@@ -1,6 +1,6 @@
 # kitchensink for Windows
 
-A native dashboard for a kitchensink server: every monitor as a live panel,
+A native dashboard for a [kitchensink](https://github.com/seventy-two/kitchensink) server: every monitor as a live panel,
 recent events alongside, and a Windows notification for each new event.
 It's written in C++ with Win32, Direct3D 11 and
 [Dear ImGui](https://github.com/ocornut/imgui), and uses WinHTTP, so the
@@ -102,3 +102,7 @@ g++ -std=c++17 -I src -I third_party tests/tests.cpp src/model.cpp src/sse.cpp s
 
 `third_party` holds Dear ImGui v1.91.9b and nlohmann/json v3.11.3, both MIT
 licensed.
+
+## Licence
+
+MIT
