@@ -186,6 +186,10 @@ static void testLocalPanels() {
     CHECK_EQ(st[0].top, 100.0f);                        // percentages on a fixed scale
     CHECK_EQ(st[1].value, std::string("25%"));
     CHECK_EQ(st[1].detail, std::string("8.0 GB / 32.0 GB"));
+    // Room for the most each can show, so the tiles don't shift.
+    CHECK_EQ(st[0].widestValue, std::string("100%"));
+    CHECK_EQ(st[1].widestDetail, std::string("32.0 GB / 32.0 GB"));
+    CHECK(st[2].widestDetail.empty());
     CHECK_EQ(st[2].detail, std::string("RTX"));
     CHECK_EQ(st[3].value, std::string("–"));  // no VRAM reading
     CHECK(st[3].tone == Tone::Muted);
@@ -201,6 +205,7 @@ static void testLocalPanels() {
     CHECK(d.blocks[0].columns[1].fill);
     CHECK_EQ(d.summary.size(), size_t(2));
     CHECK_EQ(d.summary[1].detail, std::string("1000.0 GB free"));
+    CHECK_EQ(d.summary[1].widestValue, std::string("100%"));
     CHECK_EQ(DrivesSnapshot({}, 0).blocks[0].type, std::string("text"));
 }
 

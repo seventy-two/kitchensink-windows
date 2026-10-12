@@ -18,9 +18,14 @@ std::string percent(float v) {
 float share(uint64_t part, uint64_t whole) { return whole ? 100.0f * float(part) / float(whole) : -1; }
 
 // stat makes a tile for a percentage, with its history as a sparkline.
-Stat stat(const std::string& label, float pct, const std::string& detail, std::vector<float> series) {
-    if (pct < 0) return Stat{label, "–", detail, Tone::Muted, {}};
-    return Stat{label, percent(pct), detail, LoadTone(pct), std::move(series), 100};
+// widestDetail is the most room its detail can need.
+Stat stat(const std::string& label, float pct, const std::string& detail, std::vector<float> series,
+          const std::string& widestDetail = "") {
+    Stat s = pct < 0 ? Stat{label, "–", detail, Tone::Muted, {}}
+                     : Stat{label, percent(pct), detail, LoadTone(pct), std::move(series), 100};
+    s.widestValue = "100%";
+    s.widestDetail = widestDetail;
+    return s;
 }
 
 std::string driveName(const std::string& root) {
@@ -158,13 +163,15 @@ Snapshot PcHistory::Build(int64_t now) const {
     auto of = [](uint64_t used, uint64_t total) {
         return total ? FormatBytes(used) + " / " + FormatBytes(total) : std::string();
     };
+    // Used never passes the total, so the total on both sides is as wide as
+    // the detail gets (digits are all one width).
     Block b;
     b.type = "stats";
     b.stats = {
         stat("CPU", s.cpu, "", cpu),
-        stat("Memory", share(s.ramUsed, s.ramTotal), of(s.ramUsed, s.ramTotal), ram),
+        stat("Memory", share(s.ramUsed, s.ramTotal), of(s.ramUsed, s.ramTotal), ram, of(s.ramTotal, s.ramTotal)),
         stat("GPU", s.gpu, s.gpuName, gpu),
-        stat("Video memory", share(s.vramUsed, s.vramTotal), of(s.vramUsed, s.vramTotal), vram),
+        stat("Video memory", share(s.vramUsed, s.vramTotal), of(s.vramUsed, s.vramTotal), vram, of(s.vramTotal, s.vramTotal)),
     };
     snap.blocks.push_back(b);
     // The summary is the same tiles; it doesn't draw sparklines.
@@ -194,7 +201,10 @@ Snapshot DrivesSnapshot(const std::vector<DriveInfo>& drives, int64_t now) {
             {FormatBytes(d.free), "", Tone::None},
             {FormatBytes(d.total), "", Tone::Muted},
         });
-        snap.summary.push_back({name, percent(used), FormatBytes(d.free) + " free", LoadTone(used), {}});
+        Stat st{name, percent(used), FormatBytes(d.free) + " free", LoadTone(used), {}};
+        st.widestValue = "100%";
+        st.widestDetail = FormatBytes(d.total) + " free";
+        snap.summary.push_back(st);
     }
     if (b.rows.empty()) {
         b = Block{};

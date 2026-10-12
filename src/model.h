@@ -29,6 +29,10 @@ struct Stat {
     std::string icon;        // a picture by the value, e.g. "rain"
     float level = 0;         // 0 to 1, a faint chart behind, e.g. the chance of rain
     bool hasLevel = false;
+    // The widest the value and detail can get, e.g. "100%": a summary tile
+    // keeps that much room, so figures that change every second don't push
+    // the tiles after them about. Empty for no reserve.
+    std::string widestValue, widestDetail;
 };
 
 struct Column {

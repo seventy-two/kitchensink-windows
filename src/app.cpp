@@ -1235,12 +1235,15 @@ void App::summary(const std::vector<Stat>& stats, float width) {
         const Stat& s = stats[i];
         ImGui::PushFont(fonts_.caption);
         std::string label = fit(s.label, width), detail = fit(s.detail, width);
-        float w = std::max(ImGui::CalcTextSize(label.c_str()).x, ImGui::CalcTextSize(detail.c_str()).x);
+        float w = std::max({ImGui::CalcTextSize(label.c_str()).x, ImGui::CalcTextSize(detail.c_str()).x,
+                            ImGui::CalcTextSize(s.widestDetail.c_str()).x});
         ImGui::PopFont();
         ImGui::PushFont(fonts_.heading);
         std::string value = fit(s.value, width);
-        w = std::max(w, ImGui::CalcTextSize(value.c_str()).x);
+        w = std::max({w, ImGui::CalcTextSize(value.c_str()).x, ImGui::CalcTextSize(s.widestValue.c_str()).x});
         ImGui::PopFont();
+        // Room kept for figures that change, short of the whole line.
+        w = std::min(w, width);
 
         if (x > 0 && x + w > width) x = 0, y += lineH + 4 * scale_, lineH = 0;
         ImGui::SetCursorScreenPos(ImVec2(origin.x + x, origin.y + y));
