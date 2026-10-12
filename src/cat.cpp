@@ -58,7 +58,7 @@ CatPose blend(const CatPose& a, const CatPose& b, float k) {
     p.head = lerp(a.head, b.head, k), p.rHead = lerpf(a.rHead, b.rHead, k), p.headTilt = lerpf(a.headTilt, b.headTilt, k);
     for (int i = 0; i < 4; i++) p.joint[i] = lerp(a.joint[i], b.joint[i], k), p.paw[i] = lerp(a.paw[i], b.paw[i], k);
     for (int i = 0; i < CatPose::kTailPoints; i++) p.tail[i] = lerp(a.tail[i], b.tail[i], k);
-    p.eyes = lerpf(a.eyes, b.eyes, k), p.yawn = lerpf(a.yawn, b.yawn, k);
+    p.eyes = lerpf(a.eyes, b.eyes, k), p.yawn = lerpf(a.yawn, b.yawn, k), p.tongue = lerpf(a.tongue, b.tongue, k);
     return p;
 }
 
@@ -110,93 +110,430 @@ void breathing(CatPose& p, double t, float asleep) {
     }
 }
 
+// More poses, for what she gets up to once she's awake.
+// Sitting up, tail curled round her front paws.
+const CatPose kSit = make({5, -25}, 8.5f, {0, -17}, 9.5f, {-6, -10}, 10.5f, {9, -38}, 0,
+                          {{{8, -18}, {6, -18}, {-1, -7}, {-3, -7}}}, {{{9, 0}, {6, 0}, {6, -1}, {4, -1}}},
+                          {{{-15, -6}, {-18, -3}, {-16, 0}, {-10, 0}, {-3, 0}, {4, 0}, {10, -1}, {14, -2}}}, 1, 0);
+// Low and ready to spring: chest down, eyes wide, tail out straight.
+const CatPose kCrouch = make({14, -9}, 8.5f, {2, -11}, 9, {-11, -13}, 9.5f, {25, -13}, -0.1f,
+                             {{{16, -5}, {13, -5}, {-14, -8}, {-16, -8}}}, {{{19, 0}, {16, 0}, {-8, 0}, {-10, 0}}},
+                             {{{-20, -14}, {-26, -13}, {-31, -12}, {-36, -11}, {-40, -10}, {-43, -10}, {-45, -11}, {-46, -13}}},
+                             1, 0);
+// Mid-pounce: stretched out, front paws reaching, back legs pushing off.
+const CatPose kLeap = make({16, -26}, 8.5f, {2, -24}, 8.5f, {-12, -22}, 9, {28, -30}, -0.1f,
+                           {{{22, -22}, {20, -21}, {-15, -18}, {-17, -18}}}, {{{30, -16}, {28, -15}, {-24, -10}, {-25, -9}}},
+                           {{{-21, -24}, {-27, -25}, {-33, -26}, {-38, -27}, {-43, -27}, {-47, -26}, {-50, -25}, {-52, -24}}},
+                           1, 0);
+
+// withHead is a pose with its head moved, and its eyes as given.
+CatPose withHead(CatPose p, Vec2f head, float tilt, float eyes) {
+    p.head = head, p.headTilt = tilt, p.eyes = eyes;
+    return p;
+}
+
+// Curled up, but her head raised drowsily.
+const CatPose kSleepUp = withHead(kSleep, {17, -16}, -0.15f, 0.45f);
+
+// Sitting with her near front paw up at her mouth, to lick it.
+CatPose pawUp() {
+    CatPose p = withHead(kSit, {9, -38}, 0.25f, 0.3f);
+    p.joint[0] = {16, -25}, p.paw[0] = {20, -34};
+    return p;
+}
+const CatPose kSitPawUp = pawUp();
+
+// Sitting with her near back leg up behind her ear, to scratch it.
+CatPose legUp() {
+    CatPose p = withHead(kSit, {10, -37}, -0.45f, 0.25f);
+    p.joint[2] = {-10, -19}, p.paw[2] = {2, -43};
+    return p;
+}
+const CatPose kSitScratch = legUp();
+
+// Head down in a bowl in front of her, lapping.
+const CatPose kDrink = make({14, -11}, 8.5f, {2, -14}, 9, {-11, -18}, 9.5f, {27, -8}, 0.55f,
+                            {{{15, -7}, {12, -7}, {-12, -12}, {-14, -12}}}, {{{17, 0}, {14, 0}, {-11, 0}, {-15, 0}}},
+                            {{{-21, -20}, {-26, -23}, {-29, -28}, {-30, -34}, {-29, -39}, {-26, -43}, {-22, -45}, {-19, -44}}},
+                            0.4f, 0);
+
+// Crouched with her front paws pinning something ahead of her.
+CatPose pin() {
+    CatPose p = withHead(kCrouch, {27, -11}, 0.25f, 1);
+    p.joint[0] = {20, -6}, p.joint[1] = {18, -6};
+    p.paw[0] = {25, 0}, p.paw[1] = {23, 0};
+    return p;
+}
+const CatPose kPin = pin();
+
+// The same, batting it on with her near paw.
+CatPose bat() {
+    CatPose p = kPin;
+    p.joint[0] = {21, -12}, p.paw[0] = {29, -7};
+    return p;
+}
+const CatPose kBat = bat();
+
 // Rest is where she settles at the end of an episode, and which way she
 // faces there.
 struct Rest {
     float x = 0, facing = 1;
 };
 
-// restAfter is where she is after episode k, played from the first: she
-// only walks to her next spot when it's far enough, so where she is and
-// which way she faces depend on every episode before. The last answer is
-// kept, so each frame takes a step at most.
-Rest restAfter(long long k, float room) {
+// How long each of her activities takes, in seconds.
+constexpr float kToSit = 0.8f, kPawUp = 0.5f, kLick = 1.8f, kWash = 1.6f, kLegUp = 0.5f, kScratch = 1.6f,
+                kLookRound = 0.7f, kLookHold = 0.5f, kSlowBlink = 1.4f, kLookBack = 0.6f, kToCrouch = 0.6f,
+                kWiggle = 1.5f, kLeapTime = 1.0f, kLand = 0.4f, kKnead = 3.2f, kStirUp = 0.7f, kStirLook = 1.8f,
+                kStirDown = 0.9f, kSlideIn = 1.8f, kLower = 0.75f, kLap = 4.0f, kLickLips = 0.8f,
+                kSlideOut = 1.4f, kRollIn = 1.6f, kPinDown = 0.8f, kBatTime = 0.8f, kProud = 1.0f;
+constexpr float kPounce = 18;  // units forward
+constexpr float kBowlAt = 31;  // from her middle to the bowl's, under her mouth
+constexpr float kToyAt = 45;   // from her middle to the toy's, before she pounces: just past her paws once she lands
+constexpr float kBatBy = 5;    // how far each bat sends the toy
+
+float lengthOf(CatAction a) {
+    switch (a) {
+    case CatAction::Groom: return kToSit + kPawUp + kLick + kWash + kPawUp + kToSit;
+    case CatAction::Scratch: return kToSit + kLegUp + kScratch + kLegUp + kToSit;
+    case CatAction::Blink: return kToSit + kLookRound + kLookHold + kSlowBlink + kLookHold + kLookBack + kToSit;
+    case CatAction::Pounce: return kToCrouch + kWiggle + kLeapTime + kLand + kToCrouch;
+    case CatAction::Drink: return kSlideIn + 2 * kLower + kLap + kLickLips + kSlideOut;
+    case CatAction::Hunt: return kRollIn + kToCrouch + kWiggle + kLeapTime + kPinDown + 2 * kBatTime + kToSit + kProud + kToSit;
+    default: return 0;
+    }
+}
+
+// Plan is what she does in one episode: where she starts and whether she
+// walks somewhere, what she does there, and where she ends up.
+struct Plan {
+    float from = 0, to = 0, facing = 1, walkTo = 1;
+    bool walks = false;
+    float walk = 0, turn = 0;  // seconds of each
+    CatAction doings[2] = {CatAction::Sleep, CatAction::Sleep};
+    int count = 0;
+    bool knead = false;
+    bool stir = false;
+    float stirAt = 0;  // seconds into her sleep
+    Rest end;
+};
+
+// plan works out episode k from where the last left her. Everything comes
+// from k's hash, so it's the same whenever it's asked.
+Plan plan(long long k, Rest rest, float half) {
+    float room = std::max(0.0f, half - 46);  // keep all of her on the floor, nose to tail
+    Plan p;
+    p.from = rest.x, p.facing = rest.facing;
+    p.to = spot(k) * room;
+    p.walkTo = sign(p.to - p.from);
+    p.walks = std::fabs(p.to - p.from) >= kMinWalk;
+    p.walk = p.walks ? std::fabs(p.to - p.from) / kSpeed : 0;
+    p.turn = p.walks && p.walkTo != p.facing ? kTurn : 0;
+    float x = p.walks ? p.to : p.from, dir = p.walks ? p.walkTo : p.facing;
+
+    uint32_t h = hash(uint32_t(k) * 0x9E3779B9u + 7);
+    const CatAction choices[] = {CatAction::Groom, CatAction::Scratch, CatAction::Blink,
+                                 CatAction::Pounce, CatAction::Drink, CatAction::Hunt};
+    int first = int(h % 6), second = (first + 1 + int((h >> 4) % 5)) % 6;
+    p.count = (h >> 8) % 3 == 0 ? 2 : 1;
+    p.doings[0] = choices[first], p.doings[1] = choices[second];
+    for (int i = 0; i < p.count; i++) {
+        CatAction& a = p.doings[i];
+        // Each only with room on the floor for it: to land a pounce, for
+        // the bowl in front of her, for the toy to skid along.
+        bool lands = room > 0 && std::fabs(x + dir * kPounce) <= room;
+        if (a == CatAction::Pounce && !lands) a = CatAction::Blink;
+        if (a == CatAction::Drink && std::fabs(x + dir * kBowlAt) > half - 10) a = CatAction::Groom;
+        if (a == CatAction::Hunt && (!lands || std::fabs(x + dir * (kToyAt + kPounce + 2 * kBatBy)) > half - 11))
+            a = CatAction::Scratch;
+        if (a == CatAction::Pounce || a == CatAction::Hunt) x += dir * kPounce;
+    }
+    p.knead = (h >> 12) % 2 == 0;
+    p.stir = (h >> 16) % 5 < 2;
+    p.stirAt = 15 + float((h >> 20) % 40);
+    p.end = {x, dir};
+    return p;
+}
+
+// restAfter is where she is after episode k, played from the first: where
+// she is and which way she faces depend on every episode before. The last
+// answer is kept, so each frame takes a step at most.
+Rest restAfter(long long k, float half) {
     static long long lastK = -2;
-    static float lastRoom = -1;
+    static float lastHalf = -1;
     static Rest last;
     long long from = -1;
-    Rest r{spot(-1) * room, 1};
-    if (room == lastRoom && lastK >= -1 && lastK <= k) from = lastK, r = last;
-    for (long long j = from + 1; j <= k; j++) {
-        float to = spot(j) * room;
-        if (std::fabs(to - r.x) >= kMinWalk) r.facing = sign(to - r.x), r.x = to;
-    }
-    lastK = k, lastRoom = room, last = r;
+    Rest r{spot(-1) * std::max(0.0f, half - 46), 1};
+    if (half == lastHalf && lastK >= -1 && lastK <= k) from = lastK, r = last;
+    for (long long j = from + 1; j <= k; j++) r = plan(j, r, half).end;
+    lastK = k, lastHalf = half, last = r;
     return r;
+}
+
+// bump rises from 0 to 1 and back over k from 0 to 1, smoothly.
+float bump(float k) { return std::sin(kPi * std::clamp(k, 0.0f, 1.0f)); }
+
+// Timeline steps through an episode's parts: take reports whether the time
+// falls in the next part, of len seconds, and how far into it.
+struct Timeline {
+    float at;
+    bool take(float len, float& k) {
+        if (len <= 0) return false;
+        if (at < len) {
+            k = at / len;
+            return true;
+        }
+        at -= len;
+        return false;
+    }
+};
+
+// doing is her pose partway through an activity, which starts and ends
+// standing where she is; dir is the way she faces, and x and lift are set
+// for a pounce.
+bool doing(CatAction a, Timeline& tl, double t, float dir, float half, Cat& c) {
+    float k = 0;
+    auto sitDown = [&] { return tl.take(kToSit, k) ? (c.pose = blend(kStand, kSit, smooth(k)), true) : false; };
+    auto standUp = [&] { return tl.take(kToSit, k) ? (c.pose = blend(kSit, kStand, smooth(k)), true) : false; };
+    float ft = float(t);
+    switch (a) {
+    case CatAction::Groom:
+        if (sitDown()) return true;
+        if (tl.take(kPawUp, k)) return c.pose = blend(kSit, kSitPawUp, smooth(k)), true;
+        if (tl.take(kLick, k)) {
+            // Quick licks, her head bobbing with them.
+            c.pose = kSitPawUp;
+            c.pose.tongue = 0.5f + 0.5f * std::sin(2 * kPi * 3 * ft);
+            c.pose.headTilt += 0.06f * std::sin(2 * kPi * 3 * ft);
+            return true;
+        }
+        if (tl.take(kWash, k)) {
+            // Two strokes of the paw up over her face to her ear and down.
+            c.pose = kSitPawUp;
+            float up = std::pow(std::sin(2 * kPi * k), 2.0f);
+            c.pose.paw[0] = {20 - 5 * up, -34 - 12 * up};
+            c.pose.joint[0] = {16 - up, -25 - 6 * up};
+            c.pose.headTilt = 0.35f + 0.1f * up;
+            return true;
+        }
+        if (tl.take(kPawUp, k)) return c.pose = blend(kSitPawUp, kSit, smooth(k)), true;
+        return standUp();
+    case CatAction::Scratch:
+        if (sitDown()) return true;
+        if (tl.take(kLegUp, k)) return c.pose = blend(kSit, kSitScratch, smooth(k)), true;
+        if (tl.take(kScratch, k)) {
+            c.pose = kSitScratch;
+            float s = std::sin(2 * kPi * 7 * ft);
+            c.pose.paw[2].x += 0.8f * s, c.pose.paw[2].y += 1.6f * s;
+            c.pose.joint[2].y += 0.8f * s;
+            return true;
+        }
+        if (tl.take(kLegUp, k)) return c.pose = blend(kSitScratch, kSit, smooth(k)), true;
+        return standUp();
+    case CatAction::Blink:
+        // She looks round at you and slowly blinks: a cat's way of saying
+        // she likes you.
+        if (sitDown()) return true;
+        c.pose = kSit;
+        if (tl.take(kLookRound, k)) return c.look = smooth(k), true;
+        c.look = 1;
+        if (tl.take(kLookHold, k)) return true;
+        if (tl.take(kSlowBlink, k)) return c.pose.eyes = 1 - smooth(bump(k) * 1.4f), true;
+        if (tl.take(kLookHold, k)) return true;
+        if (tl.take(kLookBack, k)) return c.look = 1 - smooth(k), true;
+        c.look = 0;
+        return standUp();
+    case CatAction::Pounce: {
+        if (tl.take(kToCrouch, k)) return c.pose = blend(kStand, kCrouch, smooth(k)), true;
+        if (tl.take(kWiggle, k)) {
+            // The bum wiggle and tail flick before she goes.
+            c.pose = kCrouch;
+            float w = std::sin(2 * kPi * 4 * ft);
+            c.pose.hips.x += 1.2f * w, c.pose.hips.y -= 0.6f * std::fabs(w);
+            for (int i = 5; i < CatPose::kTailPoints; i++) c.pose.tail[i].y -= w * (i - 4) * 1.2f;
+            return true;
+        }
+        if (tl.take(kLeapTime, k)) {
+            c.pose = k < 0.5f ? blend(kCrouch, kLeap, smooth(k * 2)) : blend(kLeap, kCrouch, smooth(k * 2 - 1));
+            c.x += dir * kPounce * smooth(k);
+            c.lift = 10 * bump(k);
+            return true;
+        }
+        c.x += dir * kPounce;
+        if (tl.take(kLand, k)) return c.pose = kCrouch, true;
+        if (tl.take(kToCrouch, k)) return c.pose = blend(kCrouch, kStand, smooth(k)), true;
+        return false;
+    }
+    case CatAction::Drink: {
+        // A bowl of milk slides in from her side of the floor and stops
+        // under her nose; she laps it, licks her lips, and off it goes.
+        float edge = dir * (half - 10), at = c.x + dir * kBowlAt;
+        c.bowl.x = at, c.bowl.alpha = 1, c.bowl.fill = 1;
+        if (tl.take(kSlideIn, k)) {
+            c.pose = kStand;
+            c.bowl.x = lerpf(edge, at, smooth(k)), c.bowl.alpha = std::min(1.0f, k * 2.5f);
+            return true;
+        }
+        if (tl.take(kLower, k)) return c.pose = blend(kStand, kDrink, smooth(k)), true;
+        if (tl.take(kLap, k)) {
+            c.pose = kDrink;
+            float lap = std::sin(2 * kPi * 4 * ft);
+            c.pose.tongue = 0.5f + 0.5f * lap;
+            c.pose.head.y += 0.6f * lap;
+            c.bowl.fill = 1 - 0.75f * k;
+            return true;
+        }
+        c.bowl.fill = 0.25f;
+        if (tl.take(kLower, k)) return c.pose = blend(kDrink, kStand, smooth(k)), true;
+        if (tl.take(kLickLips, k)) {
+            c.pose = kStand;
+            c.pose.tongue = std::fabs(std::sin(2 * kPi * k));
+            return true;
+        }
+        if (tl.take(kSlideOut, k)) {
+            c.pose = kStand;
+            c.bowl.x = lerpf(at, edge, smooth(k)), c.bowl.alpha = std::min(1.0f, (1 - k) * 2.5f);
+            return true;
+        }
+        c.bowl = CatProp{};
+        return false;
+    }
+    case CatAction::Hunt: {
+        // A toy mouse skids in ahead of her. She stalks it, pounces on it,
+        // bats it along twice, then sits back pleased while it goes.
+        float start = c.x, toyAt = start + dir * kToyAt;
+        c.toy.x = toyAt, c.toy.alpha = 1;
+        if (tl.take(kRollIn, k)) {
+            c.pose = kStand;
+            c.toy.x = lerpf(dir * (half - 11), toyAt, smooth(k));
+            c.toy.rot = 0.45f * std::sin(4 * kPi * k) * (1 - k);  // wobbling as it skids
+            c.toy.alpha = std::min(1.0f, k * 3);
+            return true;
+        }
+        if (tl.take(kToCrouch, k)) return c.pose = blend(kStand, kCrouch, smooth(k)), true;
+        if (tl.take(kWiggle, k)) {
+            c.pose = kCrouch;
+            float w = std::sin(2 * kPi * 4 * ft);
+            c.pose.hips.x += 1.2f * w, c.pose.hips.y -= 0.6f * std::fabs(w);
+            for (int i = 5; i < CatPose::kTailPoints; i++) c.pose.tail[i].y -= w * (i - 4) * 1.2f;
+            return true;
+        }
+        if (tl.take(kLeapTime, k)) {
+            c.pose = k < 0.5f ? blend(kCrouch, kLeap, smooth(k * 2)) : blend(kLeap, kPin, smooth(k * 2 - 1));
+            c.x = start + dir * kPounce * smooth(k);
+            c.lift = 10 * bump(k);
+            return true;
+        }
+        c.x = start + dir * kPounce;
+        if (tl.take(kPinDown, k)) return c.pose = kPin, true;
+        for (int hit = 0; hit < 2; hit++) {
+            if (tl.take(kBatTime, k)) {
+                c.pose = blend(kPin, kBat, bump(k));
+                // Knocked on with a hop and a tumble once her paw lands.
+                float go = smooth(std::clamp(k * 2 - 0.5f, 0.0f, 1.0f));
+                c.toy.x = toyAt + dir * kBatBy * (hit + go);
+                c.toy.lift = 3 * bump(std::clamp(k * 2 - 0.5f, 0.0f, 1.0f));
+                c.toy.rot = 0.45f * dir * std::sin(2 * kPi * go);
+                return true;
+            }
+        }
+        c.toy.x = toyAt + dir * 2 * kBatBy, c.toy.rot = 0;
+        if (tl.take(kToSit, k)) return c.pose = blend(kPin, kSit, smooth(k)), true;
+        if (tl.take(kProud, k)) return c.pose = kSit, c.toy.alpha = 1 - smooth(k), true;
+        c.toy = CatProp{};
+        if (tl.take(kToSit, k)) return c.pose = blend(kSit, kStand, smooth(k)), true;
+        return false;
+    }
+    default: return false;
+    }
 }
 
 }  // namespace
 
 Cat CatAt(double t, float half) {
-    Cat c;
-    float room = std::max(0.0f, half - 46);  // keep all of her on the floor, nose to tail
     // Start some way into an episode, so she's soon up for the first time.
     double s = t + kEpisode * 0.75;
     long long k = (long long)std::floor(s / kEpisode);
     float u = float(s - double(k) * kEpisode);
+    Plan p = plan(k, restAfter(k - 1, half), half);
 
-    Rest rest = restAfter(k - 1, room);
-    float from = rest.x, to = spot(k) * room;
-    float facing = rest.facing;
-    float walkTo = sign(to - from);
-    bool walks = std::fabs(to - from) >= kMinWalk;
-    float walk = walks ? std::fabs(to - from) / kSpeed : 0;
-    float turn = walks && walkTo != facing ? kTurn : 0;
-    float active = kWake + kToBow + kBowHold + kToArch + kArchHold + kToStand + turn + walk + kPause + kLieDown;
+    float active = kWake + kToBow + kBowHold + kToArch + kArchHold + kToStand + p.turn + p.walk + kPause + kLieDown;
+    for (int i = 0; i < p.count; i++) active += lengthOf(p.doings[i]);
+    if (p.knead) active += kKnead;
     float sleep = float(kEpisode) - active;
 
-    c.x = from, c.facing = facing;
-    // Each part of the routine, in turn.
-    float at = u - sleep;
-    auto part = [&](float len) {
-        float k = at / len;
-        at -= len;
-        return k;
-    };
-    if (at < 0) {
+    Cat c;
+    c.x = p.from, c.facing = p.facing;
+    Timeline tl{u};
+    float f = 0;
+    if (tl.take(sleep, f)) {
         c.pose = kSleep, c.asleep = 1;
-    } else if (float k = part(kWake); k < 1) {
-        c.pose = blend(kSleep, kStand, smooth(k)), c.asleep = 1 - smooth(k * 2);
-    } else if (k = part(kToBow); k < 1) {
-        c.pose = blend(kStand, kBow, smooth(k)), c.asleep = 0;
-    } else if (k = part(kBowHold); k < 1) {
-        c.pose = kBow, c.asleep = 0;
-    } else if (k = part(kToArch); k < 1) {
-        c.pose = blend(kBow, kArch, smooth(k)), c.asleep = 0;
-    } else if (k = part(kArchHold); k < 1) {
-        c.pose = kArch, c.asleep = 0;
-    } else if (k = part(kToStand); k < 1) {
-        c.pose = blend(kArch, kStand, smooth(k)), c.asleep = 0;
-    } else if (turn > 0 && (k = part(turn)) < 1) {
+        // Now and then she stirs: lifts her head, looks about drowsily and
+        // settles again.
+        float since = f * sleep - p.stirAt;
+        float len = kStirUp + kStirLook + kStirDown;
+        if (p.stir && since >= 0 && since < len) {
+            c.action = CatAction::Stir;
+            if (since < kStirUp) {
+                float e = smooth(since / kStirUp);
+                c.pose = blend(kSleep, kSleepUp, e), c.asleep = 1 - 0.6f * e;
+            } else if (since < kStirUp + kStirLook) {
+                c.pose = kSleepUp, c.asleep = 0.4f;
+                c.pose.head.x += std::sin((since - kStirUp) / kStirLook * 2 * kPi);
+            } else {
+                float e = smooth((since - kStirUp - kStirLook) / kStirDown);
+                c.pose = blend(kSleepUp, kSleep, e), c.asleep = 0.4f + 0.6f * e;
+            }
+        }
+    } else if (c.action = CatAction::Wake; tl.take(kWake, f)) {
+        c.pose = blend(kSleep, kStand, smooth(f)), c.asleep = 1 - smooth(f * 2);
+    } else if (c.action = CatAction::Stretch, c.asleep = 0; tl.take(kToBow, f)) {
+        c.pose = blend(kStand, kBow, smooth(f));
+    } else if (tl.take(kBowHold, f)) {
+        c.pose = kBow;
+    } else if (tl.take(kToArch, f)) {
+        c.pose = blend(kBow, kArch, smooth(f));
+    } else if (tl.take(kArchHold, f)) {
+        c.pose = kArch;
+    } else if (tl.take(kToStand, f)) {
+        c.pose = blend(kArch, kStand, smooth(f));
+    } else if (c.action = CatAction::Turn; tl.take(p.turn, f)) {
         // Turning round, towards the viewer: see DrawCat.
-        c.pose = kStand, c.asleep = 0, c.turn = k;
-        walking(c.pose, 2 * kPi * k, t);  // stepping round
-    } else if (walk > 0 && (k = part(walk)) < 1) {
-        c.pose = kStand, c.asleep = 0, c.facing = walkTo;
-        float gone = std::fabs(to - from) * k;
-        c.x = from + walkTo * gone;
+        c.pose = kStand, c.turn = f;
+        walking(c.pose, 2 * kPi * f, t);  // stepping round
+    } else if (c.action = CatAction::Walk; tl.take(p.walk, f)) {
+        c.pose = kStand, c.facing = p.walkTo;
+        float gone = std::fabs(p.to - p.from) * f;
+        c.x = p.from + p.walkTo * gone;
         walking(c.pose, 2 * kPi * gone / kStride, t);
     } else {
-        if (walks) c.x = to, c.facing = walkTo;
-        if (k = part(kPause); k < 1) {
-            c.pose = kStand, c.asleep = 0;
-        } else {
-            k = std::min(part(kLieDown), 1.0f);
-            c.pose = blend(kStand, kSleep, smooth(k)), c.asleep = smooth(k * 1.5f - 0.5f);
+        if (p.walks) c.x = p.to, c.facing = p.walkTo;
+        c.pose = kStand;
+        bool busy = tl.take(kPause, f);
+        if (busy) c.action = CatAction::Stand;
+        for (int i = 0; i < p.count && !busy; i++) {
+            c.action = p.doings[i];
+            busy = doing(p.doings[i], tl, t, c.facing, half, c);
+            if (!busy) c.lift = 0;
+        }
+        if (!busy && p.knead && tl.take(kKnead, f)) {
+            // Making biscuits: front paws pressing in turn, eyes half shut.
+            busy = true;
+            c.action = CatAction::Knead;
+            c.pose = kStand;
+            float w = std::sin(2 * kPi * 1.6f * float(t));
+            c.pose.paw[0].y -= std::max(0.0f, w) * 3, c.pose.joint[0].y -= std::max(0.0f, w) * 1.5f;
+            c.pose.paw[1].y -= std::max(0.0f, -w) * 3, c.pose.joint[1].y -= std::max(0.0f, -w) * 1.5f;
+            c.pose.chest.y += 0.4f * std::fabs(w);
+            c.pose.eyes = 0.35f;
+        }
+        if (!busy) {
+            c.action = CatAction::LieDown;
+            f = std::min(tl.at / kLieDown, 1.0f);
+            c.pose = blend(kStand, kSleep, smooth(f)), c.asleep = smooth(f * 1.5f - 0.5f);
         }
     }
     // A blink every few seconds while she's awake.
-    if (std::fmod(t, 4.1) < 0.14) c.pose.eyes = 0;
+    if (c.asleep < 1 && std::fmod(t, 4.1) < 0.14) c.pose.eyes = 0;
     breathing(c.pose, t, c.asleep);
     return c;
 }
@@ -204,7 +541,7 @@ Cat CatAt(double t, float half) {
 namespace {
 
 constexpr Rgba kFur{17, 17, 21}, kRim{92, 98, 112, 170}, kEye{206, 216, 84}, kPupil{8, 8, 10},
-    kLid{120, 124, 136, 220}, kMouth{176, 84, 100}, kWhisker{150, 154, 166, 110}, kZ{150, 156, 172},
+    kLid{120, 124, 136, 220}, kMouth{176, 84, 100}, kTongue{222, 112, 132}, kWhisker{150, 154, 166, 110}, kZ{150, 156, 172},
     kShadow{0, 0, 0, 55};
 
 // Painter maps her pose onto the canvas, mirrored for which way she
@@ -217,17 +554,35 @@ struct Painter {
     Vec2f floor;
     float x, facing, size;
     float headTurn = 0, hipsTurn = 0;  // radians, 0 to pi
+    float lift = 0;                     // units off the floor
+    // Her head can also turn by itself, about its own middle, to look at
+    // the viewer: head is set while drawing it, about pivot by look radians.
+    bool head = false;
+    Vec2f pivot;
+    float look = 0;
 
     float angle(float f) const { return lerpf(hipsTurn, headTurn, std::clamp((f + 13) / 38, 0.0f, 1.0f)); }
+    float headAngle() const { return angle(pivot.x) + look; }
     Vec2f m(Vec2f p, float l = 0) const {
+        float y = floor.y + (p.y - lift) * size;
+        if (head) {
+            float a0 = angle(pivot.x), a = a0 + look, dx = p.x - pivot.x;
+            return {floor.x + (x + facing * (pivot.x * std::cos(a0) + dx * std::cos(a) - l * std::sin(a))) * size, y};
+        }
         float a = angle(p.x);
-        return {floor.x + (x + facing * (p.x * std::cos(a) - l * std::sin(a))) * size, floor.y + p.y * size};
+        return {floor.x + (x + facing * (p.x * std::cos(a) - l * std::sin(a))) * size, y};
     }
     // depth is how far towards the viewer a point is, beside a centre at
     // forward f0.
     float depth(float f, float l, float f0) const {
-        float a = angle(f0);
+        float a = head ? headAngle() : angle(f0);
         return (f - f0) * std::sin(a) + l * std::cos(a);
+    }
+    // onHead is this painter drawing her head.
+    Painter onHead() const {
+        Painter h = *this;
+        h.head = true;
+        return h;
     }
     float w(float r) const { return r * size; }
     void circle(Vec2f p, float r, Rgba col, float l = 0) const { c.Circle(m(p, l), w(r), col); }
@@ -274,8 +629,9 @@ void silhouette(const Painter& d, const CatPose& p, float g, Rgba col) {
     // Neck, head, muzzle and ears.
     d.limb(lerp(p.chest, p.head, 0.35f), lerp(p.chest, p.head, 0.8f), 8 + 2 * g, col);
     auto head = [&](Vec2f v) { return add(p.head, rotate(v, p.headTilt)); };
-    d.circle(p.head, p.rHead + g, col);
-    d.circle(head({6, 2.5f}), 4.6f + g, col);
+    Painter h = d.onHead();
+    h.circle(p.head, p.rHead + g, col);
+    h.circle(head({6, 2.5f}), 4.6f + g, col);
     for (float e : {-3.5f, 3.0f}) {
         float l = e < 0 ? -3.4f : 3.4f;  // side by side, seen face on
         Vec2f base1 = head({e - 3.6f, -5}), base2 = head({e + 3.6f, -5}), tip = head({e + 1.2f, -13.5f});
@@ -285,11 +641,12 @@ void silhouette(const Painter& d, const CatPose& p, float g, Rgba col) {
             float len = std::max(0.001f, std::hypot(off.x, off.y));
             return add(v, scale(off, g / len * 1.4f));
         };
-        d.poly({grow(base1), grow(tip), grow(base2)}, col, l);
+        h.poly({grow(base1), grow(tip), grow(base2)}, col, l);
     }
 }
 
-void face(const Painter& d, const CatPose& p) {
+void face(const Painter& body, const CatPose& p) {
+    Painter d = body.onHead();
     auto head = [&](Vec2f v) { return add(p.head, rotate(v, p.headTilt)); };
     // Both eyes, the far one hidden behind her head unless she's turned
     // towards the viewer, and narrower the more side on each is.
@@ -307,9 +664,10 @@ void face(const Painter& d, const CatPose& p) {
         }
     }
     if (p.yawn > 0.3f) d.c.Ellipse(d.m(head({8.5f, 4.6f})), d.w(1.4f), d.w(2.4f * p.yawn), 0, kMouth);
+    if (p.tongue > 0.05f) d.c.Ellipse(d.m(head({10.2f, 4.4f})), d.w(1.1f), d.w(1.7f * p.tongue), 0, kTongue);
     // Whiskers both sides, fanning out, the far ones only once she's
     // turned enough to show them.
-    bool far = std::sin(d.angle(p.head.x)) > 0.25f;
+    bool far = std::sin(d.headAngle()) > 0.25f;
     for (float side : {1.0f, -1.0f}) {
         if (side < 0 && !far) continue;
         for (float dy : {-0.6f, 1.0f}) {
@@ -340,17 +698,71 @@ void zs(const Painter& d, const Cat& cat, double t) {
 
 }  // namespace
 
+// faded is a colour with its alpha scaled, for props fading in and out.
+static Rgba faded(Rgba c, float a) {
+    c.a = uint8_t(std::clamp(float(c.a) * a, 0.0f, 255.0f));
+    return c;
+}
+
+// drawBowl draws a dish of milk on the floor, its rim over her chin when
+// she's drinking from it.
+static void drawBowl(Canvas& c, const CatProp& b, Vec2f floor, float size) {
+    if (b.alpha <= 0) return;
+    float a = b.alpha;
+    auto at = [&](float x, float y) { return Vec2f{floor.x + (b.x + x) * size, floor.y + y * size}; };
+    c.Ellipse(at(0, 0.6f), 9 * size, 1.2f * size, 0, faded(kShadow, a));
+    Vec2f dish[4] = {at(-8, -4.5f), at(8, -4.5f), at(6, 0), at(-6, 0)};
+    c.Polygon(dish, 4, faded(Rgba{196, 204, 222}, a));
+    Vec2f band[4] = {at(-7.4f, -3.2f), at(7.4f, -3.2f), at(7.1f, -2.2f), at(-7.1f, -2.2f)};
+    c.Polygon(band, 4, faded(Rgba{90, 140, 220}, a));
+    c.Ellipse(at(0, -4.5f), 8 * size, 1.6f * size, 0, faded(Rgba{226, 232, 244}, a));
+    // The milk, lower and narrower as she drinks it.
+    if (b.fill > 0.05f) {
+        float sink = (1 - b.fill) * 1.1f;
+        c.Ellipse(at(0, -4.5f + sink * 0.5f), (6.8f - sink) * size, (1.1f - sink * 0.3f) * size, 0, faded(Rgba{250, 250, 244}, a));
+    }
+}
+
+// drawToy draws a toy mouse, facing away from her (dir), tipped by rot.
+static void drawToy(Canvas& c, const CatProp& m, float dir, Vec2f floor, float size) {
+    if (m.alpha <= 0) return;
+    float a = m.alpha;
+    Vec2f mid{m.x, -2.4f - m.lift};
+    auto at = [&](float x, float y) {
+        Vec2f r = rotate({x * dir, y}, m.rot);
+        return Vec2f{floor.x + (mid.x + r.x) * size, floor.y + (mid.y + r.y) * size};
+    };
+    if (m.lift < 4) c.Ellipse({floor.x + m.x * size, floor.y + 0.5f * size}, 5 * size, 0.9f * size, 0, faded(kShadow, a));
+    Rgba fur = faded(Rgba{138, 143, 153}, a), pink = faded(Rgba{230, 140, 160}, a);
+    c.Line(at(-4, 0.3f), at(-7, -1.2f), 0.6f * size, pink);
+    c.Line(at(-7, -1.2f), at(-9.5f, 0.6f), 0.5f * size, pink);
+    c.Ellipse(at(0, 0), 4.2f * size, 2.4f * size, m.rot, fur);
+    c.Circle(at(3.4f, -0.3f), 1.8f * size, fur);
+    c.Circle(at(2.4f, -2.2f), 1.2f * size, pink);
+    c.Circle(at(5.3f, 0), 0.6f * size, pink);
+    c.Circle(at(4.2f, -0.6f), 0.4f * size, faded(kPupil, a));
+}
+
 void DrawCat(Canvas& c, const Cat& cat, double t, Vec2f floor, float size) {
+    // The toy goes under her paws; the bowl's rim over her chin.
+    drawToy(c, cat.toy, cat.facing, floor, size);
     Painter d{c, floor, cat.x, cat.facing, size};
     // Turning round, her head comes round first, towards the viewer, and
     // her hips follow.
     d.headTurn = kPi * smooth(cat.turn * 1.4f);
     d.hipsTurn = kPi * smooth(cat.turn * 1.4f - 0.4f);
     float across = std::fabs(std::cos((d.headTurn + d.hipsTurn) / 2));
-    d.c.Ellipse(d.m({0, 0.5f}), d.w(26 * std::max(0.55f, across)), d.w(2.6f + 0.8f * (1 - across)), 0, kShadow);
+    // Her shadow stays on the floor, smaller the higher she leaps.
+    float high = 1 - std::clamp(cat.lift / 30, 0.0f, 0.5f);
+    d.c.Ellipse(d.m({0, 0.5f}), d.w(26 * std::max(0.55f, across) * high), d.w((2.6f + 0.8f * (1 - across)) * high), 0, kShadow);
+    d.lift = cat.lift;
+    // Looking at the viewer, her head comes most of the way round.
+    d.pivot = cat.pose.head;
+    d.look = cat.look * kPi * 0.42f;
     silhouette(d, cat.pose, 1.1f, kRim);
     silhouette(d, cat.pose, 0, kFur);
     face(d, cat.pose);
+    drawBowl(c, cat.bowl, floor, size);
     zs(d, cat, t);
 }
 

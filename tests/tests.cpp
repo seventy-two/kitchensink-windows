@@ -505,8 +505,42 @@ static void testCat() {
         }
         CHECK(walked);
         CHECK(yawned);
-        CHECK(asleep > frames * 3 / 4);
+        CHECK(asleep > frames / 2);
         (void)turned;  // depends on where she happens to go
+    }
+    // Over many episodes she gets up to all sorts, always on the floor and
+    // inside her space, pouncing included.
+    for (float half : {60.0f, 150.0f}) {
+        std::set<int> did;
+        bool licked = false, looked = false, leapt = false, drank = false, batted = false;
+        for (double t = 0; t < 30 * kEpisode; t += 1.0 / 10) {
+            Cat c = CatAt(t, half);
+            did.insert(int(c.action));
+            licked = licked || c.pose.tongue > 0.9f;
+            looked = looked || c.look > 0.99f;
+            leapt = leapt || c.lift > 9;
+            drank = drank || (c.action == CatAction::Drink && c.bowl.alpha >= 1 && c.bowl.fill < 0.5f);
+            batted = batted || (c.action == CatAction::Hunt && c.toy.lift > 2);
+            // Props only while she's busy with them.
+            if (c.action != CatAction::Drink) CHECK(c.bowl.alpha == 0);
+            if (c.action != CatAction::Hunt) CHECK(c.toy.alpha == 0);
+            CHECK(c.lift >= 0 && c.look >= 0 && c.look <= 1);
+            for (const Vec2f& paw : c.pose.paw) CHECK(paw.y <= 0.01f);
+            Recorder r;
+            DrawCat(r, c, t, {0, 0}, 1);
+            CHECK(r.maxY <= 4);
+            CHECK(r.minY >= -64);
+            CHECK(r.minX >= -half && r.maxX <= half);
+        }
+        for (CatAction a : {CatAction::Stir, CatAction::Groom, CatAction::Scratch, CatAction::Blink, CatAction::Knead})
+            CHECK(did.count(int(a)));
+        CHECK(licked && looked);
+        // A narrow column has no room to land a pounce, or chase a toy.
+        CHECK(leapt == (half > 100));
+        CHECK(did.count(int(CatAction::Pounce)) == (half > 100));
+        CHECK(did.count(int(CatAction::Hunt)) == (half > 100));
+        CHECK(batted == (half > 100));
+        CHECK(did.count(int(CatAction::Drink)) && drank);
     }
     // She never jumps: from one frame to the next she moves a little, and
     // only turns round by turning, at the end of which she faces the other
@@ -516,6 +550,10 @@ static void testCat() {
             Cat a = CatAt(t, half), b = CatAt(t + 0.05, half);
             CHECK(std::fabs(a.x - b.x) < 3);
             CHECK(std::fabs(a.pose.head.y - b.pose.head.y) < 3);
+            CHECK(std::fabs(a.lift - b.lift) < 3);
+            CHECK(std::fabs(a.look - b.look) < 0.2f);
+            if (a.toy.alpha > 0 && b.toy.alpha > 0) CHECK(std::fabs(a.toy.x - b.toy.x) < 12);
+            if (a.bowl.alpha > 0 && b.bowl.alpha > 0) CHECK(std::fabs(a.bowl.x - b.bowl.x) < 12);
             if (a.facing != b.facing) CHECK(a.turn > 0.9f);
         }
     }

@@ -44,10 +44,15 @@ result is a single `kitchensink.exe` with nothing to install.
   their blocks and summary chips go, and it's remembered.
 - **Cat** (in settings, off by default): a black cat, drawn in code,
   sleeps curled up above the Recent column, breathing, with the odd tail
-  twitch and Z's. Every 100 seconds or so she wakes, stretches, yawns,
-  arches her back, sometimes wanders to another spot, and curls up again.
-  Asleep she needs ten frames a second, awake about thirty, and none while
-  the window's minimised or dimmed.
+  twitch and Z's, and now and then stirs to lift her head and look about.
+  Every 100 seconds or so she wakes, stretches, yawns, arches her back,
+  sometimes wanders to another spot, and finds something to do: a wash
+  (licking a paw, then her face), a scratch behind the ear, a slow blink at
+  you, a pounce, a drink from a bowl of milk that slides in from the side,
+  or hunting a toy mouse (stalking, pouncing, batting it along). Some days
+  she kneads her bed before curling up again. Asleep she needs ten frames a
+  second, awake about thirty, and none while the window's minimised or
+  dimmed.
 - There are no scrollbars: the Recent column, the panels column and a
   panel cut short to fit scroll with the mouse wheel.
 - Hovering a Recent card shows an × that clears it; the × by the heading

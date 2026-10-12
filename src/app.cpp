@@ -1599,7 +1599,7 @@ void App::list(const Block& b) {
 
 // cat draws the black cat along the top of the Recent column.
 void App::cat(float width) {
-    float size = 1.1f * scale_;
+    float size = 1.6f * scale_;
     // Her space is 68 units tall: 64 above the floor (an arched tail),
     // 4 below (rounded paws and her rim).
     float h = std::round(68 * size);
