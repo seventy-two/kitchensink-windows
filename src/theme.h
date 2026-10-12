@@ -1,5 +1,6 @@
-// Colours, fonts and ImGui style, in light and dark variants that follow the
-// Windows app theme.
+// Colours, fonts and ImGui style: light and dark variants that follow the
+// Windows app theme, OLED care's true black, and a retro theme after the
+// Weather Channel's 90s WeatherStar screens.
 #pragma once
 
 #include "imgui.h"
@@ -9,7 +10,16 @@ namespace ks {
 
 struct Palette {
     ImVec4 bg, card, border, text, muted, good, bad, warn, accent, hover, rowAlt, frame;
+    // The app's name and Recent's heading, and blocks' titles: text and
+    // muted, except in the retro theme's yellow.
+    ImVec4 heading, blockTitle;
+    // The retro theme's extras: the background's gradient, top to bottom,
+    // and panels' bevel, lit along the top and left.
+    ImVec4 bgTop, bgBottom, bevelLight, bevelDark;
+    bool retro = false;
 };
+
+enum class Theme { Light, Dark, Oled, Retro };
 
 struct Fonts {
     ImFont* body = nullptr;
@@ -44,13 +54,14 @@ bool SystemUsesDarkTheme();
 
 // ApplyTheme sets the palette and ImGui style for a theme and DPI scale.
 // Compact spacing is tighter, for small windows. OLED is a true-black dark
-// theme with dimmer text and fainter borders, whatever Windows' theme.
-void ApplyTheme(bool dark, float scale, bool compact = false, bool oled = false);
+// theme with dimmer text and fainter borders.
+void ApplyTheme(Theme theme, float scale, bool compact = false);
 const Palette& Colours();
 
-// LoadFonts rebuilds the font atlas for a DPI scale. The renderer's font
-// texture must be recreated afterwards.
-Fonts LoadFonts(float scale);
+// LoadFonts rebuilds the font atlas for a DPI scale: Segoe UI, or bold
+// Arial for the retro theme. The renderer's font texture must be recreated
+// afterwards.
+Fonts LoadFonts(float scale, bool retro = false);
 
 ImVec4 ToneColour(Tone t);
 

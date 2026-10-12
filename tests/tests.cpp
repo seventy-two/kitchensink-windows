@@ -1,5 +1,5 @@
 // Tests for the dashboard's portable code. Build and run with build.bat, or
-// on Linux: g++ -std=c++17 -I src -I third_party tests/tests.cpp src/model.cpp src/sse.cpp src/local.cpp src/cat.cpp
+// on Linux with the command in the README.
 #include <cstdio>
 #include <set>
 #include <string>
@@ -9,6 +9,7 @@
 #include "../src/cat.h"
 #include "../src/local.h"
 #include "../src/model.h"
+#include "../src/retro.h"
 #include "../src/sse.h"
 #include "../src/weather_icon.h"
 
@@ -520,7 +521,110 @@ static void testCat() {
     CHECK(later.x == again.x && later.facing == again.facing);
 }
 
+static ImDrawVert vert(float x, float y, float u, float v, ImU32 col = IM_COL32(255, 255, 255, 255)) {
+    ImDrawVert d;
+    d.pos = ImVec2(x, y);
+    d.uv = ImVec2(u, v);
+    d.col = col;
+    return d;
+}
+
+static void testRetro() {
+    const ImTextureID font = 1, image = 2;
+    const ImVec2 white(0.5f, 0.5f);
+    ImDrawList dl(nullptr);
+    // A shape (white pixel), then a glyph's quad, then an image.
+    dl.VtxBuffer.push_back(vert(0, 0, 0.5f, 0.5f));
+    dl.VtxBuffer.push_back(vert(10, 0, 0.5f, 0.5f));
+    dl.VtxBuffer.push_back(vert(0, 10, 0.5f, 0.5f));
+    dl.VtxBuffer.push_back(vert(20, 20, 0.1f, 0.1f, IM_COL32(255, 255, 255, 128)));
+    dl.VtxBuffer.push_back(vert(30, 20, 0.2f, 0.1f, IM_COL32(255, 255, 255, 128)));
+    dl.VtxBuffer.push_back(vert(30, 30, 0.2f, 0.2f, IM_COL32(255, 255, 255, 128)));
+    dl.VtxBuffer.push_back(vert(20, 30, 0.1f, 0.2f, IM_COL32(255, 255, 255, 128)));
+    for (ImDrawIdx i : {0, 1, 2, 3, 4, 5, 3, 5, 6}) dl.IdxBuffer.push_back(i);
+    ImDrawCmd text;
+    text.TextureId = font;
+    text.ElemCount = 9;
+    dl.CmdBuffer.push_back(text);
+    for (int i = 0; i < 3; i++) dl.VtxBuffer.push_back(vert(float(i), 0, 0.3f, 0.3f));
+    for (ImDrawIdx i : {0, 1, 2}) dl.IdxBuffer.push_back(i);
+    ImDrawCmd img;
+    img.TextureId = image;
+    img.VtxOffset = 7;
+    img.IdxOffset = 9;
+    img.ElemCount = 3;
+    dl.CmdBuffer.push_back(img);
+
+    ImDrawData data;
+    data.CmdLists.push_back(&dl);
+    AddTextShadows(&data, font, white, ImVec2(2, 2), IM_COL32(0, 0, 0, 200));
+    CHECK_EQ(dl.CmdBuffer.Size, 2);
+    // The shape, the glyph's two shadow triangles, then the glyph itself.
+    CHECK_EQ(dl.CmdBuffer[0].ElemCount, 15u);
+    auto at = [&](const ImDrawCmd& c, unsigned i) { return dl.VtxBuffer[c.VtxOffset + dl.IdxBuffer[c.IdxOffset + i]]; };
+    CHECK_EQ(at(dl.CmdBuffer[0], 0).pos.x, 0.0f);
+    ImDrawVert shadow = at(dl.CmdBuffer[0], 3);
+    CHECK_EQ(shadow.pos.x, 22.0f);
+    CHECK_EQ(shadow.pos.y, 22.0f);
+    CHECK_EQ(shadow.col, IM_COL32(0, 0, 0, 200 * 128 / 255));
+    CHECK_EQ(at(dl.CmdBuffer[0], 9).pos.x, 20.0f);  // the glyph, unmoved
+    CHECK_EQ(at(dl.CmdBuffer[0], 9).col, IM_COL32(255, 255, 255, 128));
+    // The image is left alone.
+    CHECK_EQ(dl.CmdBuffer[1].ElemCount, 3u);
+    CHECK(dl.CmdBuffer[1].TextureId == image);
+    CHECK_EQ(at(dl.CmdBuffer[1], 2).pos.x, 2.0f);
+    CHECK_EQ(data.TotalVtxCount, dl.VtxBuffer.Size);
+    CHECK_EQ(data.TotalIdxCount, dl.IdxBuffer.Size);
+
+    // Lots of text splits into commands that each stay in 16-bit range.
+    ImDrawList big(nullptr);
+    const unsigned glyphs = 15000;
+    for (unsigned g = 0; g < glyphs; g++) {
+        for (int k = 0; k < 4; k++) big.VtxBuffer.push_back(vert(float(k), float(g), 0.1f, 0.1f));
+    }
+    ImDrawCmd all;
+    all.TextureId = font;
+    unsigned base = 0;
+    for (unsigned g = 0; g < glyphs; g++, base += 4) {
+        // Each command can only reach 65535 vertices from its offset, so
+        // the input itself comes in commands.
+        if (base + 4 > 65535) {
+            big.CmdBuffer.push_back(all);
+            all.VtxOffset += base;
+            all.IdxOffset = unsigned(big.IdxBuffer.Size);
+            all.ElemCount = 0;
+            base = 0;
+        }
+        for (unsigned i : {0u, 1u, 2u, 0u, 2u, 3u}) big.IdxBuffer.push_back(ImDrawIdx(base + i));
+        all.ElemCount += 6;
+    }
+    big.CmdBuffer.push_back(all);
+    ImDrawData bigData;
+    bigData.CmdLists.push_back(&big);
+    AddTextShadows(&bigData, font, white, ImVec2(1, 1), IM_COL32(0, 0, 0, 255));
+    unsigned elems = 0;
+    bool inRange = true;
+    for (const ImDrawCmd& c : big.CmdBuffer) {
+        elems += c.ElemCount;
+        for (unsigned i = 0; i < c.ElemCount; i++)
+            if (c.VtxOffset + big.IdxBuffer[c.IdxOffset + i] >= unsigned(big.VtxBuffer.Size))
+                inRange = false;
+    }
+    CHECK(big.CmdBuffer.Size > 2);
+    CHECK_EQ(elems, glyphs * 12);
+    CHECK(inRange);
+
+    std::tm t{};
+    t.tm_hour = 16, t.tm_min = 52, t.tm_sec = 10, t.tm_wday = 1, t.tm_mday = 12, t.tm_mon = 9;
+    CHECK(RetroClock(t) == std::make_pair(std::string("4:52:10 PM"), std::string("MON 12 OCT")));
+    t.tm_hour = 0, t.tm_min = 5, t.tm_sec = 0;
+    CHECK_EQ(RetroClock(t).first, std::string("12:05:00 AM"));
+    t.tm_hour = 12;
+    CHECK_EQ(RetroClock(t).first, std::string("12:05:00 PM"));
+}
+
 int main() {
+    testRetro();
     testCat();
     testWeatherIcons();
     testPrivate();

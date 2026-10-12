@@ -58,10 +58,27 @@ public:
     // while typing.
     bool Busy() const { return busy_; }
     // FrameInterval is how often, in milliseconds, something on screen
-    // wants drawing while it moves (the cat), or 0 when nothing does.
+    // wants drawing while it moves (the cat, the retro theme's clock), or 0
+    // when nothing does.
     unsigned long FrameInterval() const { return frameInterval_; }
 
+    // FontsDirty says the fonts need loading again (the theme changed), which
+    // the caller does with ReloadFonts before the next frame, then recreates
+    // the renderer's font texture.
+    bool FontsDirty() const { return fontsDirty_; }
+    void ReloadFonts();
+
+    // PostRender finishes the frame's draw data before it's drawn: the
+    // retro theme's text shadows.
+    void PostRender(ImDrawData* data) const;
+
 private:
+    // theme is the theme in use: retro if chosen, else true black for OLED
+    // care, else Windows' light or dark.
+    Theme theme() const;
+    // bevel raises a retro panel: lit along its top and left, shaded along
+    // its bottom and right.
+    void bevel(ImVec2 min, ImVec2 max);
     void header();
     float windowButtons();
     // panels lists everything to draw, in the order the user dragged them
@@ -104,7 +121,7 @@ private:
     // Compact shows each monitor's summary instead of its full panel, for
     // small windows; see UseCompact.
     bool compact_ = false;
-    bool fontsDirty_ = true;
+    bool fontsDirty_ = false;
     Fonts fonts_;
 
     Config config_;
@@ -144,6 +161,7 @@ private:
     bool startChoice_ = false;
     OledCare oledChoice_;
     bool catChoice_ = false;
+    int themeChoice_ = 0;  // 0 as Windows, 1 retro
 
     // OLED care: when the mouse was last over the window, and until when
     // something new keeps it bright (Unix seconds).

@@ -29,7 +29,35 @@ const Palette kOled = {
     hex(0xD9534B), hex(0xBF8A27), hex(0x4A8AD4), hex(0x15171B), hex(0x0E0F12), hex(0x131518),
 };
 
-Palette current = kDark;
+// The retro theme, after the WeatherStar 4000: a deep blue sky fading to
+// purple, raised blue panels, white lettering with yellow headings, and
+// colours bright enough to read on blue.
+const Palette kRetro = {
+    hex(0x0B1663), hex(0x1C3694), hex(0x0A1450), hex(0xFFFFFF), hex(0xAEBCF4), hex(0x6CF06C),
+    hex(0xFF6A5A), hex(0xFF9A1F), hex(0xFFC21A), hex(0x2B4CC0), hex(0x2443A6), hex(0x132A7C),
+};
+
+// extras fills in what the plain palettes don't set.
+Palette extras(Palette p) {
+    p.heading = p.text;
+    p.blockTitle = p.muted;
+    p.bgTop = p.bgBottom = p.bg;
+    p.bevelLight = p.bevelDark = p.border;
+    return p;
+}
+
+Palette retro() {
+    Palette p = extras(kRetro);
+    p.heading = p.blockTitle = hex(0xFFE84A);
+    p.bgTop = hex(0x0B1663);
+    p.bgBottom = hex(0x3A1D7E);
+    p.bevelLight = hex(0x6F8FF0);
+    p.bevelDark = hex(0x06103C);
+    p.retro = true;
+    return p;
+}
+
+Palette current = extras(kDark);
 
 std::string fontPath(const char* file) {
     char dir[MAX_PATH];
@@ -64,9 +92,14 @@ ImVec4 ToneColour(Tone t) {
     }
 }
 
-void ApplyTheme(bool dark, float scale, bool compact, bool oled) {
-    current = oled ? kOled : dark ? kDark : kLight;
-    dark = dark || oled;
+void ApplyTheme(Theme theme, float scale, bool compact) {
+    switch (theme) {
+    case Theme::Light: current = extras(kLight); break;
+    case Theme::Dark: current = extras(kDark); break;
+    case Theme::Oled: current = extras(kOled); break;
+    case Theme::Retro: current = retro(); break;
+    }
+    bool dark = theme != Theme::Light;
     const Palette& p = current;
 
     ImGuiStyle& s = ImGui::GetStyle();
@@ -89,6 +122,9 @@ void ApplyTheme(bool dark, float scale, bool compact, bool oled) {
     s.ChildBorderSize = 1;
     s.PopupBorderSize = 1;
     s.FrameBorderSize = 0;
+    // Lines drawn from the font texture would pick up the retro theme's
+    // text shadows (see AddTextShadows).
+    s.AntiAliasedLinesUseTex = !p.retro;
     s.ScaleAllSizes(scale);
 
     ImVec4* c = s.Colors;
@@ -127,7 +163,7 @@ void ApplyTheme(bool dark, float scale, bool compact, bool oled) {
     c[ImGuiCol_NavHighlight] = p.accent;
 }
 
-Fonts LoadFonts(float scale) {
+Fonts LoadFonts(float scale, bool retro) {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
 
@@ -138,6 +174,8 @@ Fonts LoadFonts(float scale) {
     static const ImWchar icons[] = {0xE700, 0xF8FF, 0};
 
     std::string regular = fontPath("segoeui.ttf"), semibold = fontPath("seguisb.ttf");
+    // The WeatherStar's lettering was a heavy sans, all bold.
+    if (retro && exists(fontPath("arialbd.ttf"))) regular = semibold = fontPath("arialbd.ttf");
     std::string iconFont = fontPath("SegoeIcons.ttf");
     if (!exists(iconFont)) iconFont = fontPath("segmdl2.ttf");
     if (!exists(semibold)) semibold = regular;

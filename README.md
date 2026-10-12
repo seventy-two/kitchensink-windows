@@ -62,6 +62,10 @@ result is a single `kitchensink.exe` with nothing to install.
   every other hour.
 - Follows the Windows light or dark app theme (set `KITCHENSINK_THEME` to
   `light` or `dark` to override) and per-monitor DPI.
+- **Retro** (in settings): a theme after the Weather Channel's 90s
+  WeatherStar screens, with a deep blue sky fading to purple, raised blue
+  panels, bold lettering with black drop shadows, yellow headings, an amber
+  rule under the title bar and a clock beside the buttons.
 - Settings live in `%APPDATA%\kitchensink\config.json`; the token is
   encrypted with DPAPI, so only your Windows account can read it.
 
@@ -78,7 +82,8 @@ parts (the data model and the server-sent events parser) also build and
 test on Linux:
 
 ```sh
-g++ -std=c++17 -I src -I third_party tests/tests.cpp src/model.cpp src/sse.cpp src/local.cpp src/cat.cpp src/weather_icon.cpp && ./a.out
+g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/model.cpp src/sse.cpp src/local.cpp \
+    src/cat.cpp src/weather_icon.cpp src/retro.cpp third_party/imgui/imgui*.cpp && ./a.out
 ```
 
 ## Layout
@@ -96,6 +101,7 @@ g++ -std=c++17 -I src -I third_party tests/tests.cpp src/model.cpp src/sse.cpp s
 | `src/images.cpp` | thumbnail download, WIC decoding and textures |
 | `src/config.cpp` | settings and start-with-Windows |
 | `src/theme.cpp` | palettes, fonts and ImGui style |
+| `src/retro.cpp` | the retro theme's text shadows and clock |
 | `src/cat.cpp` | the cat above Recent: her poses, routine and drawing |
 | `src/weather_icon.cpp` | weather icons for the forecast's chips, drawn from shapes |
 | `src/canvas.h` | the simple drawing interface those two draw through |

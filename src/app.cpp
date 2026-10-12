@@ -14,6 +14,7 @@
 #include "cat.h"
 #include "weather_icon.h"
 #include "local.h"
+#include "retro.h"
 
 namespace ks {
 
@@ -175,15 +176,45 @@ App::~App() {
     images_.reset();
 }
 
+Theme App::theme() const {
+    if (config_.theme == "retro") return Theme::Retro;
+    if (config_.oled.black) return Theme::Oled;
+    return dark_ ? Theme::Dark : Theme::Light;
+}
+
 void App::SetScale(float scale) {
     scale_ = scale;
-    ApplyTheme(dark_, scale_, compact_, config_.oled.black);
-    fonts_ = LoadFonts(scale_);
+    ApplyTheme(theme(), scale_, compact_);
+    fonts_ = LoadFonts(scale_, Colours().retro);
+    fontsDirty_ = false;
+}
+
+void App::ReloadFonts() {
+    fonts_ = LoadFonts(scale_, Colours().retro);
+    fontsDirty_ = false;
 }
 
 void App::SetDark(bool dark) {
     dark_ = dark;
-    ApplyTheme(dark_, scale_, compact_, config_.oled.black);
+    ApplyTheme(theme(), scale_, compact_);
+}
+
+void App::PostRender(ImDrawData* data) const {
+    if (!Colours().retro) return;
+    ImFontAtlas* atlas = ImGui::GetIO().Fonts;
+    float d = std::max(1.0f, std::round(1.5f * scale_));
+    AddTextShadows(data, atlas->TexID, atlas->TexUvWhitePixel, ImVec2(d, d), IM_COL32(0, 0, 0, 210));
+}
+
+void App::bevel(ImVec2 min, ImVec2 max) {
+    const Palette& p = Colours();
+    if (!p.retro) return;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float t = std::max(1.0f, std::round(2 * scale_));
+    dl->AddRectFilled(min, ImVec2(max.x, min.y + t), u32(p.bevelLight));
+    dl->AddRectFilled(min, ImVec2(min.x + t, max.y), u32(p.bevelLight));
+    dl->AddRectFilled(ImVec2(min.x, max.y - t), max, u32(p.bevelDark));
+    dl->AddRectFilled(ImVec2(max.x - t, min.y), max, u32(p.bevelDark));
 }
 
 void App::Pump() {
@@ -258,7 +289,7 @@ void App::Frame() {
     ImGuiIO& io = ImGui::GetIO();
     if (bool c = UseCompact(compact_, io.DisplaySize.x, io.DisplaySize.y, scale_); c != compact_) {
         compact_ = c;
-        ApplyTheme(dark_, scale_, compact_, config_.oled.black);
+        ApplyTheme(theme(), scale_, compact_);
     }
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(io.DisplaySize);
@@ -268,6 +299,12 @@ void App::Frame() {
                      ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoScrollbar |
                      ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar();
+    // The retro theme's sky, behind everything.
+    if (Colours().retro) {
+        const Palette& p = Colours();
+        ImGui::GetWindowDrawList()->AddRectFilledMultiColor(ImVec2(0, 0), io.DisplaySize, u32(p.bgTop), u32(p.bgTop),
+                                                            u32(p.bgBottom), u32(p.bgBottom));
+    }
 
     // OLED care moves everything round a small circle, inside a margin left
     // for it. The window itself stays full size, so nothing behind it (the
@@ -335,6 +372,8 @@ void App::Frame() {
     if (dimmed) ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, 153));
     // The cat isn't drawn while the window's dimmed.
     frameInterval_ = dimmed ? 0 : catInterval_;
+    // The retro theme's clock shows seconds.
+    if (!dimmed && Colours().retro) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 1000ul) : 1000;
     busy_ = ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || settingsOpen_;
     ImGui::End();
 }
@@ -388,14 +427,42 @@ void App::header() {
     if (!IsZoomed(hwnd_))
         ImGui::GetBackgroundDrawList()->AddLine(ImVec2(0, 0.5f), ImVec2(ImGui::GetIO().DisplaySize.x, 0.5f), u32(p.border));
 
+    // The retro theme's title band, with an amber rule beneath, behind the
+    // window buttons too.
+    if (p.retro) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        ImVec2 a = origin, b(origin.x + width, origin.y + captionH_);
+        dl->AddRectFilledMultiColor(a, b, IM_COL32(0x24, 0x3C, 0xB4, 0xFF), IM_COL32(0x24, 0x3C, 0xB4, 0xFF),
+                                    IM_COL32(0x10, 0x1E, 0x7A, 0xFF), IM_COL32(0x10, 0x1E, 0x7A, 0xFF));
+        float t = std::max(2.0f, std::round(3 * scale_));
+        dl->AddRectFilledMultiColor(ImVec2(a.x, b.y - t), b, IM_COL32(0xE0, 0x62, 0x00, 0xFF), IM_COL32(0xFF, 0xC8, 0x1A, 0xFF),
+                                    IM_COL32(0xFF, 0xC8, 0x1A, 0xFF), IM_COL32(0xE0, 0x62, 0x00, 0xFF));
+    }
+
     float left = windowButtons();
 
     ImGui::PushFont(fonts_.title);
     float titleH = ImGui::GetTextLineHeight();
     float mid = captionH_ / 2;
     ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().WindowPadding.x, mid - titleH / 2));
-    ImGui::TextUnformatted("kitchensink");
+    ImGui::TextColored(p.heading, "kitchensink");
     ImGui::PopFont();
+
+    // The retro theme's clock, as on the WeatherStar: time, then date.
+    std::pair<std::string, std::string> clock;
+    float clockW = 0, gapW = 10 * scale_;
+    if (p.retro) {
+        std::time_t tt = std::time(nullptr);
+        std::tm local{};
+        localtime_s(&local, &tt);
+        clock = RetroClock(local);
+        ImGui::PushFont(fonts_.heading);
+        clockW = ImGui::CalcTextSize(clock.first.c_str()).x;
+        ImGui::PopFont();
+        ImGui::PushFont(fonts_.caption);
+        clockW += gapW + ImGui::CalcTextSize(clock.second.c_str()).x;
+        ImGui::PopFont();
+    }
 
     ConnState state = client_->State();
     ImVec4 dot = p.muted;
@@ -423,7 +490,7 @@ void App::header() {
     ImGui::SameLine(0, 6 * scale_);
     ImGui::SetCursorPosY(mid - textH / 2);
     // Long errors stop short of the buttons.
-    ImGui::PushClipRect(ImGui::GetCursorScreenPos(), ImVec2(left - 48 * scale_, origin.y + captionH_), true);
+    ImGui::PushClipRect(ImGui::GetCursorScreenPos(), ImVec2(left - 48 * scale_ - (clockW > 0 ? clockW + 72 * scale_ : 0), origin.y + captionH_), true);
     mutedText(status);
     ImGui::PopClipRect();
     ImGui::PopFont();
@@ -437,6 +504,7 @@ void App::header() {
     ImGui::PopStyleColor();
     if (open) openSettings();
     noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
+    float buttonsLeft = ImGui::GetItemRectMin().x;
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Settings");
 
     // Hide or show private figures, e.g. a portfolio, at a click: only
@@ -459,12 +527,25 @@ void App::header() {
                                                 u32(p.muted), 1.5f * scale_);
         }
         noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
+        buttonsLeft = ImGui::GetItemRectMin().x;
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", config_.hidePrivate ? "Show private figures" : "Hide private figures");
         if (toggle) {
             config_.hidePrivate = !config_.hidePrivate;
             SaveConfig(config_);
         }
+    }
+    if (clockW > 0) {
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        float x = buttonsLeft - 16 * scale_ - clockW;
+        ImGui::PushFont(fonts_.heading);
+        ImVec2 ts = ImGui::CalcTextSize(clock.first.c_str());
+        dl->AddText(ImVec2(x, std::round(origin.y + mid - ts.y / 2)), u32(p.text), clock.first.c_str());
+        ImGui::PopFont();
+        ImGui::PushFont(fonts_.caption);
+        ImVec2 ds = ImGui::CalcTextSize(clock.second.c_str());
+        dl->AddText(ImVec2(x + ts.x + gapW, std::round(origin.y + mid - ds.y / 2)), u32(p.heading), clock.second.c_str());
+        ImGui::PopFont();
     }
     ImGui::SetCursorPosY(captionH_ + (compact_ ? 2 : 8) * scale_);
 }
@@ -645,6 +726,7 @@ void App::card(const Snapshot& s, float width) {
 
     ImGui::EndChild();
     ImGui::PopStyleColor();
+    bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     heights_[s.monitor] = ImGui::GetItemRectSize().y;
     cardRects_.push_back({s.monitor, ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax())});
 }
@@ -898,6 +980,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
     }
     ImGui::EndChild();
     ImGui::PopStyleColor();
+    bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (clicked) cardRects_.push_back({s.monitor, ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax())});
     return ImGui::GetItemRectSize().y;
 }
@@ -1183,7 +1266,7 @@ void App::summary(const std::vector<Stat>& stats, float width) {
 void App::block(const std::string& monitor, const Block& b) {
     if (!b.title.empty() && b.type != "stats") {
         ImGui::PushFont(fonts_.caption);
-        mutedText(b.title);
+        ImGui::TextColored(Colours().blockTitle, "%s", b.title.c_str());
         ImGui::PopFont();
     }
     if (b.type == "stats") stats(b);
@@ -1346,7 +1429,7 @@ void App::checklist(const std::string& monitor, const Block& b) {
 void App::stats(const Block& b) {
     if (!b.title.empty()) {
         ImGui::PushFont(fonts_.caption);
-        mutedText(b.title);
+        ImGui::TextColored(Colours().blockTitle, "%s", b.title.c_str());
         ImGui::PopFont();
     }
     size_t n = b.stats.size();
@@ -1535,7 +1618,7 @@ void App::feedHeading(float width) {
     const ImGuiIO& io = ImGui::GetIO();
     ImVec2 at = ImGui::GetCursorScreenPos();
     ImGui::PushFont(fonts_.heading);
-    ImGui::TextUnformatted("Recent");
+    ImGui::TextColored(p.heading, "Recent");
     ImGui::PopFont();
     float h = ImGui::GetItemRectSize().y;
     ImGui::Dummy(ImVec2(0, 2 * scale_));
@@ -1629,6 +1712,7 @@ void App::feed() {
             else OpenURL(e.url);
         }
         dl->ChannelsMerge();
+        bevel(start, end);
         ImGui::Dummy(ImVec2(0, 1 * scale_));
         ImGui::PopID();
     }
@@ -1647,6 +1731,7 @@ void App::openSettings() {
     startChoice_ = StartsWithWindows();
     oledChoice_ = config_.oled;
     catChoice_ = config_.cat;
+    themeChoice_ = config_.theme == "retro" ? 1 : 0;
     settingsOpen_ = true;
 }
 
@@ -1661,7 +1746,7 @@ void App::settings() {
     ImGui::PopStyleVar();
     if (!open) return;
     ImGui::PushFont(fonts_.title);
-    ImGui::TextUnformatted("Settings");
+    ImGui::TextColored(Colours().heading, "Settings");
     ImGui::PopFont();
     ImGui::Dummy(ImVec2(0, 4 * scale_));
 
@@ -1683,6 +1768,11 @@ void App::settings() {
     ImGui::EndDisabled();
     ImGui::Checkbox("Start with Windows", &startChoice_);
     ImGui::Dummy(ImVec2(0, 4 * scale_));
+    mutedText("Theme");
+    static const char* kThemes[] = {"As Windows (light or dark)", "Retro (the 90s Weather Channel)"};
+    ImGui::SetNextItemWidth(w);
+    ImGui::Combo("##theme", &themeChoice_, kThemes, IM_ARRAYSIZE(kThemes));
+    ImGui::Dummy(ImVec2(0, 4 * scale_));
     mutedText("OLED care, against burn-in");
     auto care = [&](const char* label, bool* on, const char* what) {
         ImGui::Checkbox(label, on);
@@ -1693,7 +1783,9 @@ void App::settings() {
         ImGui::PopFont();
     };
     care("Shift", &oledChoice_.shift, "moves everything a few pixels every three minutes");
-    care("True black", &oledChoice_.black, "a black theme with dimmer text and borders");
+    ImGui::BeginDisabled(themeChoice_ == 1);
+    care("True black", &oledChoice_.black, themeChoice_ == 1 ? "not with the retro theme" : "a black theme with dimmer text and borders");
+    ImGui::EndDisabled();
     care("Dim when idle", &oledChoice_.dim, "after ten minutes without the mouse over the window");
     care("Swap sides", &oledChoice_.swap, "moves the Recent column across every other hour");
     ImGui::Dummy(ImVec2(0, 4 * scale_));
@@ -1726,12 +1818,15 @@ void App::settings() {
         c.notify = notifyChoice_;
         c.oled = oledChoice_;
         c.cat = catChoice_;
+        c.theme = themeChoice_ == 1 ? "retro" : "";
         c.minPriority = kPriorities[std::clamp(priorityChoice_, 0, 2)];
         bool reconnect = c.url != config_.url || c.token != config_.token;
         config_ = c;
         SaveConfig(config_);
         SetStartWithWindows(startChoice_);
-        ApplyTheme(dark_, scale_, compact_, config_.oled.black);
+        bool wasRetro = Colours().retro;
+        ApplyTheme(theme(), scale_, compact_);
+        if (Colours().retro != wasRetro) fontsDirty_ = true;
         if (reconnect) {
             model_ = Model();
             client_->Start(config_.url, config_.token);

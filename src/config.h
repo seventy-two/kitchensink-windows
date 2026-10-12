@@ -27,6 +27,9 @@ struct Config {
     OledCare oled;
     // A black cat asleep above the Recent column.
     bool cat = false;
+    // The colour theme: empty to follow Windows' light or dark mode, or
+    // "retro", after the Weather Channel's 90s WeatherStar screens.
+    std::string theme;
     // Events cleared from the Recent column.
     Model::Cleared cleared;
     // Hides private figures, e.g. a portfolio's value, from the panels.

@@ -90,11 +90,17 @@ void renderFrame(bool present) {
         resizeW = resizeH = 0;
         createTarget();
     }
+    // A new theme can need other fonts, which must be loaded between frames.
+    if (app->FontsDirty()) {
+        app->ReloadFonts();
+        ImGui_ImplDX11_InvalidateDeviceObjects();
+    }
     ImGui_ImplDX11_NewFrame();
     ImGui_ImplWin32_NewFrame();
     ImGui::NewFrame();
     app->Frame();
     ImGui::Render();
+    app->PostRender(ImGui::GetDrawData());
     if (present) {
         const ImVec4& bg = ks::Colours().bg;
         const float clear[4] = {bg.x, bg.y, bg.z, 1};
