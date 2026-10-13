@@ -293,8 +293,13 @@ void Model::ApplySnapshot(Snapshot s) {
 }
 
 bool Model::AddEvent(Event e) {
-    for (const auto& x : events_)
-        if (x.id == e.id) return false;
+    // One already here has been updated, e.g. a price move since changed:
+    // the new copy replaces it, without counting as new.
+    for (auto& x : events_)
+        if (x.id == e.id) {
+            x = std::move(e);
+            return false;
+        }
     lastEventID_ = std::max(lastEventID_, e.id);
     if (e.id <= cleared_.through || cleared_.ids.count(e.id)) return false;
     // Keep newest first; events nearly always arrive in order.

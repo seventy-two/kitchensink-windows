@@ -188,8 +188,9 @@ public:
     void EndSync();
 
     void ApplySnapshot(Snapshot s);
-    // AddEvent stores an event and reports whether it was new. Cleared
-    // ones aren't stored again, e.g. when history is replayed.
+    // AddEvent stores an event and reports whether it was new. One it has
+    // already is replaced, as the server updates events. Cleared ones aren't
+    // stored again, e.g. when history is replayed.
     bool AddEvent(Event e);
 
     // Clear removes an event from Recent; ClearAll removes every one so

@@ -343,6 +343,13 @@ static void testModel() {
     e.id = 2;
     CHECK(m.AddEvent(e));
     CHECK(!m.AddEvent(e));
+    // An updated copy replaces it, without counting as new.
+    e.title = "AMD down 0.71% today", e.quiet = true;
+    CHECK(!m.AddEvent(e));
+    CHECK_EQ(m.Events().front().title, std::string("AMD down 0.71% today"));
+    CHECK(m.Events().front().quiet);
+    CHECK_EQ(m.Events().size(), size_t(1));
+    e.title.clear(), e.quiet = false;
     e.id = 5;
     CHECK(m.AddEvent(e));
     e.id = 3;
