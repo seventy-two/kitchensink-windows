@@ -215,6 +215,10 @@ Snapshot DrivesSnapshot(const std::vector<DriveInfo>& drives, int64_t now) {
         Stat st{name, percent(used), FormatBytes(d.free) + " free", LoadTone(used), {}};
         st.widestValue = "100%";
         st.widestDetail = FormatBytes(d.total) + " free";
+        // Drawn as a bar of how full it is, the drives a group of their own.
+        st.bar = true;
+        st.level = std::clamp(used / 100, 0.0f, 1.0f), st.hasLevel = true;
+        st.group = snap.summary.empty();
         snap.summary.push_back(st);
     }
     if (b.rows.empty()) {

@@ -33,6 +33,11 @@ struct Stat {
     // keeps that much room, so figures that change every second don't push
     // the tiles after them about. Empty for no reserve.
     std::string widestValue, widestDetail;
+    // In a summary tile: bar draws the value beside a bar filled to level,
+    // e.g. how full a drive is; group starts a new group of tiles, after a
+    // little more room and a faint rule.
+    bool bar = false;
+    bool group = false;
 };
 
 struct Column {

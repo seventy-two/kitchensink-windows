@@ -216,6 +216,10 @@ static void testLocalPanels() {
     CHECK_EQ(all.summary.size(), pc.summary.size() + 2);
     CHECK_EQ(all.summary.back().label, std::string("D:"));
     CHECK_EQ(d.summary[1].widestValue, std::string("100%"));
+    // Drawn as bars of how full each is, the first starting their group.
+    CHECK(d.summary[0].bar && d.summary[0].hasLevel);
+    CHECK(std::fabs(d.summary[0].level - 0.96f) < 0.001f);
+    CHECK(d.summary[0].group && !d.summary[1].group);
     CHECK_EQ(DrivesSnapshot({}, 0).blocks[0].type, std::string("text"));
 }
 

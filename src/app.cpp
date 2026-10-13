@@ -1225,33 +1225,74 @@ void App::chips(const std::vector<Stat>& stats, float width) {
 }
 
 void App::summary(const std::vector<Stat>& stats, float width) {
+    const Palette& p = Colours();
     bool details = std::any_of(stats.begin(), stats.end(), [](const Stat& s) { return !s.detail.empty(); });
     float spacing = 24 * scale_;
+    // A bar tile: its value beside its label, and the bar across the tile.
+    float barMin = std::round(48 * scale_), barH = std::max(4.0f, std::round(5 * scale_)), barGap = 6 * scale_;
+    float groupGap = 12 * scale_;  // the extra room before a new group
     ImVec2 origin = ImGui::GetCursorScreenPos();
     float x = 0, y = 0, lineH = 0;
+    ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGui::BeginGroup();
     for (size_t i = 0; i < stats.size(); i++) {
         const Stat& s = stats[i];
         ImGui::PushFont(fonts_.caption);
         std::string label = fit(s.label, width), detail = fit(s.detail, width);
-        float w = std::max({ImGui::CalcTextSize(label.c_str()).x, ImGui::CalcTextSize(detail.c_str()).x,
-                            ImGui::CalcTextSize(s.widestDetail.c_str()).x});
+        float labelW = ImGui::CalcTextSize(label.c_str()).x;
+        float w = std::max({labelW, ImGui::CalcTextSize(detail.c_str()).x, ImGui::CalcTextSize(s.widestDetail.c_str()).x});
+        float captionH = ImGui::GetTextLineHeight();
+        std::string value = fit(s.value, width);
+        if (s.bar) {
+            float valueW = std::max(ImGui::CalcTextSize(value.c_str()).x, ImGui::CalcTextSize(s.widestValue.c_str()).x);
+            w = std::max({w, labelW + barGap + valueW, barMin});
+        }
         ImGui::PopFont();
         ImGui::PushFont(fonts_.heading);
-        std::string value = fit(s.value, width);
-        w = std::max({w, ImGui::CalcTextSize(value.c_str()).x, ImGui::CalcTextSize(s.widestValue.c_str()).x});
+        float valueH = ImGui::GetTextLineHeight();
+        if (!s.bar) w = std::max({w, ImGui::CalcTextSize(value.c_str()).x, ImGui::CalcTextSize(s.widestValue.c_str()).x});
         ImGui::PopFont();
         // Room kept for figures that change, short of the whole line.
         w = std::min(w, width);
 
-        if (x > 0 && x + w > width) x = 0, y += lineH + 4 * scale_, lineH = 0;
+        bool group = s.group && x > 0;
+        if (x > 0 && x + (group ? groupGap : 0) + w > width) x = 0, y += lineH + 4 * scale_, lineH = 0, group = false;
+        if (group) {
+            // A faint rule midway between the groups.
+            float rx = std::round(origin.x + x - spacing / 2 + groupGap / 2);
+            float h = captionH + valueH + (details ? captionH : 0);
+            dl->AddLine(ImVec2(rx, origin.y + y + 2 * scale_), ImVec2(rx, origin.y + y + h - 2 * scale_), u32(p.border),
+                        std::max(1.0f, std::round(scale_)));
+            x += groupGap;
+        }
         ImGui::SetCursorScreenPos(ImVec2(origin.x + x, origin.y + y));
         ImGui::BeginGroup();
         ImGui::PushFont(fonts_.caption);
         mutedText(label);
+        if (s.bar) {
+            // The value beside the label, right-aligned in the tile.
+            ImGui::SameLine(0, 0);
+            float vw = ImGui::CalcTextSize(value.c_str()).x;
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + x + w - vw, ImGui::GetCursorScreenPos().y));
+            ImGui::TextColored(ToneColour(s.tone), "%s", value.c_str());
+        }
         ImGui::PopFont();
         ImGui::PushFont(fonts_.heading);
-        ImGui::TextColored(ToneColour(s.tone), "%s", value.c_str());
+        if (s.bar) {
+            // How full, as a bar across the tile: in the accent normally, the
+            // tone's colour as it fills up.
+            ImGui::SetCursorScreenPos(ImVec2(origin.x + x, ImGui::GetCursorScreenPos().y));
+            ImVec2 at = ImGui::GetCursorScreenPos();
+            float by = std::round(at.y + (valueH - barH) / 2);
+            ImVec4 fill = s.tone == Tone::Warn || s.tone == Tone::Bad ? ToneColour(s.tone)
+                          : s.tone == Tone::Muted                     ? p.muted
+                                                                      : p.accent;
+            dl->AddRectFilled(ImVec2(at.x, by), ImVec2(at.x + w, by + barH), u32(p.frame));
+            dl->AddRectFilled(ImVec2(at.x, by), ImVec2(at.x + std::round(w * s.level), by + barH), u32(fill));
+            ImGui::Dummy(ImVec2(w, valueH));
+        } else {
+            ImGui::TextColored(ToneColour(s.tone), "%s", value.c_str());
+        }
         ImGui::PopFont();
         if (details) {
             ImGui::PushFont(fonts_.caption);
