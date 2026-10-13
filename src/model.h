@@ -75,6 +75,7 @@ struct Media {
 struct Block {
     std::string type, title, text;
     std::string addHint;  // a checklist takes new items when set
+    std::string deleteHint;  // what a checklist's delete does, when it isn't deleting
     bool isPrivate = false;  // personal figures, hidden on request
     Media media;
     std::vector<Stat> stats;

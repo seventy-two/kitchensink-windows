@@ -75,6 +75,7 @@ Block parseBlock(const json& j) {
                            tone(i), str(i, "id"), done != i.end() && done->is_boolean() && done->get<bool>()});
     }
     b.addHint = str(j, "addHint");
+    b.deleteHint = str(j, "deleteHint");
     b.isPrivate = flag(j, "private");
     return b;
 }

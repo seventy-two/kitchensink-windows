@@ -1421,7 +1421,7 @@ void App::checklist(const std::string& monitor, const Block& b) {
         // the box too.
         ImGui::PushTextWrapPos(right - bw - st.ItemSpacing.x - ImGui::GetWindowPos().x);
         ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(done ? p.muted : p.text, "%s", it.title.c_str());
+        ImGui::TextColored(done ? p.muted : it.tone == Tone::None ? p.text : ToneColour(it.tone), "%s", it.title.c_str());
         ImGui::PopTextWrapPos();
         ImVec2 textMin = ImGui::GetItemRectMin(), textMax = ImGui::GetItemRectMax();
         if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -1442,7 +1442,7 @@ void App::checklist(const std::string& monitor, const Block& b) {
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             ImGui::PushStyleColor(ImGuiCol_Text, p.muted);
             if (ImGui::Button(icon::Close)) act({{"type", "delete"}, {"id", it.id}});
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Delete");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", b.deleteHint.empty() ? "Delete" : b.deleteHint.c_str());
             ImGui::PopStyleColor(2);
             ImGui::PopFont();
             ImGui::SetCursorScreenPos(next);

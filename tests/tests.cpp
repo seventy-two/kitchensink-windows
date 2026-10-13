@@ -67,7 +67,7 @@ static void testParseSnapshot() {
              "rows": [[{"text": "Today", "url": "https://example.com", "detail": "dry"}, {"text": "15°", "tone": "bad"}]]},
             {"type": "list", "items": [{"title": "Car", "image": "https://example.com/a.jpg", "tone": "warn"}]},
             {"type": "text", "text": "hello", "unknown": {"nested": true}},
-            {"type": "checklist", "addHint": "Add a task…", "items": [{"id": "a1", "title": "Bins", "done": true}, {"id": "b2", "title": "Post"}]}
+            {"type": "checklist", "addHint": "Add a task…", "deleteHint": "Put off a day", "items": [{"id": "a1", "title": "Bins", "done": true}, {"id": "b2", "title": "Post"}]}
         ],
         "summary": [{"label": "Now", "value": "13°C", "tone": "good", "series": [1, 2]}, {"label": "Rain"}],
         "summaryStyle": "chips"
@@ -80,6 +80,7 @@ static void testParseSnapshot() {
     CHECK_EQ(s.updated, int64_t(1791655651));
     CHECK_EQ(s.blocks.size(), size_t(5));
     CHECK_EQ(s.blocks[4].addHint, std::string("Add a task…"));
+    CHECK_EQ(s.blocks[4].deleteHint, std::string("Put off a day"));
     CHECK_EQ(s.blocks[4].items[0].id, std::string("a1"));
     CHECK(s.blocks[4].items[0].done);
     CHECK(!s.blocks[4].items[1].done);
