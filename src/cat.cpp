@@ -151,8 +151,9 @@ CatPose legUp() {
 }
 const CatPose kSitScratch = legUp();
 
-// Head down in a bowl in front of her, lapping.
-const CatPose kDrink = make({14, -11}, 8.5f, {2, -14}, 9, {-11, -18}, 9.5f, {27, -8}, 0.55f,
+// Head down over a bowl in front of her, lapping: her chin at its rim and
+// her tongue's tip in the milk, behind the rim.
+const CatPose kDrink = make({14, -11}, 8.5f, {2, -14}, 9, {-11, -18}, 9.5f, {25, -15}, 0.55f,
                             {{{15, -7}, {12, -7}, {-12, -12}, {-14, -12}}}, {{{17, 0}, {14, 0}, {-11, 0}, {-15, 0}}},
                             {{{-21, -20}, {-26, -23}, {-29, -28}, {-30, -34}, {-29, -39}, {-26, -43}, {-22, -45}, {-19, -44}}},
                             0.4f, 0);
