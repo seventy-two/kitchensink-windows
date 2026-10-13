@@ -540,7 +540,7 @@ Cat CatAt(double t, float half) {
 
 namespace {
 
-constexpr Rgba kFur{17, 17, 21}, kRim{92, 98, 112, 170}, kEye{206, 216, 84}, kPupil{8, 8, 10},
+constexpr Rgba kFur{17, 17, 21}, kRim{92, 98, 112, 170}, kEye{92, 168, 245}, kPupil{8, 8, 10},
     kLid{120, 124, 136, 220}, kMouth{176, 84, 100}, kTongue{222, 112, 132}, kWhisker{150, 154, 166, 110}, kZ{150, 156, 172},
     kShadow{0, 0, 0, 55};
 
