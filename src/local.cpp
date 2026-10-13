@@ -174,9 +174,20 @@ Snapshot PcHistory::Build(int64_t now) const {
         stat("Video memory", share(s.vramUsed, s.vramTotal), of(s.vramUsed, s.vramTotal), vram, of(s.vramTotal, s.vramTotal)),
     };
     snap.blocks.push_back(b);
-    // The summary is the same tiles; it doesn't draw sparklines.
+    // The summary is the same tiles; it doesn't draw sparklines, and leaves
+    // out the GPU's name, which would take the room of a drive's tile.
     snap.summary = b.stats;
+    snap.summary[2].detail.clear();
     return snap;
+}
+
+Snapshot WithDrives(Snapshot pc, const Snapshot& drives) {
+    for (Block b : drives.blocks) {
+        b.title = "Drives";
+        pc.blocks.push_back(std::move(b));
+    }
+    pc.summary.insert(pc.summary.end(), drives.summary.begin(), drives.summary.end());
+    return pc;
 }
 
 Snapshot DrivesSnapshot(const std::vector<DriveInfo>& drives, int64_t now) {

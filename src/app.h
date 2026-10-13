@@ -82,8 +82,8 @@ private:
     void header();
     float windowButtons();
     // panels lists everything to draw, in the order the user dragged them
-    // into; by default This PC, Now playing (while something is), the
-    // server's monitors in config order, then Drives.
+    // into; by default This PC, Now playing (while something is), then the
+    // server's monitors in config order.
     std::vector<Snapshot> panels() const;
     void cards(float width);
     void card(const Snapshot& s, float width);
@@ -129,7 +129,7 @@ private:
     std::unique_ptr<Client> client_;
     std::unique_ptr<ImageCache> images_;
     std::unique_ptr<LocalStats> local_;
-    std::vector<Snapshot> localPanels_;  // This PC, then Drives
+    std::vector<Snapshot> localPanels_;  // This PC, drives and all
     std::unique_ptr<MediaWatcher> media_;
     Snapshot mediaPanel_;  // no blocks while nothing's playing
     std::function<void(const std::string&, const std::string&)> notify_;

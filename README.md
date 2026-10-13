@@ -18,10 +18,10 @@ result is a single `kitchensink.exe` with nothing to install.
   open or close it yourself. Panels have no titles: an open one keeps its controls
   in a slim strip down its right edge. The layout follows the window live
   as it's resized.
-- Adds two panels about the PC it runs on: **This PC** (CPU, memory, GPU
-  and video memory, each with a minute's history) and **Drives** (each
-  fixed drive's use). They read Windows' own counters once a second, only
-  while the window is showing, and work with the server offline.
+- Adds a panel about the PC it runs on, **This PC**: CPU, memory, GPU and
+  video memory, each with a minute's history, and each fixed drive's use.
+  It reads Windows' own counters once a second, only while the window is
+  showing, and works with the server offline.
 - Panels show their controls (grip, refresh, open/close) only while the
   mouse is over them. Drag a panel by the dots in its left margin to
   reorder; the order also decides which open first in the compact layout.
@@ -102,7 +102,7 @@ g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/mo
 | `src/net.cpp` | WinHTTP requests and the stream client |
 | `src/media.cpp` | reads and controls Windows' media sessions (C++/WinRT) |
 | `src/sysinfo.cpp` | reads CPU, memory, GPU and drive use (performance counters, DXGI) |
-| `src/local.cpp` | turns those readings into the This PC and Drives panels |
+| `src/local.cpp` | turns those readings into the This PC panel |
 | `src/images.cpp` | thumbnail download, WIC decoding and textures |
 | `src/config.cpp` | settings and start-with-Windows |
 | `src/theme.cpp` | palettes, fonts and ImGui style |

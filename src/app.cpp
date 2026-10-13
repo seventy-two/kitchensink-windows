@@ -383,7 +383,6 @@ std::vector<Snapshot> App::panels() const {
     if (!localPanels_.empty()) out.push_back(localPanels_.front());
     if (!mediaPanel_.blocks.empty()) out.push_back(mediaPanel_);
     for (const Snapshot& s : model_.Snapshots()) out.push_back(config_.hidePrivate ? WithoutPrivate(s) : s);
-    if (localPanels_.size() > 1) out.push_back(localPanels_.back());
     if (config_.order.empty()) return out;
     std::vector<std::string> ids;
     for (const auto& p : out) ids.push_back(p.monitor);

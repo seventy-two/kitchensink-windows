@@ -45,8 +45,13 @@ private:
     std::deque<PcSample> samples_;
 };
 
-// DrivesSnapshot is the "Drives" panel.
+// DrivesSnapshot is the drives' part of the "This PC" panel: a table and a
+// tile for each.
 Snapshot DrivesSnapshot(const std::vector<DriveInfo>& drives, int64_t now);
+
+// WithDrives is the "This PC" panel with the drives added: their table
+// under its stats, titled "Drives", and their tiles after its own.
+Snapshot WithDrives(Snapshot pc, const Snapshot& drives);
 
 // NowPlaying is what Windows says is playing, from whichever app it
 // considers current. active is false when nothing is.

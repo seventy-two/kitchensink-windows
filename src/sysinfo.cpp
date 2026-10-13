@@ -183,7 +183,7 @@ void LocalStats::run() {
             drivesAt = GetTickCount64();
         }
         int64_t now = int64_t(std::time(nullptr));
-        std::vector<Snapshot> panels = {history.Build(now), DrivesSnapshot(drives, now)};
+        std::vector<Snapshot> panels = {WithDrives(history.Build(now), DrivesSnapshot(drives, now))};
 
         lock.lock();
         latest_ = std::move(panels);

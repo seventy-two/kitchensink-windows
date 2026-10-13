@@ -194,6 +194,7 @@ static void testLocalPanels() {
     CHECK_EQ(st[3].value, std::string("–"));  // no VRAM reading
     CHECK(st[3].tone == Tone::Muted);
     CHECK_EQ(pc.summary.size(), size_t(4));
+    CHECK(pc.summary[2].detail.empty());  // the GPU's name only in the full panel
 
     Snapshot d = DrivesSnapshot({{"C:\\", "", 1000 * GB, 40 * GB}, {"D:\\", "Games", 2000 * GB, 1000 * GB}, {"E:\\", "", 0, 0}}, 1000);
     CHECK_EQ(d.blocks[0].rows.size(), size_t(2));  // the empty drive is skipped
@@ -205,6 +206,15 @@ static void testLocalPanels() {
     CHECK(d.blocks[0].columns[1].fill);
     CHECK_EQ(d.summary.size(), size_t(2));
     CHECK_EQ(d.summary[1].detail, std::string("1000.0 GB free"));
+    // The drives join This PC: their table under its stats, their tiles
+    // after its own.
+    Snapshot all = WithDrives(pc, d);
+    CHECK_EQ(all.monitor, std::string("local:pc"));
+    CHECK_EQ(all.blocks.size(), pc.blocks.size() + 1);
+    CHECK_EQ(all.blocks.back().type, std::string("table"));
+    CHECK_EQ(all.blocks.back().title, std::string("Drives"));
+    CHECK_EQ(all.summary.size(), pc.summary.size() + 2);
+    CHECK_EQ(all.summary.back().label, std::string("D:"));
     CHECK_EQ(d.summary[1].widestValue, std::string("100%"));
     CHECK_EQ(DrivesSnapshot({}, 0).blocks[0].type, std::string("text"));
 }
