@@ -94,6 +94,8 @@ private:
     // when clicked; it returns whether the mouse is over one.
     bool chips(const std::vector<Stat>& stats, float width, bool live = false);
     void refreshButton(const Snapshot& s);
+    // pasteButton sends the clipboard's text to a monitor that takes it.
+    void pasteButton(const Snapshot& s);
     bool grip(const Snapshot& s, float y, bool shown);
     bool hoveringCard() const;
     void dragDrop();
@@ -142,6 +144,7 @@ private:
     unsigned long long pendingSince_ = 0;
     std::unordered_map<std::string, float> heights_;  // card heights last frame
     std::unordered_map<std::string, double> refreshing_;
+    std::unordered_map<std::string, double> pasted_;  // when each monitor was last sent the clipboard
     bool busy_ = false;
     unsigned long frameInterval_ = 0, catInterval_ = 0;
     ImRect feedRect_;  // the Recent column, last frame

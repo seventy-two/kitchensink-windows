@@ -702,9 +702,15 @@ void App::card(const Snapshot& s, float width) {
             ImGuiStyle& st = ImGui::GetStyle();
             float bw = ImGui::CalcTextSize(icon::Refresh).x + st.FramePadding.x * 2;
             float ww = ImGui::CalcTextSize(when.c_str()).x;
-            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - bw - ww - st.ItemSpacing.x);
+            float pw = s.paste.empty() ? 0 : ImGui::CalcTextSize(icon::Paste).x + st.FramePadding.x * 2 + st.ItemSpacing.x;
+            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - bw - pw - ww - st.ItemSpacing.x);
             ImGui::AlignTextToFramePadding();
             mutedText(when);
+            if (!s.paste.empty()) {
+                ImGui::SameLine();
+                if (show) pasteButton(s);
+                else ImGui::Dummy(ImVec2(pw - st.ItemSpacing.x, ImGui::GetFrameHeight()));
+            }
             ImGui::SameLine();
             if (show) refreshButton(s);
             else ImGui::Dummy(ImVec2(bw, ImGui::GetFrameHeight()));
@@ -750,6 +756,21 @@ void App::refreshButton(const Snapshot& s) {
         ImGui::SetTooltip("%s", tip.c_str());
     }
     ImGui::EndDisabled();
+    ImGui::PopID();
+    ImGui::PopStyleColor(2);
+}
+
+void App::pasteButton(const Snapshot& s) {
+    bool sent = pasted_.count(s.monitor) && ImGui::GetTime() - pasted_[s.monitor] < 3;
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text, Colours().muted);
+    ImGui::PushID(s.monitor.c_str());
+    if (ImGui::Button(icon::Paste)) {
+        const char* text = ImGui::GetClipboardText();
+        client_->Act(s.monitor, nlohmann::json{{"type", "paste"}, {"text", text ? text : ""}}.dump());
+        pasted_[s.monitor] = ImGui::GetTime();
+    }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", sent ? "Sent" : s.paste.c_str());
     ImGui::PopID();
     ImGui::PopStyleColor(2);
 }
@@ -854,7 +875,9 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
     ImGui::PopFont();
     float chevronX = top.x + avail - slot;
     float refreshX = chevronX - 2 * scale_ - slot;
-    float controlsX = local ? chevronX : refreshX;
+    bool paste = !local && !s.paste.empty();
+    float pasteX = refreshX - 2 * scale_ - slot;
+    float controlsX = local ? chevronX : paste ? pasteX : refreshX;
 
     // The grip and buttons only show while the mouse is over the panel (or
     // it's being dragged); their places stay kept so nothing moves.
@@ -870,6 +893,15 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
             ImGui::SetCursorScreenPos(ImVec2(refreshX, top.y));
             if (shown) {
                 refreshButton(s);
+                onButton = onButton || ImGui::IsItemHovered();
+            } else {
+                ImGui::Dummy(ImVec2(slot, lineH));
+            }
+        }
+        if (paste) {
+            ImGui::SetCursorScreenPos(ImVec2(pasteX, top.y));
+            if (shown) {
+                pasteButton(s);
                 onButton = onButton || ImGui::IsItemHovered();
             } else {
                 ImGui::Dummy(ImVec2(slot, lineH));

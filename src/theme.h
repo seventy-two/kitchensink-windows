@@ -49,6 +49,7 @@ inline constexpr const char* ChevronUp = "\xEE\x9C\x8E";    // U+E70E
 inline constexpr const char* View = "\xEE\xA2\x90";         // U+E890, an eye
 inline constexpr const char* Up = "\xEE\x9D\x8A";           // U+E74A
 inline constexpr const char* Down = "\xEE\x9D\x8B";         // U+E74B
+inline constexpr const char* Paste = "\xEE\x9D\xBF";        // U+E77F
 }  // namespace icon
 
 // SystemUsesDarkTheme reads the Windows "app mode" setting.

@@ -501,6 +501,8 @@ static void testWeatherIcons() {
         R"({"summary": [{"label": "13:00", "value": "18°", "icon": "rain", "level": 0.6}, {"level": 3}, {"url": "https://example.com/"}, {"level": 0}]})"));
     CHECK_EQ(snap.summary[0].icon, std::string("rain"));
     CHECK_EQ(snap.summary[2].url, std::string("https://example.com/"));
+    CHECK(snap.paste.empty());
+    CHECK_EQ(ParseSnapshot(nlohmann::json::parse(R"({"paste": "Log it"})")).paste, std::string("Log it"));
     CHECK(snap.summary[0].url.empty());
     CHECK(std::fabs(snap.summary[0].level - 0.6f) < 1e-6f);
     CHECK_EQ(snap.summary[1].level, 1.0f);  // clamped

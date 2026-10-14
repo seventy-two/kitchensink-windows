@@ -100,6 +100,9 @@ struct Snapshot {
     // It only feeds other panels (the mail reader), so it's shown with the
     // settings rather than on the dashboard.
     bool background = false;
+    // paste, if set, is the tooltip of a button that sends the clipboard's
+    // text as a "paste" action (the dailies' share text).
+    std::string paste;
     int64_t updated = 0;  // Unix seconds; 0 if never polled
     std::vector<Block> blocks;
     // The few things most worth seeing at a glance, shown in place of the
