@@ -117,6 +117,9 @@ struct Event {
     int64_t time = 0;  // Unix seconds
     Priority priority = Priority::Normal;
     bool quiet = false;
+    // expires, if set (Unix seconds), makes the event temporary: shown
+    // apart from Recent until then, then dropped.
+    int64_t expires = 0;
 };
 
 Snapshot ParseSnapshot(const nlohmann::json& j);
@@ -208,6 +211,11 @@ public:
     // already is replaced, as the server updates events. Cleared ones aren't
     // stored again, e.g. when history is replayed.
     bool AddEvent(Event e);
+    // Temporary events go in their own list, newest first, rather than
+    // Recent. DropExpired removes the ones whose time is up, including old
+    // ones replayed from the history.
+    const std::deque<Event>& Temporary() const { return temporary_; }
+    void DropExpired(int64_t now);
 
     // Clear removes an event from Recent; ClearAll removes every one so
     // far. They stay cleared through reconnects and, via Cleared and
@@ -230,12 +238,14 @@ public:
     std::string TitleOf(const std::string& monitor) const;
 
     static constexpr size_t kMaxEvents = 300;
+    static constexpr size_t kMaxTemporary = 10;
     // At most this many single cleared events are remembered, the newest.
     static constexpr size_t kMaxCleared = 500;
 
 private:
     std::vector<Snapshot> snapshots_;
     std::deque<Event> events_;
+    std::deque<Event> temporary_;
     int64_t lastEventID_ = 0;
     bool syncing_ = false;
     std::set<std::string> synced_;

@@ -109,6 +109,8 @@ private:
     void mediaBlock(const Block& b);
     void feedHeading(float width);
     void feed();
+    bool eventCard(const Event& e, int64_t t, float left);
+    void temporaries();
     void cat(float width);
     void empty(const char* message, bool settingsButton);
     void settings();

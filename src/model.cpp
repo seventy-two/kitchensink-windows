@@ -235,6 +235,7 @@ Event ParseEvent(const json& j) {
     e.time = ParseTime(str(j, "time"));
     e.priority = ParsePriority(str(j, "priority"));
     if (auto it = j.find("quiet"); it != j.end() && it->is_boolean()) e.quiet = it->get<bool>();
+    if (std::string x = str(j, "expires"); !x.empty()) e.expires = ParseTime(x);
     return e;
 }
 
@@ -302,6 +303,20 @@ void Model::ApplySnapshot(Snapshot s) {
 }
 
 bool Model::AddEvent(Event e) {
+    if (e.expires > 0) {
+        for (auto& x : temporary_)
+            if (x.id == e.id) {
+                x = std::move(e);
+                return false;
+            }
+        lastEventID_ = std::max(lastEventID_, e.id);
+        if (e.id <= cleared_.through || cleared_.ids.count(e.id)) return false;
+        auto it = temporary_.begin();
+        while (it != temporary_.end() && it->id > e.id) ++it;
+        temporary_.insert(it, std::move(e));
+        while (temporary_.size() > kMaxTemporary) temporary_.pop_back();
+        return true;
+    }
     // One already here has been updated, e.g. a price move since changed:
     // the new copy replaces it, without counting as new.
     for (auto& x : events_)
@@ -319,8 +334,15 @@ bool Model::AddEvent(Event e) {
     return true;
 }
 
+void Model::DropExpired(int64_t now) {
+    temporary_.erase(std::remove_if(temporary_.begin(), temporary_.end(), [&](const Event& e) { return e.expires <= now; }),
+                     temporary_.end());
+}
+
 void Model::Clear(int64_t id) {
     events_.erase(std::remove_if(events_.begin(), events_.end(), [&](const Event& e) { return e.id == id; }), events_.end());
+    temporary_.erase(std::remove_if(temporary_.begin(), temporary_.end(), [&](const Event& e) { return e.id == id; }),
+                     temporary_.end());
     if (id <= cleared_.through) return;
     cleared_.ids.insert(id);
     while (cleared_.ids.size() > kMaxCleared) cleared_.ids.erase(cleared_.ids.begin());

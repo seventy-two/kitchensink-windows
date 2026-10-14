@@ -237,7 +237,7 @@ void App::Pump() {
             if (!model_.AddEvent(std::move(m.event))) break;
             // History from before the app started has already been seen
             // (or missed for good); events missed while offline are new.
-            if (!m.history && !e.quiet) wakeUntil_ = now() + 2 * 60;  // OLED care: show it
+            if (!m.history && (!e.quiet || e.expires > 0)) wakeUntil_ = now() + 2 * 60;  // OLED care: show it
             if (!m.history && !e.quiet && config_.notify && e.priority >= config_.minPriority)
                 pending_.push_back(std::move(e));
             break;
@@ -337,6 +337,10 @@ void App::Frame() {
         auto drawFeed = [&] {
             ImGui::BeginGroup();
             if (config_.cat) cat(feedW);
+            ImGui::BeginChild("##temporary", ImVec2(feedW, 0), ImGuiChildFlags_AutoResizeY,
+                              ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+            temporaries();
+            ImGui::EndChild();
             feedHeading(feedW);
             // Scrolled with the wheel; no scrollbar, which would take width
             // and get in the way.
@@ -1796,6 +1800,108 @@ void App::feedHeading(float width) {
     }
 }
 
+// eventCard draws one event as a card, which opens its link when clicked
+// and has an x to clear it while hovered; left, from 1 down to 0, draws
+// how long a temporary one has left (negative for none). It returns
+// whether the x was clicked.
+bool App::eventCard(const Event& e, int64_t t, float left) {
+    const Palette& p = Colours();
+    const ImGuiIO& io = ImGui::GetIO();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float pad = (compact_ ? 7 : 10) * scale_;
+    ImGui::PushID(int(e.id));
+    dl->ChannelsSplit(2);
+    dl->ChannelsSetCurrent(1);
+    ImVec2 start = ImGui::GetCursorScreenPos();
+    float width = ImGui::GetContentRegionAvail().x;
+    ImGui::SetCursorScreenPos(ImVec2(start.x + pad, start.y + pad * 0.8f));
+    ImGui::BeginGroup();
+    ImGui::PushTextWrapPos(start.x + width - pad - ImGui::GetWindowPos().x);
+    ImGui::PushFont(fonts_.caption);
+    mutedText(model_.TitleOf(e.monitor) + "  ·  " + Ago(e.time, t));
+    ImGui::PopFont();
+    // Quiet ones are quieter in Recent; a temporary one is there to be read.
+    bool quiet = e.quiet && left < 0;
+    ImGui::PushFont(quiet ? fonts_.body : fonts_.heading);
+    wrapped(e.title, quiet ? p.muted : p.text);
+    ImGui::PopFont();
+    if (!e.body.empty()) {
+        ImGui::PushFont(fonts_.caption);
+        wrapped(e.body, p.muted);
+        ImGui::PopFont();
+    }
+    ImGui::PopTextWrapPos();
+    ImGui::EndGroup();
+    ImVec2 end(start.x + width, ImGui::GetItemRectMax().y + pad * 0.8f);
+    ImGui::SetCursorScreenPos(start);
+    ImGui::InvisibleButton("##event", ImVec2(width, end.y - start.y));
+
+    bool over = ImGui::IsItemHovered();
+    // An x in the top-right corner, while the card's hovered, clears it.
+    float xs = std::round(22 * scale_);
+    float edge = end.x - 3 * scale_;
+    ImRect x(ImVec2(edge - xs, start.y + 3 * scale_), ImVec2(edge, start.y + 3 * scale_ + xs));
+    bool overX = over && x.Contains(io.MousePos);
+    if (over) {
+        if (overX) dl->AddRectFilled(x.Min, x.Max, u32(p.frame), 4 * scale_);
+        ImGui::PushFont(fonts_.chrome);
+        ImVec2 g = ImGui::CalcTextSize(icon::Close);
+        dl->AddText(ImVec2(std::round(x.GetCenter().x - g.x / 2), std::round(x.GetCenter().y - g.y / 2)),
+                    u32(overX ? p.text : p.muted), icon::Close);
+        ImGui::PopFont();
+        if (overX) ImGui::SetTooltip("Clear");
+    }
+
+    dl->ChannelsSetCurrent(0);
+    bool hovered = over && !overX && !e.url.empty();
+    dl->AddRectFilled(start, end, u32(hovered ? p.hover : p.card));
+    if (e.priority == Priority::High && !e.quiet)
+        dl->AddRectFilled(start, ImVec2(start.x + 3 * scale_, end.y), u32(p.accent));
+    if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    bool cleared = false;
+    if (ImGui::IsItemClicked()) {
+        if (overX) cleared = true;
+        else OpenURL(e.url);
+    }
+    if (left >= 0) {
+        // How long it has left, as a bar along the bottom that empties.
+        float h = std::max(2.0f, std::round(2 * scale_));
+        dl->AddRectFilled(ImVec2(start.x, end.y - h), ImVec2(start.x + (end.x - start.x) * left, end.y), u32(p.accent));
+    }
+    dl->ChannelsMerge();
+    bevel(start, end);
+    ImGui::Dummy(ImVec2(0, 1 * scale_));
+    ImGui::PopID();
+    return cleared;
+}
+
+// temporaries draws the temporary events above Recent, under their own
+// heading, until each one's time is up.
+void App::temporaries() {
+    model_.DropExpired(now());
+    const auto& temp = model_.Temporary();
+    if (temp.empty()) return;
+    const Palette& p = Colours();
+    ImGui::PushFont(fonts_.heading);
+    ImGui::TextColored(p.heading, "Just now");
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, 2 * scale_));
+    // Fractions of a second, so the bars move smoothly between redraws.
+    double t = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+    int64_t clear = 0;
+    for (const auto& e : temp) {
+        float span = float(std::max<int64_t>(e.expires - e.time, 1));
+        float left = std::clamp(float((double(e.expires) - t) / span), 0.0f, 1.0f);
+        if (eventCard(e, int64_t(t), left)) clear = e.id;
+    }
+    ImGui::Dummy(ImVec2(0, 10 * scale_));
+    if (clear != 0) {
+        model_.Clear(clear);
+        config_.cleared = model_.GetCleared();
+        SaveConfig(config_);
+    }
+}
+
 void App::feed() {
     const Palette& p = Colours();
     const ImGuiIO& io = ImGui::GetIO();
@@ -1804,68 +1910,12 @@ void App::feed() {
         mutedText("Nothing new.");
         return;
     }
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    float pad = (compact_ ? 7 : 10) * scale_;
     int64_t t = now();
     size_t shown = 0;
     int64_t clear = 0;
     for (const auto& e : events) {
         if (++shown > 150) break;
-        ImGui::PushID(int(e.id));
-        dl->ChannelsSplit(2);
-        dl->ChannelsSetCurrent(1);
-        ImVec2 start = ImGui::GetCursorScreenPos();
-        float width = ImGui::GetContentRegionAvail().x;
-        ImGui::SetCursorScreenPos(ImVec2(start.x + pad, start.y + pad * 0.8f));
-        ImGui::BeginGroup();
-        ImGui::PushTextWrapPos(start.x + width - pad - ImGui::GetWindowPos().x);
-        ImGui::PushFont(fonts_.caption);
-        mutedText(model_.TitleOf(e.monitor) + "  ·  " + Ago(e.time, t));
-        ImGui::PopFont();
-        ImGui::PushFont(e.quiet ? fonts_.body : fonts_.heading);
-        wrapped(e.title, e.quiet ? p.muted : p.text);
-        ImGui::PopFont();
-        if (!e.body.empty()) {
-            ImGui::PushFont(fonts_.caption);
-            wrapped(e.body, p.muted);
-            ImGui::PopFont();
-        }
-        ImGui::PopTextWrapPos();
-        ImGui::EndGroup();
-        ImVec2 end(start.x + width, ImGui::GetItemRectMax().y + pad * 0.8f);
-        ImGui::SetCursorScreenPos(start);
-        ImGui::InvisibleButton("##event", ImVec2(width, end.y - start.y));
-
-        bool over = ImGui::IsItemHovered();
-        // An x in the top-right corner, while the card's hovered, clears it.
-        float xs = std::round(22 * scale_);
-        float edge = end.x - 3 * scale_;
-        ImRect x(ImVec2(edge - xs, start.y + 3 * scale_), ImVec2(edge, start.y + 3 * scale_ + xs));
-        bool overX = over && x.Contains(io.MousePos);
-        if (over) {
-            if (overX) dl->AddRectFilled(x.Min, x.Max, u32(p.frame), 4 * scale_);
-            ImGui::PushFont(fonts_.chrome);
-            ImVec2 g = ImGui::CalcTextSize(icon::Close);
-            dl->AddText(ImVec2(std::round(x.GetCenter().x - g.x / 2), std::round(x.GetCenter().y - g.y / 2)),
-                        u32(overX ? p.text : p.muted), icon::Close);
-            ImGui::PopFont();
-            if (overX) ImGui::SetTooltip("Clear");
-        }
-
-        dl->ChannelsSetCurrent(0);
-        bool hovered = over && !overX && !e.url.empty();
-        dl->AddRectFilled(start, end, u32(hovered ? p.hover : p.card));
-        if (e.priority == Priority::High && !e.quiet)
-            dl->AddRectFilled(start, ImVec2(start.x + 3 * scale_, end.y), u32(p.accent));
-        if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-        if (ImGui::IsItemClicked()) {
-            if (overX) clear = e.id;
-            else OpenURL(e.url);
-        }
-        dl->ChannelsMerge();
-        bevel(start, end);
-        ImGui::Dummy(ImVec2(0, 1 * scale_));
-        ImGui::PopID();
+        if (eventCard(e, t, -1)) clear = e.id;
     }
     if (clear != 0) {
         model_.Clear(clear);

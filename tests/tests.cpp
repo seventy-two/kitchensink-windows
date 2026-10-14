@@ -699,9 +699,35 @@ static void testRetro() {
     CHECK_EQ(RetroClock(t).first, std::string("12:05:00 PM"));
 }
 
+static void testTemporaryEvents() {
+    Model m;
+    Event lasting = ParseEvent(nlohmann::json::parse(R"({"id": 1, "title": "TD", "time": "2026-10-14T10:00:00Z"})"));
+    Event brief = ParseEvent(nlohmann::json::parse(
+        R"({"id": 2, "title": "Logged", "quiet": true, "time": "2026-10-14T10:00:00Z", "expires": "2026-10-14T10:02:00Z"})"));
+    CHECK_EQ(brief.expires - brief.time, int64_t(120));
+    CHECK(m.AddEvent(lasting));
+    CHECK(m.AddEvent(brief));
+    CHECK(!m.AddEvent(brief));  // the same one again
+    CHECK_EQ(m.Events().size(), size_t(1));  // not in Recent
+    CHECK_EQ(m.Temporary().size(), size_t(1));
+    CHECK_EQ(m.LastEventID(), int64_t(2));
+    m.DropExpired(brief.expires - 1);
+    CHECK_EQ(m.Temporary().size(), size_t(1));
+    m.DropExpired(brief.expires);
+    CHECK(m.Temporary().empty());
+    // Cleared by hand, it doesn't come back with the history.
+    Event again = brief;
+    again.id = 3;
+    m.AddEvent(again);
+    m.Clear(3);
+    CHECK(m.Temporary().empty());
+    CHECK(!m.AddEvent(again));
+}
+
 int main() {
     testRetro();
     testCat();
+    testTemporaryEvents();
     testWeatherIcons();
     testPrivate();
     testParseTime();
