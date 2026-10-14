@@ -76,6 +76,10 @@ Block parseBlock(const json& j) {
     }
     b.addHint = str(j, "addHint");
     b.deleteHint = str(j, "deleteHint");
+    b.noDelete = j.value("noDelete", false);
+    b.movable = j.value("movable", false);
+    b.upHint = str(j, "upHint");
+    b.downHint = str(j, "downHint");
     b.isPrivate = flag(j, "private");
     return b;
 }
@@ -107,6 +111,7 @@ Snapshot ParseSnapshot(const json& j) {
     s.error = str(j, "error");
     s.subtitle = str(j, "subtitle");
     s.timely = j.value("timely", false);
+    s.background = j.value("background", false);
     // Go sends its zero time, year 1, for a monitor that hasn't polled yet.
     s.updated = std::max<int64_t>(0, ParseTime(str(j, "updated")));
     for (const auto& b : array(j, "blocks")) s.blocks.push_back(parseBlock(b));

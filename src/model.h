@@ -76,6 +76,11 @@ struct Block {
     std::string type, title, text;
     std::string addHint;  // a checklist takes new items when set
     std::string deleteHint;  // what a checklist's delete does, when it isn't deleting
+    bool noDelete = false;   // a checklist without delete buttons
+    // A checklist whose items have up and down buttons (sending "move"),
+    // and what they do when it isn't moving the item in the list.
+    bool movable = false;
+    std::string upHint, downHint;
     bool isPrivate = false;  // personal figures, hidden on request
     Media media;
     std::vector<Stat> stats;
@@ -88,6 +93,9 @@ struct Snapshot {
     std::string monitor, kind, title, error;
     std::string subtitle;  // what it's watching, when that isn't obvious
     bool timely = false;   // when it was updated matters at the moment
+    // It only feeds other panels (the mail reader), so it's shown with the
+    // settings rather than on the dashboard.
+    bool background = false;
     int64_t updated = 0;  // Unix seconds; 0 if never polled
     std::vector<Block> blocks;
     // The few things most worth seeing at a glance, shown in place of the

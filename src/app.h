@@ -108,6 +108,7 @@ private:
     void cat(float width);
     void empty(const char* message, bool settingsButton);
     void settings();
+    void diagnostics();
     void openSettings();
 
     HWND hwnd_;

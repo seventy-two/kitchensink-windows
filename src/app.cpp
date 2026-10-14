@@ -382,7 +382,10 @@ std::vector<Snapshot> App::panels() const {
     std::vector<Snapshot> out;
     if (!localPanels_.empty()) out.push_back(localPanels_.front());
     if (!mediaPanel_.blocks.empty()) out.push_back(mediaPanel_);
-    for (const Snapshot& s : model_.Snapshots()) out.push_back(config_.hidePrivate ? WithoutPrivate(s) : s);
+    for (const Snapshot& s : model_.Snapshots()) {
+        if (s.background) continue;  // in the settings' diagnostics instead
+        out.push_back(config_.hidePrivate ? WithoutPrivate(s) : s);
+    }
     if (config_.order.empty()) return out;
     std::vector<std::string> ids;
     for (const auto& p : out) ids.push_back(p.monitor);
@@ -1392,8 +1395,9 @@ void App::mediaBlock(const Block& b) {
     ImGui::EndGroup();
 }
 
-// checklist draws items with checkboxes, a delete button on the one under
-// the mouse, and a box for new items if the block takes them. Each change is
+// checklist draws items with checkboxes, up, down and delete buttons on
+// the one under the mouse (as the block has them), and a box for new
+// items if the block takes them. Each change is
 // sent to the monitor as an action; ticks show at once, ahead of the
 // server's snapshot.
 void App::checklist(const std::string& monitor, const Block& b) {
@@ -1404,6 +1408,8 @@ void App::checklist(const std::string& monitor, const Block& b) {
     ImGui::PushFont(fonts_.caption);
     float bw = ImGui::CalcTextSize(icon::Close).x + st.FramePadding.x * 2;
     ImGui::PopFont();
+    int buttons = (b.movable ? 2 : 0) + (b.noDelete ? 0 : 1);
+    float bsw = buttons * bw;  // the hover buttons' width
 
     for (const Item& it : b.items) {
         ImGui::PushID(it.id.c_str());
@@ -1417,9 +1423,9 @@ void App::checklist(const std::string& monitor, const Block& b) {
         bool v = done;
         if (ImGui::Checkbox("##done", &v)) toggle = true;
         ImGui::SameLine();
-        // The text wraps short of the delete button, and clicking it ticks
-        // the box too.
-        ImGui::PushTextWrapPos(right - bw - st.ItemSpacing.x - ImGui::GetWindowPos().x);
+        // The text wraps short of the buttons, and clicking it ticks the
+        // box too.
+        ImGui::PushTextWrapPos(right - bsw - st.ItemSpacing.x - ImGui::GetWindowPos().x);
         ImGui::AlignTextToFramePadding();
         ImGui::TextColored(done ? p.muted : it.tone == Tone::None ? p.text : ToneColour(it.tone), "%s", it.title.c_str());
         ImGui::PopTextWrapPos();
@@ -1435,14 +1441,27 @@ void App::checklist(const std::string& monitor, const Block& b) {
 
         // Allowing for an active item keeps the button there while it's
         // held, so the click completes.
-        if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+        if (buttons > 0 && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
             ImGui::IsMouseHoveringRect(rowMin, ImVec2(right, rowBottom))) {
-            ImGui::SetCursorScreenPos(ImVec2(right - bw, rowMin.y));
             ImGui::PushFont(fonts_.caption);
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
             ImGui::PushStyleColor(ImGuiCol_Text, p.muted);
-            if (ImGui::Button(icon::Close)) act({{"type", "delete"}, {"id", it.id}});
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", b.deleteHint.empty() ? "Delete" : b.deleteHint.c_str());
+            float x = right - bsw;
+            auto button = [&](const char* glyph, const char* id, const std::string& hint, const char* fallback) {
+                ImGui::SetCursorScreenPos(ImVec2(x, rowMin.y));
+                x += bw;
+                bool clicked = ImGui::Button((std::string(glyph) + id).c_str(), ImVec2(bw, 0));
+                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", hint.empty() ? fallback : hint.c_str());
+                return clicked;
+            };
+            // Ticked items stay in the order they were ticked.
+            if (b.movable) {
+                ImGui::BeginDisabled(done);
+                if (button(icon::Up, "##up", b.upHint, "Move up")) act({{"type", "move"}, {"id", it.id}, {"text", "up"}});
+                if (button(icon::Down, "##down", b.downHint, "Move down")) act({{"type", "move"}, {"id", it.id}, {"text", "down"}});
+                ImGui::EndDisabled();
+            }
+            if (!b.noDelete && button(icon::Close, "##delete", b.deleteHint, "Delete")) act({{"type", "delete"}, {"id", it.id}});
             ImGui::PopStyleColor(2);
             ImGui::PopFont();
             ImGui::SetCursorScreenPos(next);
@@ -1778,6 +1797,26 @@ void App::openSettings() {
     settingsOpen_ = true;
 }
 
+// diagnostics shows the background monitors, which feed other panels
+// rather than having their own (the mail reader and what it found), each
+// collapsed until opened.
+void App::diagnostics() {
+    std::vector<Snapshot> bg;
+    for (const Snapshot& s : model_.Snapshots())
+        if (s.background) bg.push_back(s);
+    if (bg.empty()) return;
+    mutedText("Diagnostics");
+    for (const Snapshot& s : bg) {
+        if (!ImGui::CollapsingHeader((s.title + "##diag-" + s.monitor).c_str())) continue;
+        ImGui::BeginChild(("##diag-body-" + s.monitor).c_str(), ImVec2(0, 260 * scale_), ImGuiChildFlags_Borders);
+        if (!s.error.empty()) ImGui::TextColored(ToneColour(Tone::Bad), "%s", s.error.c_str());
+        for (const Block& b : s.blocks) block(s.monitor, b);
+        if (s.blocks.empty()) mutedText("Nothing to show.");
+        ImGui::EndChild();
+    }
+    ImGui::Dummy(ImVec2(0, 8 * scale_));
+}
+
 void App::settings() {
     if (settingsOpen_ && !ImGui::IsPopupOpen("Settings")) ImGui::OpenPopup("Settings");
     ImGuiIO& io = ImGui::GetIO();
@@ -1839,6 +1878,7 @@ void App::settings() {
     mutedText("a black cat asleep above the Recent column");
     ImGui::PopFont();
     ImGui::Dummy(ImVec2(0, 8 * scale_));
+    diagnostics();
 
     bool configured = !config_.url.empty() && !config_.token.empty();
     const ImGuiStyle& st = ImGui::GetStyle();

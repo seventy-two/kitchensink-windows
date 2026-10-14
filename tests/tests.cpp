@@ -58,7 +58,7 @@ static void testAgo() {
 static void testParseSnapshot() {
     auto j = nlohmann::json::parse(R"({
         "monitor": "weather", "kind": "weather", "title": "Weather",
-        "updated": "2026-10-10T18:07:31Z", "error": "site down", "subtitle": "Mazda3 · Automatic", "timely": true,
+        "updated": "2026-10-10T18:07:31Z", "error": "site down", "subtitle": "Mazda3 · Automatic", "timely": true, "background": true,
         "blocks": [
             {"type": "stats", "title": "Bristol", "stats": [
                 {"label": "Now", "value": "13°C", "detail": "Clear", "tone": "accent", "series": [0, 0.4, 1.5]}
@@ -67,7 +67,7 @@ static void testParseSnapshot() {
              "rows": [[{"text": "Today", "url": "https://example.com", "detail": "dry"}, {"text": "15°", "tone": "bad"}]]},
             {"type": "list", "items": [{"title": "Car", "image": "https://example.com/a.jpg", "tone": "warn"}]},
             {"type": "text", "text": "hello", "unknown": {"nested": true}},
-            {"type": "checklist", "addHint": "Add a task…", "deleteHint": "Put off a day", "items": [{"id": "a1", "title": "Bins", "done": true}, {"id": "b2", "title": "Post"}]}
+            {"type": "checklist", "addHint": "Add a task…", "deleteHint": "Put off a day", "noDelete": true, "movable": true, "downHint": "Later", "items": [{"id": "a1", "title": "Bins", "done": true}, {"id": "b2", "title": "Post"}]}
         ],
         "summary": [{"label": "Now", "value": "13°C", "tone": "good", "series": [1, 2]}, {"label": "Rain"}],
         "summaryStyle": "chips"
@@ -77,10 +77,14 @@ static void testParseSnapshot() {
     CHECK_EQ(s.error, std::string("site down"));
     CHECK_EQ(s.subtitle, std::string("Mazda3 · Automatic"));
     CHECK(s.timely);
+    CHECK(s.background);
     CHECK_EQ(s.updated, int64_t(1791655651));
     CHECK_EQ(s.blocks.size(), size_t(5));
     CHECK_EQ(s.blocks[4].addHint, std::string("Add a task…"));
     CHECK_EQ(s.blocks[4].deleteHint, std::string("Put off a day"));
+    CHECK(s.blocks[4].noDelete && s.blocks[4].movable);
+    CHECK_EQ(s.blocks[4].downHint, std::string("Later"));
+    CHECK(s.blocks[4].upHint.empty());
     CHECK_EQ(s.blocks[4].items[0].id, std::string("a1"));
     CHECK(s.blocks[4].items[0].done);
     CHECK(!s.blocks[4].items[1].done);
@@ -106,6 +110,7 @@ static void testParseSnapshot() {
     // Wrong types and missing fields don't throw.
     Snapshot odd = ParseSnapshot(nlohmann::json::parse(R"({"monitor": 5, "blocks": {"x": 1}})"));
     CHECK(!odd.timely);
+    CHECK(!odd.background);
     CHECK(odd.monitor.empty());
     CHECK(odd.blocks.empty());
     CHECK_EQ(ParseSnapshot(nlohmann::json::parse(R"({"updated": "0001-01-01T00:00:00Z"})")).updated, int64_t(0));
