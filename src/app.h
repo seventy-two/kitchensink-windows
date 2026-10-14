@@ -90,7 +90,9 @@ private:
     void compactCards(float width);
     float compactCard(const Snapshot& s, float width, Show show, float body, bool* clicked);
     void summary(const std::vector<Stat>& stats, float width);
-    void chips(const std::vector<Stat>& stats, float width);
+    // chips draws a summary as chips. With live, chips with a URL open it
+    // when clicked; it returns whether the mouse is over one.
+    bool chips(const std::vector<Stat>& stats, float width, bool live = false);
     void refreshButton(const Snapshot& s);
     bool grip(const Snapshot& s, float y, bool shown);
     bool hoveringCard() const;

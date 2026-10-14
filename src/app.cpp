@@ -917,7 +917,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         ImGui::SetCursorScreenPos(ImVec2(top.x, y));
         if (!s.summary.empty()) {
             float w = avail - (y == top.y ? rightW : 0);
-            if (s.summaryStyle == "chips") chips(s.summary, w);
+            if (s.summaryStyle == "chips") onButton = chips(s.summary, w, clicked && dragging_.empty()) || onButton;
             else summary(s.summary, w);
         } else if (s.blocks.empty() && !failed) {
             mutedText("Waiting for the first check…");
@@ -1073,8 +1073,8 @@ void App::dragDrop() {
 // values would still be cut short, they flow onto more lines. A lead chip
 // has no block, just its label and value on one line, as wide as they
 // are, with more room after it.
-void App::chips(const std::vector<Stat>& stats, float width) {
-    if (stats.empty()) return;
+bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
+    if (stats.empty()) return false;
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 pad(6 * scale_, 4 * scale_);
@@ -1109,7 +1109,7 @@ void App::chips(const std::vector<Stat>& stats, float width) {
         }
         w = std::max(w, l.x);
         need[i] = l.x;
-        labelH = std::max(labelH, l.y);
+        if (!s.label.empty()) labelH = std::max(labelH, l.y);  // none at all: no line for them
         if (!s.detail.empty()) {
             ImVec2 d = ImGui::CalcTextSize(s.detail.c_str());
             w = std::max(w, d.x);
@@ -1196,6 +1196,7 @@ void App::chips(const std::vector<Stat>& stats, float width) {
         }
     }
     bool levels = std::any_of(stats.begin(), stats.end(), [](const Stat& s) { return s.hasLevel; });
+    bool onLink = false;
     ImGui::BeginGroup();
     for (size_t i = 0; i < n; i++) {
         const Stat& s = stats[i];
@@ -1221,6 +1222,12 @@ void App::chips(const std::vector<Stat>& stats, float width) {
             continue;
         }
         dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(coloured ? fade(tone, 0.2f) : p.frame));
+        if (live && !s.url.empty() && ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(a, ImVec2(a.x + w, a.y + h))) {
+            dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(fade(p.text, 0.12f)));
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) OpenURL(s.url);
+            onLink = true;
+        }
         float inner = w - pad.x * 2;
         if (levels) {
             // The levels as one faint chart behind the row: through the
@@ -1273,6 +1280,7 @@ void App::chips(const std::vector<Stat>& stats, float width) {
         ImGui::Dummy(ImVec2(w, h));
     }
     ImGui::EndGroup();
+    return onLink;
 }
 
 void App::summary(const std::vector<Stat>& stats, float width) {

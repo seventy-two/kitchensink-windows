@@ -46,6 +46,7 @@ Stat parseStat(const json& j) {
     st.isPrivate = flag(j, "private");
     st.lead = flag(j, "lead");
     st.icon = str(j, "icon");
+    st.url = str(j, "url");
     if (auto it = j.find("level"); it != j.end() && it->is_number()) {
         st.level = std::clamp(it->get<float>(), 0.0f, 1.0f);
         st.hasLevel = true;
