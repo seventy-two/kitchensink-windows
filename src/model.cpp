@@ -120,6 +120,7 @@ Snapshot ParseSnapshot(const json& j) {
     for (const auto& b : array(j, "blocks")) s.blocks.push_back(parseBlock(b));
     for (const auto& st : array(j, "summary")) s.summary.push_back(parseStat(st));
     s.summaryStyle = str(j, "summaryStyle");
+    if (j.contains("summaryBlock") && j["summaryBlock"].is_object()) s.summaryBlock.push_back(parseBlock(j["summaryBlock"]));
     return s;
 }
 
@@ -206,16 +207,18 @@ bool UseCompact(bool compact, float width, float height, float scale) {
 
 bool HasPrivate(const Snapshot& s) {
     auto stat = [](const Stat& st) { return st.isPrivate; };
+    auto block = [&](const Block& b) { return b.isPrivate || std::any_of(b.stats.begin(), b.stats.end(), stat); };
     return std::any_of(s.summary.begin(), s.summary.end(), stat) ||
-           std::any_of(s.blocks.begin(), s.blocks.end(), [&](const Block& b) {
-               return b.isPrivate || std::any_of(b.stats.begin(), b.stats.end(), stat);
-           });
+           std::any_of(s.blocks.begin(), s.blocks.end(), block) ||
+           std::any_of(s.summaryBlock.begin(), s.summaryBlock.end(), block);
 }
 
 Snapshot WithoutPrivate(Snapshot s) {
     auto stat = [](const Stat& st) { return st.isPrivate; };
     s.summary.erase(std::remove_if(s.summary.begin(), s.summary.end(), stat), s.summary.end());
     for (auto& b : s.blocks) b.stats.erase(std::remove_if(b.stats.begin(), b.stats.end(), stat), b.stats.end());
+    // A private summary block goes; the summary is shown instead.
+    if (!s.summaryBlock.empty() && s.summaryBlock[0].isPrivate) s.summaryBlock.clear();
     // A stats block left with nothing goes too.
     s.blocks.erase(std::remove_if(s.blocks.begin(), s.blocks.end(),
                                   [](const Block& b) { return b.isPrivate || (b.type == "stats" && b.stats.empty()); }),

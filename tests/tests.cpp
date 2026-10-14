@@ -70,9 +70,13 @@ static void testParseSnapshot() {
             {"type": "checklist", "addHint": "Add a task…", "deleteHint": "Put off a day", "noDelete": true, "movable": true, "downHint": "Later", "items": [{"id": "a1", "title": "Bins", "done": true}, {"id": "b2", "title": "Post"}]}
         ],
         "summary": [{"label": "Now", "value": "13°C", "tone": "good", "series": [1, 2]}, {"label": "Rain"}],
-        "summaryStyle": "chips"
+        "summaryStyle": "chips",
+        "summaryBlock": {"type": "table", "columns": [{"title": ""}, {"title": "Today", "align": "right"}],
+                         "rows": [[{"text": "Vorkath"}, {"text": "+12", "tone": "good"}]]}
     })");
     Snapshot s = ParseSnapshot(j);
+    CHECK_EQ(s.summaryBlock.size(), size_t(1));
+    CHECK_EQ(s.summaryBlock[0].rows[0][1].text, std::string("+12"));
     CHECK_EQ(s.monitor, std::string("weather"));
     CHECK_EQ(s.error, std::string("site down"));
     CHECK_EQ(s.subtitle, std::string("Mazda3 · Automatic"));
@@ -113,6 +117,8 @@ static void testParseSnapshot() {
     CHECK(!odd.background);
     CHECK(odd.monitor.empty());
     CHECK(odd.blocks.empty());
+    CHECK(odd.summaryBlock.empty());
+    CHECK(ParseSnapshot(nlohmann::json::parse(R"({"summaryBlock": null})")).summaryBlock.empty());
     CHECK_EQ(ParseSnapshot(nlohmann::json::parse(R"({"updated": "0001-01-01T00:00:00Z"})")).updated, int64_t(0));
 }
 

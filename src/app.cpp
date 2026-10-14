@@ -951,7 +951,16 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
             y = bottom;
         }
         ImGui::SetCursorScreenPos(ImVec2(top.x, y));
-        if (!s.summary.empty()) {
+        if (!s.summaryBlock.empty()) {
+            // The panel's own look, cut short. In a window of its own, as a
+            // table splits the draw list and this row has split it already.
+            float w = avail - (y == top.y ? rightW : 0);
+            ImGui::BeginChild("##short", ImVec2(w, 0), ImGuiChildFlags_AutoResizeY,
+                              ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
+                                  ImGuiWindowFlags_NoScrollWithMouse);
+            block(s.monitor, s.summaryBlock[0]);
+            ImGui::EndChild();
+        } else if (!s.summary.empty()) {
             float w = avail - (y == top.y ? rightW : 0);
             if (s.summaryStyle == "chips") onButton = chips(s.summary, w, clicked && dragging_.empty()) || onButton;
             else summary(s.summary, w);
@@ -965,7 +974,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         // Clicking anywhere on the row, bar the buttons and grip, opens it.
         ImVec2 hitMin = winMin, hitMax(winRight, bottom + 8 * scale_);
         dl->ChannelsSetCurrent(0);
-        bool hovered = clicked && dragging_.empty() && ImGui::IsWindowHovered() &&
+        bool hovered = clicked && dragging_.empty() && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
                        ImGui::IsMouseHoveringRect(hitMin, hitMax) && !onButton;
         if (hovered) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);

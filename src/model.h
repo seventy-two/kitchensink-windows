@@ -109,6 +109,9 @@ struct Snapshot {
     // blocks when space is short. Older servers don't send it.
     std::vector<Stat> summary;
     std::string summaryStyle;  // "" for tiles, or "chips"
+    // summaryBlock, if the monitor sends one, is drawn in place of the
+    // summary: e.g. the top rows of its table, so it looks the same short.
+    std::vector<Block> summaryBlock;  // none or one
 };
 
 struct Event {
