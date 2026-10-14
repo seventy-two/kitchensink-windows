@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "../src/cat.h"
+#include "../src/grab.h"
 #include "../src/local.h"
 #include "../src/model.h"
 #include "../src/retro.h"
@@ -730,7 +731,52 @@ static void testTemporaryEvents() {
     CHECK(!m.AddEvent(again));
 }
 
+static void testGrab() {
+    // A table cell with a local app's button.
+    Snapshot s = ParseSnapshot(nlohmann::json::parse(R"({"monitor":"letterboxd","blocks":[{"type":"table","columns":[{"title":"Film"},{"title":""}],
+        "rows":[[{"text":"Fish Tank","url":"https://letterboxd.com/film/fish-tank/"},{"text":"","local":{"app":"watchgrab","arg":"fish-tank"}}]]}]})"));
+    CHECK_EQ(s.blocks.size(), size_t(1));
+    if (!s.blocks.empty()) {
+        const Cell& c = s.blocks[0].rows[0][1];
+        CHECK_EQ(c.localApp, std::string("watchgrab"));
+        CHECK_EQ(c.localArg, std::string("fish-tank"));
+        CHECK(s.blocks[0].rows[0][0].localApp.empty());
+    }
+
+    auto st = ParseWatchgrabState(R"({"started":"2026-10-14T21:22:48Z","films":{
+        "fish-tank":{"name":"Fish Tank","old":true,"status":"grabbed","torrent":"Fish Tank 2009 1080p BluRay-hallowed"},
+        "pi":{"name":"Pi","status":"have"},
+        "obscure":{"name":"Obscure","status":"none"},
+        "plain":{"name":"Plain","old":true}}})");
+    CHECK_EQ(st.size(), size_t(3));
+    CHECK(st["fish-tank"].kind == GrabState::Grabbed);
+    CHECK_EQ(st["fish-tank"].message, std::string("Added Fish Tank 2009 1080p BluRay-hallowed"));
+    CHECK(st["pi"].kind == GrabState::Have);
+    CHECK(st["obscure"].kind == GrabState::NoRelease);
+    CHECK(!st.count("plain"));
+    CHECK(ParseWatchgrabState("not json").empty());
+
+    GrabState r = ParseGrabResult("{\"slug\":\"a\",\"status\":\"grabbed\",\"message\":\"Added X (10.9 GB, freeleech)\"}\r\n");
+    CHECK(r.kind == GrabState::Grabbed);
+    CHECK_EQ(r.message, std::string("Added X (10.9 GB, freeleech)"));
+    r = ParseGrabResult("{\"slug\":\"a\",\"status\":\"error\",\"message\":\"404\"}\nwatchgrab: 404\n");
+    CHECK(r.kind == GrabState::Failed);
+    CHECK_EQ(r.message, std::string("404"));
+    CHECK(ParseGrabResult("").kind == GrabState::Failed);
+    CHECK(ParseGrabResult("{\"status\":\"would\"}").kind == GrabState::Failed);
+
+    CHECK(ViewGrab({}).clickable);
+    CHECK(ViewGrab({}).icon == GrabView::Download);
+    CHECK(!ViewGrab({GrabState::Running, ""}).clickable);
+    CHECK(!ViewGrab({GrabState::Grabbed, "Added X"}).clickable);
+    CHECK(ViewGrab({GrabState::Grabbed, "Added X"}).tone == Tone::Good);
+    CHECK(ViewGrab({GrabState::NoRelease, "No release"}).clickable);
+    CHECK(ViewGrab({GrabState::Failed, "Not enough space"}).clickable);
+    CHECK_EQ(ViewGrab({GrabState::Failed, "Not enough space"}).tooltip, std::string("Not enough space. Click to try again."));
+}
+
 int main() {
+    testGrab();
     testRetro();
     testCat();
     testTemporaryEvents();

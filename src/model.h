@@ -54,6 +54,9 @@ struct Cell {
     std::string text, url;
     Tone tone = Tone::None;
     std::string detail;  // a smaller, muted line under the text
+    // A button for an app on this PC (watchgrab), run with localArg; drawn
+    // only where the app is installed.
+    std::string localApp, localArg;
 };
 
 struct Item {

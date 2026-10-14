@@ -31,6 +31,14 @@ result is a single `kitchensink.exe` with nothing to install.
   browsers and other players all show. Cover, track, progress and
   previous / play-pause / next. A playing app wins over a paused one, and
   a paused track hides ten minutes after it last played.
+- **Buttons for apps on this PC**: a table cell can name a local app
+  (`local`), drawn as a button only where that app is installed. The one
+  known is watchgrab (`%LOCALAPPDATA%\Programs\watchgrab\watchgrab.exe`),
+  for the Letterboxd watchlist: its download button runs
+  `watchgrab -grab <film>` in the background, and each row shows how the
+  film stands from watchgrab's `state.json`: added (green tick), already
+  had (grey tick), no release yet (amber, click to look again) or a failure
+  (red, click to retry), with the detail on hover.
 - Checklists (the `todo` monitor) can be ticked, added to and deleted
   from; a tick shows at once, ahead of the server's update.
 - Keeps the server's event stream open, reconnects with backoff, and
@@ -88,7 +96,7 @@ parts (the data model and the server-sent events parser) also build and
 test on Linux:
 
 ```sh
-g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/model.cpp src/sse.cpp src/local.cpp \
+g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/model.cpp src/sse.cpp src/local.cpp src/grab.cpp \
     src/cat.cpp src/weather_icon.cpp src/retro.cpp third_party/imgui/imgui*.cpp && ./a.out
 ```
 
@@ -104,6 +112,8 @@ g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/mo
 | `src/media.cpp` | reads and controls Windows' media sessions (C++/WinRT) |
 | `src/sysinfo.cpp` | reads CPU, memory, GPU and drive use (performance counters, DXGI) |
 | `src/local.cpp` | turns those readings into the This PC panel |
+| `src/grab.cpp` | watchgrab's state and results, and how each film's button looks |
+| `src/grabber.cpp` | runs watchgrab for the download buttons and follows its state file |
 | `src/images.cpp` | thumbnail download, WIC decoding and textures |
 | `src/config.cpp` | settings and start-with-Windows |
 | `src/theme.cpp` | palettes, fonts and ImGui style |

@@ -161,6 +161,7 @@ App::App(HWND hwnd, ID3D11Device* device, std::function<void()> wake,
       images_(std::make_unique<ImageCache>(device, wake)),
       local_(std::make_unique<LocalStats>(wake)),
       media_(std::make_unique<MediaWatcher>(wake, images_.get())),
+      grabber_(std::make_unique<Grabber>(wake)),
       notify_(std::move(notify)) {
     // Idle dimming counts from launch, not from 1970.
     lastActivity_ = now();
@@ -764,6 +765,35 @@ void App::refreshButton(const Snapshot& s) {
     ImGui::PopStyleColor(2);
 }
 
+// localButton is a table cell's button for an app on this PC: watchgrab's
+// download, showing how the film stands with it.
+void App::localButton(const Cell& cell) {
+    GrabView v = ViewGrab(grabber_->Get(cell.localArg));
+    const char* glyph = v.icon == GrabView::Busy      ? icon::Refresh
+                        : v.icon == GrabView::Done    ? icon::CheckMark
+                        : v.icon == GrabView::Warning ? icon::Warning
+                                                      : icon::Download;
+    ImVec4 colour = v.tone == Tone::None ? Colours().accent : ToneColour(v.tone);
+    ImGui::PushID(cell.localArg.c_str());
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text, colour);
+    if (!v.clickable) {
+        // A state, not a button: full colour, no highlight.
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0, 0, 0, 0));
+    }
+    // No vertical padding, so the row stays a line of text tall.
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4 * scale_, 0));
+    if (ImGui::Button(glyph) && v.clickable) grabber_->Start(cell.localArg);
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", v.tooltip.c_str());
+        localHovered_ = true;
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(v.clickable ? 2 : 4);
+    ImGui::PopID();
+}
+
 void App::pasteButton(const Snapshot& s) {
     bool sent = pasted_.count(s.monitor) && ImGui::GetTime() - pasted_[s.monitor] < 3;
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
@@ -958,7 +988,9 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
             ImGui::BeginChild("##short", ImVec2(w, 0), ImGuiChildFlags_AutoResizeY,
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
                                   ImGuiWindowFlags_NoScrollWithMouse);
+            localHovered_ = false;
             block(s.monitor, s.summaryBlock[0]);
+            onButton = onButton || localHovered_;
             ImGui::EndChild();
         } else if (!s.summary.empty()) {
             float w = avail - (y == top.y ? rightW : 0);
@@ -1665,8 +1697,12 @@ void App::table(const Block& b) {
             if (c < r.size() && !r[c].detail.empty() && b.columns[c].align != Align::Left)
                 w = std::max(w, ImGui::CalcTextSize(r[c].detail.c_str()).x);
         ImGui::PopFont();
-        for (const auto& r : b.rows)
-            if (c < r.size()) w = std::max(w, ImGui::CalcTextSize(r[c].text.c_str()).x);
+        for (const auto& r : b.rows) {
+            if (c >= r.size()) continue;
+            w = std::max(w, ImGui::CalcTextSize(r[c].text.c_str()).x);
+            if (!r[c].localApp.empty() && grabber_->Has(r[c].localApp))
+                w = std::max(w, ImGui::CalcTextSize(icon::Download).x + 8 * scale_);
+        }
         ImGui::TableSetupColumn(b.columns[c].title.c_str(), ImGuiTableColumnFlags_WidthFixed, std::ceil(w));
     }
 
@@ -1685,6 +1721,10 @@ void App::table(const Block& b) {
         for (size_t c = 0; c < cols && c < row.size(); c++) {
             ImGui::TableSetColumnIndex(int(c));
             const Cell& cell = row[c];
+            if (!cell.localApp.empty()) {
+                if (grabber_->Has(cell.localApp)) localButton(cell);
+                continue;
+            }
             textAligned(cell.text, b.columns[c].align, ToneColour(cell.tone));
             linkBehaviour(cell.url);
             if (!cell.detail.empty()) {

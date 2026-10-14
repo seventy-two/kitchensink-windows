@@ -68,7 +68,15 @@ Block parseBlock(const json& j) {
     }
     for (const auto& r : array(j, "rows")) {
         std::vector<Cell> row;
-        for (const auto& c : r) row.push_back({str(c, "text"), str(c, "url"), tone(c), str(c, "detail")});
+        for (const auto& c : r) {
+            Cell cell{str(c, "text"), str(c, "url"), tone(c), str(c, "detail")};
+            auto local = c.find("local");
+            if (local != c.end() && local->is_object()) {
+                cell.localApp = str(*local, "app");
+                cell.localArg = str(*local, "arg");
+            }
+            row.push_back(std::move(cell));
+        }
         b.rows.push_back(std::move(row));
     }
     for (const auto& i : array(j, "items")) {

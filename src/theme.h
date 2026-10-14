@@ -50,6 +50,8 @@ inline constexpr const char* View = "\xEE\xA2\x90";         // U+E890, an eye
 inline constexpr const char* Up = "\xEE\x9D\x8A";           // U+E74A
 inline constexpr const char* Down = "\xEE\x9D\x8B";         // U+E74B
 inline constexpr const char* Paste = "\xEE\x9D\xBF";        // U+E77F
+inline constexpr const char* Download = "\xEE\xA2\x96";     // U+E896
+inline constexpr const char* CheckMark = "\xEE\x9C\xBE";    // U+E73E
 }  // namespace icon
 
 // SystemUsesDarkTheme reads the Windows "app mode" setting.
