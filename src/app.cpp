@@ -1151,9 +1151,10 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
     for (size_t i = 0; i < n; i++) ws[i] = own[i] > 0 ? own[i] : std::min(w, width);
     float natural = gaps;
     for (float x : ws) natural += x;
-    if (natural > width + 0.5f && shared > 0 && oneRow >= 44 * scale_) {
+    if (natural > width + 0.5f && shared > 0 && oneRow > 0) {
         // All on one row: the chips that need more than an equal share
-        // take it, and the rest share what's left.
+        // take it, and the rest share what's left. Short ones (the
+        // dailies' "W", "C") can go narrow, as long as each still fits.
         float share = oneRow;
         for (size_t pass = 0; pass < n; pass++) {
             float taken = 0;
@@ -1170,7 +1171,7 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
         float total = gaps + fixed;
         for (size_t i = 0; i < n; i++)
             if (own[i] == 0) total += std::max(share, need[i]);
-        if (share >= 44 * scale_ && total <= width + 0.5f) {
+        if (total <= width + 0.5f) {
             w = share;
             for (size_t i = 0; i < n; i++)
                 if (own[i] == 0) ws[i] = std::max(share, need[i]);
