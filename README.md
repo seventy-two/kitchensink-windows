@@ -7,7 +7,7 @@ It's written in C++ with Win32, Direct3D 11 and
 result is a single `kitchensink.exe` with nothing to install.
 
 - Draws whatever blocks a monitor sends (stats, tables, lists, checklists,
-  text) and its summary (tiles, or chips tinted by tone, a `lead` one as plain text), so new monitors
+  text) and its summary (tiles, or chips tinted by tone, a `lead` one as plain text on one line), so new monitors
   appear without client changes.
 - In a smaller window (under about 1100 px tall or 900 px wide at 100%
   scale) the layout tightens and each monitor becomes one row of its

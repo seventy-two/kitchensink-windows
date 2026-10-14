@@ -1071,7 +1071,8 @@ void App::dragDrop() {
 // they narrow to do so, shortening details that are too wide, though a chip
 // whose label or value wouldn't fit keeps its own width; if labels or
 // values would still be cut short, they flow onto more lines. A lead chip
-// has no block, just its text, with more room after it.
+// has no block, just its label and value on one line, as wide as they
+// are, with more room after it.
 void App::chips(const std::vector<Stat>& stats, float width) {
     if (stats.empty()) return;
     const Palette& p = Colours();
@@ -1088,10 +1089,24 @@ void App::chips(const std::vector<Stat>& stats, float width) {
     float beside = 0;  // the widest label or value with an icon by it
     bool icons = false;
     std::vector<float> need(stats.size());
+    std::vector<float> own(stats.size());  // a lead chip's width, else 0
+    float fixed = 0;                       // the lead chips' together
+    size_t leads = 0;
     for (size_t i = 0; i < stats.size(); i++) {
         const Stat& s = stats[i];
         ImGui::PushFont(fonts_.caption);
         ImVec2 l = ImGui::CalcTextSize(s.label.c_str());
+        if (s.lead) {
+            labelH = std::max(labelH, l.y);
+            ImGui::PopFont();
+            ImGui::PushFont(fonts_.heading);
+            ImVec2 v = ImGui::CalcTextSize(s.value.c_str());
+            if (!s.value.empty()) valueH = std::max(valueH, v.y);
+            ImGui::PopFont();
+            own[i] = std::min(l.x + gap * 1.5f + v.x, width);
+            fixed += own[i], leads++;
+            continue;
+        }
         w = std::max(w, l.x);
         need[i] = l.x;
         labelH = std::max(labelH, l.y);
@@ -1128,33 +1143,37 @@ void App::chips(const std::vector<Stat>& stats, float width) {
         if (stats[i].lead && i + 1 < n) after[i] += leadGap;
         if (i + 1 < n) gaps += after[i];
     }
-    for (float& x : need) x = std::min(x + pad.x * 2, width);
-    float oneRow = (width - gaps) / float(n);
+    for (size_t i = 0; i < n; i++) need[i] = own[i] > 0 ? own[i] : std::min(need[i] + pad.x * 2, width);
+    const size_t shared = n - leads;  // the chips sharing a width
+    float oneRow = shared > 0 ? (width - gaps - fixed) / float(shared) : width;
     // Each chip's width: the shared one, or its own if it needs more.
-    std::vector<float> ws(n, std::min(w, width));
+    std::vector<float> ws(n);
+    for (size_t i = 0; i < n; i++) ws[i] = own[i] > 0 ? own[i] : std::min(w, width);
     float natural = gaps;
     for (float x : ws) natural += x;
-    if (natural > width + 0.5f && oneRow >= 44 * scale_) {
+    if (natural > width + 0.5f && shared > 0 && oneRow >= 44 * scale_) {
         // All on one row: the chips that need more than an equal share
         // take it, and the rest share what's left.
         float share = oneRow;
         for (size_t pass = 0; pass < n; pass++) {
             float taken = 0;
             size_t wide = 0;
-            for (float x : need)
-                if (x > share) taken += x, wide++;
-            if (wide == n) break;
-            float next = (width - gaps - taken) / float(n - wide);
+            for (size_t i = 0; i < n; i++)
+                if (own[i] == 0 && need[i] > share) taken += need[i], wide++;
+            if (wide == shared) break;
+            float next = (width - gaps - fixed - taken) / float(shared - wide);
             if (next == share) break;
             share = next;
         }
         // If that still leaves a label or value cut short, they flow onto
         // more lines at their full width instead.
-        float total = gaps;
-        for (float x : need) total += std::max(share, x);
+        float total = gaps + fixed;
+        for (size_t i = 0; i < n; i++)
+            if (own[i] == 0) total += std::max(share, need[i]);
         if (share >= 44 * scale_ && total <= width + 0.5f) {
             w = share;
-            for (size_t i = 0; i < n; i++) ws[i] = std::max(share, need[i]);
+            for (size_t i = 0; i < n; i++)
+                if (own[i] == 0) ws[i] = std::max(share, need[i]);
         }
     }
     float h = pad.y * 2 + labelH + valueH + detailH;
@@ -1184,7 +1203,24 @@ void App::chips(const std::vector<Stat>& stats, float width) {
         float w = ws[i];
         ImVec4 tone = ToneColour(s.tone);
         bool coloured = s.tone == Tone::Good || s.tone == Tone::Bad || s.tone == Tone::Warn || s.tone == Tone::Accent;
-        if (!s.lead) dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(coloured ? fade(tone, 0.2f) : p.frame));
+        if (s.lead) {
+            // The value centred in the row's height, the label before it
+            // on the same line, both resting on its bottom.
+            float y = a.y + std::round((h - valueH) / 2);
+            ImGui::PushFont(fonts_.caption);
+            float labelW = ImGui::CalcTextSize(s.label.c_str()).x;
+            ImGui::SetCursorScreenPos(ImVec2(a.x, y + std::round(valueH - labelH - valueH * 0.08f)));
+            ImGui::TextColored(s.tone == Tone::Muted ? p.muted : p.text, "%s", s.label.c_str());
+            ImGui::PopFont();
+            ImGui::PushFont(fonts_.heading);
+            ImGui::SetCursorScreenPos(ImVec2(a.x + labelW + gap * 1.5f, y));
+            ImGui::TextColored(coloured ? tone : s.tone == Tone::Muted ? p.muted : p.text, "%s", s.value.c_str());
+            ImGui::PopFont();
+            ImGui::SetCursorScreenPos(a);
+            ImGui::Dummy(ImVec2(w, h));
+            continue;
+        }
+        dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(coloured ? fade(tone, 0.2f) : p.frame));
         float inner = w - pad.x * 2;
         if (levels) {
             // The levels as one faint chart behind the row: through the
