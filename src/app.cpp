@@ -1070,13 +1070,16 @@ void App::dragDrop() {
 // below, all one size so they line up. If they nearly fit on one line,
 // they narrow to do so, shortening details that are too wide, though a chip
 // whose label or value wouldn't fit keeps its own width; if labels or
-// values would still be cut short, they flow onto more lines.
+// values would still be cut short, they flow onto more lines. A lead chip
+// has a bar of its tone down its left, a stronger fill and more room
+// after it.
 void App::chips(const std::vector<Stat>& stats, float width) {
     if (stats.empty()) return;
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 pad(6 * scale_, 4 * scale_);
     float gap = 4 * scale_;
+    float leadBar = std::round(3 * scale_), leadGap = 8 * scale_;
 
     // One size for all, from the widest and tallest of each part. need is
     // what each chip's label and value take: a chip that can't fit them
@@ -1118,12 +1121,25 @@ void App::chips(const std::vector<Stat>& stats, float width) {
     }
     if (icons) w = std::max(w, beside + gap + labelH + valueH);
     w += pad.x * 2;
-    for (float& n : need) n = std::min(n + pad.x * 2, width);
     const size_t n = stats.size();
-    float oneRow = (width - gap * float(n - 1)) / float(n);
+    // The room after each chip, and the lead chips' bars, which their
+    // text sits right of.
+    std::vector<float> after(n, gap);
+    float gaps = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (stats[i].lead) need[i] += leadBar;
+        if (stats[i].lead && i + 1 < n) after[i] += leadGap;
+        if (i + 1 < n) gaps += after[i];
+    }
+    for (float& x : need) x = std::min(x + pad.x * 2, width);
+    float oneRow = (width - gaps) / float(n);
     // Each chip's width: the shared one, or its own if it needs more.
     std::vector<float> ws(n, std::min(w, width));
-    if (w > oneRow && oneRow >= 44 * scale_) {
+    for (size_t i = 0; i < n; i++)
+        if (stats[i].lead) ws[i] = std::min(w + leadBar, width);
+    float natural = gaps;
+    for (float x : ws) natural += x;
+    if (natural > width + 0.5f && oneRow >= 44 * scale_) {
         // All on one row: the chips that need more than an equal share
         // take it, and the rest share what's left.
         float share = oneRow;
@@ -1133,13 +1149,13 @@ void App::chips(const std::vector<Stat>& stats, float width) {
             for (float x : need)
                 if (x > share) taken += x, wide++;
             if (wide == n) break;
-            float next = (width - gap * float(n - 1) - taken) / float(n - wide);
+            float next = (width - gaps - taken) / float(n - wide);
             if (next == share) break;
             share = next;
         }
         // If that still leaves a label or value cut short, they flow onto
         // more lines at their full width instead.
-        float total = gap * float(n - 1);
+        float total = gaps;
         for (float x : need) total += std::max(share, x);
         if (share >= 44 * scale_ && total <= width + 0.5f) {
             w = share;
@@ -1162,7 +1178,7 @@ void App::chips(const std::vector<Stat>& stats, float width) {
             if (x > 0 && x + ws[i] > width + 0.5f) x = 0, y += h + gap;
             row[i] = x == 0;
             at[i] = ImVec2(origin.x + x, origin.y + y);
-            x += ws[i] + gap;
+            x += ws[i] + after[i];
         }
     }
     bool levels = std::any_of(stats.begin(), stats.end(), [](const Stat& s) { return s.hasLevel; });
@@ -1170,10 +1186,15 @@ void App::chips(const std::vector<Stat>& stats, float width) {
     for (size_t i = 0; i < n; i++) {
         const Stat& s = stats[i];
         ImVec2 a = at[i];
-        float w = ws[i], inner = w - pad.x * 2;
+        float w = ws[i];
         ImVec4 tone = ToneColour(s.tone);
         bool coloured = s.tone == Tone::Good || s.tone == Tone::Bad || s.tone == Tone::Warn || s.tone == Tone::Accent;
-        dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(coloured ? fade(tone, 0.2f) : p.frame));
+        dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(coloured ? fade(tone, s.lead ? 0.32f : 0.2f) : p.frame));
+        if (s.lead) {
+            dl->AddRectFilled(a, ImVec2(a.x + leadBar, a.y + h), u32(coloured ? tone : p.muted));
+            a.x += leadBar, w -= leadBar;
+        }
+        float inner = w - pad.x * 2;
         if (levels) {
             // The levels as one faint chart behind the row: through the
             // middle of each block at its own level, and at each edge

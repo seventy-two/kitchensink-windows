@@ -436,7 +436,7 @@ static void testSse() {
 static void testPrivate() {
     Snapshot s = ParseSnapshot(nlohmann::json::parse(R"({
         "monitor": "stocks",
-        "summary": [{"label": "Today", "value": "+£10", "private": true}, {"label": "AMD", "value": "+1%"}],
+        "summary": [{"label": "Today", "value": "+£10", "private": true, "lead": true}, {"label": "AMD", "value": "+1%"}],
         "blocks": [
             {"type": "stats", "private": true, "stats": [{"label": "Portfolio", "value": "£1,000"}]},
             {"type": "stats", "stats": [{"label": "Mine", "value": "£5", "private": true}, {"label": "Public", "value": "1"}]},
@@ -447,6 +447,8 @@ static void testPrivate() {
     CHECK(HasPrivate(s));
     CHECK(s.blocks[0].isPrivate);
     CHECK(s.summary[0].isPrivate);
+    CHECK(s.summary[0].lead);
+    CHECK(!s.summary[1].lead);
 
     Snapshot hidden = WithoutPrivate(s);
     CHECK(!HasPrivate(hidden));

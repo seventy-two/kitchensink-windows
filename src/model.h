@@ -38,6 +38,9 @@ struct Stat {
     // little more room and a faint rule.
     bool bar = false;
     bool group = false;
+    // In chips: lead sets the chip apart from the ones after it, e.g. the
+    // portfolio's day before the watchlist's moves.
+    bool lead = false;
 };
 
 struct Column {

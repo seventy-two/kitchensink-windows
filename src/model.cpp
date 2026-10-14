@@ -44,6 +44,7 @@ Stat parseStat(const json& j) {
     for (const auto& v : array(j, "series"))
         if (v.is_number()) st.series.push_back(v.get<float>());
     st.isPrivate = flag(j, "private");
+    st.lead = flag(j, "lead");
     st.icon = str(j, "icon");
     if (auto it = j.find("level"); it != j.end() && it->is_number()) {
         st.level = std::clamp(it->get<float>(), 0.0f, 1.0f);
