@@ -1071,15 +1071,15 @@ void App::dragDrop() {
 // they narrow to do so, shortening details that are too wide, though a chip
 // whose label or value wouldn't fit keeps its own width; if labels or
 // values would still be cut short, they flow onto more lines. A lead chip
-// has a bar of its tone down its left, a stronger fill and more room
-// after it.
+// is outlined in its tone, and is a little wider than the rest with more
+// room after it.
 void App::chips(const std::vector<Stat>& stats, float width) {
     if (stats.empty()) return;
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImVec2 pad(6 * scale_, 4 * scale_);
     float gap = 4 * scale_;
-    float leadBar = std::round(3 * scale_), leadGap = 8 * scale_;
+    float leadPad = std::round(4 * scale_), leadGap = 10 * scale_;  // a lead chip's extra, each side
 
     // One size for all, from the widest and tallest of each part. need is
     // what each chip's label and value take: a chip that can't fit them
@@ -1122,12 +1122,11 @@ void App::chips(const std::vector<Stat>& stats, float width) {
     if (icons) w = std::max(w, beside + gap + labelH + valueH);
     w += pad.x * 2;
     const size_t n = stats.size();
-    // The room after each chip, and the lead chips' bars, which their
-    // text sits right of.
+    // The room after each chip, and the lead chips' extra width.
     std::vector<float> after(n, gap);
     float gaps = 0;
     for (size_t i = 0; i < n; i++) {
-        if (stats[i].lead) need[i] += leadBar;
+        if (stats[i].lead) need[i] += leadPad * 2;
         if (stats[i].lead && i + 1 < n) after[i] += leadGap;
         if (i + 1 < n) gaps += after[i];
     }
@@ -1136,7 +1135,7 @@ void App::chips(const std::vector<Stat>& stats, float width) {
     // Each chip's width: the shared one, or its own if it needs more.
     std::vector<float> ws(n, std::min(w, width));
     for (size_t i = 0; i < n; i++)
-        if (stats[i].lead) ws[i] = std::min(w + leadBar, width);
+        if (stats[i].lead) ws[i] = std::min(w + leadPad * 2, width);
     float natural = gaps;
     for (float x : ws) natural += x;
     if (natural > width + 0.5f && oneRow >= 44 * scale_) {
@@ -1189,11 +1188,15 @@ void App::chips(const std::vector<Stat>& stats, float width) {
         float w = ws[i];
         ImVec4 tone = ToneColour(s.tone);
         bool coloured = s.tone == Tone::Good || s.tone == Tone::Bad || s.tone == Tone::Warn || s.tone == Tone::Accent;
-        dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(coloured ? fade(tone, s.lead ? 0.32f : 0.2f) : p.frame));
+        dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(coloured ? fade(tone, 0.2f) : p.frame));
         if (s.lead) {
-            dl->AddRectFilled(a, ImVec2(a.x + leadBar, a.y + h), u32(coloured ? tone : p.muted));
-            a.x += leadBar, w -= leadBar;
+            // Inside the block, so it lines up with the chips beside it.
+            float line = std::max(1.0f, std::round(scale_));
+            ImVec2 in(line / 2, line / 2);
+            dl->AddRect(ImVec2(a.x + in.x, a.y + in.y), ImVec2(a.x + w - in.x, a.y + h - in.y),
+                        u32(coloured ? tone : p.accent), 0, 0, line);
         }
+        if (s.lead) a.x += leadPad, w -= leadPad * 2;
         float inner = w - pad.x * 2;
         if (levels) {
             // The levels as one faint chart behind the row: through the
@@ -1242,8 +1245,8 @@ void App::chips(const std::vector<Stat>& stats, float width) {
             ImGui::PopFont();
         }
         // The block itself, for the group's size.
-        ImGui::SetCursorScreenPos(a);
-        ImGui::Dummy(ImVec2(w, h));
+        ImGui::SetCursorScreenPos(at[i]);
+        ImGui::Dummy(ImVec2(ws[i], h));
     }
     ImGui::EndGroup();
 }
