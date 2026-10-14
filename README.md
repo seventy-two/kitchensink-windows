@@ -13,7 +13,9 @@ result is a single `kitchensink.exe` with nothing to install.
 - In a smaller window (under about 1100 px tall or 900 px wide at 100%
   scale) the layout tightens and each monitor becomes one row of its
   summary: the next events, your holdings' moves, today's games, the hourly
-  forecast and so on. Full panels open beneath their rows, in panel order,
+  forecast and so on. A monitor whose summary is its table cut short (the
+  watchlist, OSRS) is drawn exactly as its open panel is, with the same
+  subtitle, width and column widths, so opening it only adds rows. Full panels open beneath their rows, in panel order,
   as long as they fit; the first that doesn't takes whatever height is left
   and scrolls, if that fits a table header and four rows. Click a row to
   open or close it yourself. Panels have no titles: an open one keeps its controls

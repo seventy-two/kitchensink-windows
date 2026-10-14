@@ -952,7 +952,10 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         // monitors have one, and it only shows on hover, where it matters
         // now. Its space is kept, so the summary doesn't move.
         float x = controlsX;
-        if (!local) {
+        // A short table is drawn as the open panel's body, which has no
+        // such text: hover the refresh button for it.
+        bool asPanel = !s.summaryBlock.empty();
+        if (!local && !asPanel) {
             bool pending = refreshing_.count(s.monitor) && ImGui::GetTime() - refreshing_[s.monitor] < 15;
             std::string when = failed      ? std::string(icon::Warning) + "  Failed"
                                : pending   ? "refreshing…"
@@ -973,7 +976,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         // summary, which shares the controls' line when there's no
         // subtitle above it.
         float y = top.y;
-        if (!s.subtitle.empty()) {
+        if (!s.subtitle.empty() && !asPanel) {
             ImGui::SetCursorScreenPos(ImVec2(top.x, top.y + st.FramePadding.y));
             ImGui::PushFont(fonts_.caption);
             mutedText(fit(s.subtitle, avail - rightW));
@@ -981,15 +984,21 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
             y = bottom;
         }
         ImGui::SetCursorScreenPos(ImVec2(top.x, y));
-        if (!s.summaryBlock.empty()) {
-            // The panel's own look, cut short. In a window of its own, as a
-            // table splits the draw list and this row has split it already.
-            float w = avail - (y == top.y ? rightW : 0);
-            ImGui::BeginChild("##short", ImVec2(w, 0), ImGuiChildFlags_AutoResizeY,
+        if (asPanel) {
+            // The panel's own look, cut short: placed, sized and measured
+            // as the open panel is, so opening it only adds rows. In a
+            // window of its own, as a table splits the draw list and this
+            // row has split it already.
+            ImGui::SetCursorScreenPos(top);
+            ImGui::BeginChild("##short", ImVec2(avail - (top.x + avail - controlsX + 8 * scale_), 0),
+                              ImGuiChildFlags_AutoResizeY,
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
                                   ImGuiWindowFlags_NoScrollWithMouse);
+            panelHead(s);
             localHovered_ = false;
+            measure_ = fullTable(s, s.summaryBlock[0]);
             block(s.monitor, s.summaryBlock[0]);
+            measure_ = nullptr;
             onButton = onButton || localHovered_;
             ImGui::EndChild();
         } else if (!s.summary.empty()) {
@@ -1036,16 +1045,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
                           clip ? ImGuiChildFlags_None : ImGuiChildFlags_AutoResizeY,
                           ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
                               (clip ? 0 : ImGuiWindowFlags_NoScrollWithMouse));
-        if (!s.subtitle.empty()) {
-            ImGui::PushFont(fonts_.caption);
-            wrapped(s.subtitle, p.muted);
-            ImGui::PopFont();
-        }
-        if (failed) {
-            ImGui::PushFont(fonts_.caption);
-            wrapped(std::string(icon::Warning) + "  " + s.error, p.warn);
-            ImGui::PopFont();
-        }
+        panelHead(s);
         for (size_t i = 0; i < s.blocks.size(); i++) {
             ImGui::PushID(int(i));
             if (i > 0) ImGui::Dummy(ImVec2(0, 2 * scale_));
@@ -1062,6 +1062,27 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
     bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     if (clicked) cardRects_.push_back({s.monitor, ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax())});
     return ImGui::GetItemRectSize().y;
+}
+
+// panelHead draws what an open panel shows above its blocks: the subtitle
+// and the last error. A short table's row draws it too, to match.
+void App::panelHead(const Snapshot& s) {
+    ImGui::PushFont(fonts_.caption);
+    if (!s.subtitle.empty()) wrapped(s.subtitle, Colours().muted);
+    if (!s.error.empty()) wrapped(std::string(icon::Warning) + "  " + s.error, Colours().warn);
+    ImGui::PopFont();
+}
+
+// fullTable finds the panel's table that a short table is cut from (the
+// same columns), so the short one's columns are as wide as the full one's.
+const Block* App::fullTable(const Snapshot& s, const Block& b) {
+    for (const auto& full : s.blocks) {
+        if (full.type != "table" || full.columns.size() != b.columns.size()) continue;
+        bool same = true;
+        for (size_t c = 0; c < b.columns.size() && same; c++) same = full.columns[c].title == b.columns[c].title;
+        if (same) return &full;
+    }
+    return nullptr;
 }
 
 // grip draws the six dots that drag a panel, in the card's left margin,
@@ -1671,13 +1692,15 @@ void App::table(const Block& b) {
     if (cols == 0) return;
     // The column marked fill takes the spare width, or failing that the
     // left-aligned column with the most text. The rest fit their contents.
+    // A short table takes its column widths from the full one.
+    const std::vector<std::vector<Cell>>& sized = measure_ ? measure_->rows : b.rows;
     auto fill = std::find_if(b.columns.begin(), b.columns.end(), [](const Column& c) { return c.fill; });
     int stretch = fill != b.columns.end() ? int(fill - b.columns.begin()) : -1;
     size_t most = 0;
     for (size_t c = 0; c < cols && fill == b.columns.end(); c++) {
         if (b.columns[c].align != Align::Left) continue;
         size_t total = 0;
-        for (const auto& r : b.rows)
+        for (const auto& r : sized)
             if (c < r.size()) total += r[c].text.size();
         if (stretch < 0 || total > most) stretch = int(c), most = total;
     }
@@ -1693,11 +1716,11 @@ void App::table(const Block& b) {
         }
         ImGui::PushFont(fonts_.caption);
         float w = ImGui::CalcTextSize(b.columns[c].title.c_str()).x;
-        for (const auto& r : b.rows)
+        for (const auto& r : sized)
             if (c < r.size() && !r[c].detail.empty() && b.columns[c].align != Align::Left)
                 w = std::max(w, ImGui::CalcTextSize(r[c].detail.c_str()).x);
         ImGui::PopFont();
-        for (const auto& r : b.rows) {
+        for (const auto& r : sized) {
             if (c >= r.size()) continue;
             w = std::max(w, ImGui::CalcTextSize(r[c].text.c_str()).x);
             if (!r[c].localApp.empty() && grabber_->Has(r[c].localApp))

@@ -98,6 +98,8 @@ private:
     // pasteButton sends the clipboard's text to a monitor that takes it.
     void pasteButton(const Snapshot& s);
     void localButton(const Cell& cell);
+    void panelHead(const Snapshot& s);
+    const Block* fullTable(const Snapshot& s, const Block& b);
     bool grip(const Snapshot& s, float y, bool shown);
     bool hoveringCard() const;
     void dragDrop();
@@ -141,6 +143,7 @@ private:
     std::vector<Snapshot> localPanels_;  // This PC, drives and all
     std::unique_ptr<MediaWatcher> media_;
     std::unique_ptr<Grabber> grabber_;  // the watchlist's download buttons
+    const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths
     bool localHovered_ = false;         // a local button is under the mouse, so a row's click isn't for the row
     Snapshot mediaPanel_;  // no blocks while nothing's playing
     std::function<void(const std::string&, const std::string&)> notify_;
