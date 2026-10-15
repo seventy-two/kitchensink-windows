@@ -110,14 +110,16 @@ void MediaWatcher::run() {
             if (!manager) manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
             // A playing app wins over Windows' current one, which is just
             // the most recent and may well be paused.
+            // Any of these reads can come back null rather than throwing
+            // when an app closes its session mid-read, so each is checked.
             auto playing = [](const GlobalSystemMediaTransportControlsSession& s) {
-                return s.GetPlaybackInfo().PlaybackStatus() ==
-                       GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+                auto info = s.GetPlaybackInfo();
+                return info && info.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
             };
             GlobalSystemMediaTransportControlsSession session = manager.GetCurrentSession();
             if (!session || !playing(session))
                 for (const auto& s : manager.GetSessions())
-                    if (playing(s)) {
+                    if (s && playing(s)) {
                         session = s;
                         break;
                     }
@@ -132,6 +134,7 @@ void MediaWatcher::run() {
                 auto playback = session.GetPlaybackInfo();
                 auto controls = playback.Controls();
                 auto timeline = session.GetTimelineProperties();
+                if (!props || !playback || !controls || !timeline) throw winrt::hresult_error(E_POINTER);
                 np.active = true;
                 np.title = Narrow(props.Title());
                 np.artist = Narrow(props.Artist());
