@@ -75,6 +75,12 @@ Block parseBlock(const json& j) {
                 cell.localApp = str(*local, "app");
                 cell.localArg = str(*local, "arg");
             }
+            auto action = c.find("action");
+            if (action != c.end() && action->is_object()) {
+                cell.actionType = str(*action, "type");
+                cell.actionId = str(*action, "id");
+                cell.actionLabel = str(*action, "label");
+            }
             row.push_back(std::move(cell));
         }
         b.rows.push_back(std::move(row));

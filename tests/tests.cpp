@@ -743,6 +743,17 @@ static void testGrab() {
         CHECK(s.blocks[0].rows[0][0].localApp.empty());
     }
 
+    // A table cell with a button that sends the monitor an action.
+    Snapshot e = ParseSnapshot(nlohmann::json::parse(R"({"monitor":"ebay","blocks":[{"type":"table","columns":[{"title":"Listing"},{"title":""}],
+        "rows":[[{"text":"Wipeout"},{"text":"","action":{"type":"ignore","id":"v1|1|0","label":"Ignore Wipeout from now on"}}]]}]})"));
+    if (!e.blocks.empty()) {
+        const Cell& c = e.blocks[0].rows[0][1];
+        CHECK_EQ(c.actionType, std::string("ignore"));
+        CHECK_EQ(c.actionId, std::string("v1|1|0"));
+        CHECK_EQ(c.actionLabel, std::string("Ignore Wipeout from now on"));
+        CHECK(e.blocks[0].rows[0][0].actionType.empty());
+    }
+
     auto st = ParseWatchgrabState(R"({"started":"2026-10-14T21:22:48Z","films":{
         "fish-tank":{"name":"Fish Tank","old":true,"status":"grabbed","torrent":"Fish Tank 2009 1080p BluRay-hallowed"},
         "pi":{"name":"Pi","status":"have"},

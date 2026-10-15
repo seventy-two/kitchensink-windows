@@ -7,6 +7,7 @@
 #include <array>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -98,6 +99,7 @@ private:
     // pasteButton sends the clipboard's text to a monitor that takes it.
     void pasteButton(const Snapshot& s);
     void localButton(const Cell& cell);
+    void actionButton(const std::string& monitor, const Cell& cell);
     void panelHead(const Snapshot& s);
     const Block* fullTable(const Snapshot& s, const Block& b);
     bool grip(const Snapshot& s, float y, bool shown);
@@ -107,7 +109,7 @@ private:
     // checklist sends its actions.
     void block(const std::string& monitor, const Block& b);
     void stats(const Block& b);
-    void table(const Block& b);
+    void table(const std::string& monitor, const Block& b);
     void list(const Block& b);
     void checklist(const std::string& monitor, const Block& b);
     void mediaBlock(const Block& b);
@@ -144,7 +146,8 @@ private:
     std::unique_ptr<MediaWatcher> media_;
     std::unique_ptr<Grabber> grabber_;  // the watchlist's download buttons
     const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths
-    bool localHovered_ = false;         // a local button is under the mouse, so a row's click isn't for the row
+    bool localHovered_ = false;         // a local or action button is under the mouse, so a row's click isn't for the row
+    std::set<std::string> sentActions_;  // cells' actions sent, by monitor, type and ID, drawn as done
     Snapshot mediaPanel_;  // no blocks while nothing's playing
     std::function<void(const std::string&, const std::string&)> notify_;
     std::string lastNotifyURL_;

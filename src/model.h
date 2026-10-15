@@ -57,6 +57,9 @@ struct Cell {
     // A button for an app on this PC (watchgrab), run with localArg; drawn
     // only where the app is installed.
     std::string localApp, localArg;
+    // A button that sends the monitor an action of actionType with
+    // actionId; actionLabel says what it does.
+    std::string actionType, actionId, actionLabel;
 };
 
 struct Item {

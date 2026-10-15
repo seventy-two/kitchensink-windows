@@ -52,6 +52,7 @@ inline constexpr const char* Down = "\xEE\x9D\x8B";         // U+E74B
 inline constexpr const char* Paste = "\xEE\x9D\xBF";        // U+E77F
 inline constexpr const char* Download = "\xEE\xA2\x96";     // U+E896
 inline constexpr const char* CheckMark = "\xEE\x9C\xBE";    // U+E73E
+inline constexpr const char* Dismiss = "\xEE\x9C\x91";      // U+E711 Cancel, a cross
 }  // namespace icon
 
 // SystemUsesDarkTheme reads the Windows "app mode" setting.

@@ -770,6 +770,33 @@ void App::refreshButton(const Snapshot& s) {
     ImGui::PopStyleColor(2);
 }
 
+// actionButton is a table cell's button that sends its monitor an action,
+// e.g. eBay's ignore. Once sent it shows a tick until the server's next
+// snapshot, which usually drops the button.
+void App::actionButton(const std::string& monitor, const Cell& cell) {
+    std::string key = monitor + "\n" + cell.actionType + "\n" + cell.actionId;
+    bool sent = sentActions_.count(key) > 0;
+    ImGui::PushID(key.c_str());
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text, Colours().muted);
+    if (sent) {
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0, 0, 0, 0));
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4 * scale_, 0));
+    if (ImGui::Button(sent ? icon::CheckMark : icon::Dismiss) && !sent) {
+        sentActions_.insert(key);
+        client_->Act(monitor, nlohmann::json{{"type", cell.actionType}, {"id", cell.actionId}}.dump());
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s", sent ? "Done" : cell.actionLabel.c_str());
+        localHovered_ = true;
+    }
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(sent ? 4 : 2);
+    ImGui::PopID();
+}
+
 // localButton is a table cell's button for an app on this PC: watchgrab's
 // download, showing how the film stands with it.
 void App::localButton(const Cell& cell) {
@@ -1477,7 +1504,7 @@ void App::block(const std::string& monitor, const Block& b) {
         ImGui::PopFont();
     }
     if (b.type == "stats") stats(b);
-    else if (b.type == "table") table(b);
+    else if (b.type == "table") table(monitor, b);
     else if (b.type == "list") list(b);
     else if (b.type == "checklist") checklist(monitor, b);
     else if (b.type == "media") mediaBlock(b);
@@ -1693,7 +1720,7 @@ void App::stats(const Block& b) {
     ImGui::Dummy(ImVec2(0, 4 * scale_));
 }
 
-void App::table(const Block& b) {
+void App::table(const std::string& monitor, const Block& b) {
     size_t cols = b.columns.size();
     if (cols == 0) return;
     // The column marked fill takes the spare width, or failing that the
@@ -1731,6 +1758,7 @@ void App::table(const Block& b) {
             w = std::max(w, ImGui::CalcTextSize(r[c].text.c_str()).x);
             if (!r[c].localApp.empty() && grabber_->Has(r[c].localApp))
                 w = std::max(w, ImGui::CalcTextSize(icon::Download).x + 8 * scale_);
+            if (!r[c].actionType.empty()) w = std::max(w, ImGui::CalcTextSize(icon::Dismiss).x + 8 * scale_);
         }
         ImGui::TableSetupColumn(b.columns[c].title.c_str(), ImGuiTableColumnFlags_WidthFixed, std::ceil(w));
     }
@@ -1752,6 +1780,10 @@ void App::table(const Block& b) {
             const Cell& cell = row[c];
             if (!cell.localApp.empty()) {
                 if (grabber_->Has(cell.localApp)) localButton(cell);
+                continue;
+            }
+            if (!cell.actionType.empty()) {
+                actionButton(monitor, cell);
                 continue;
             }
             textAligned(cell.text, b.columns[c].align, ToneColour(cell.tone));
