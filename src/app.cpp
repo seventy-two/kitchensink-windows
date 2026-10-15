@@ -42,9 +42,14 @@ void textAligned(const std::string& s, Align align, const ImVec4& colour) {
     ImGui::TextColored(colour, "%s", s.c_str());
 }
 
+// linkHovered is set when a link is under the mouse, so a collapsed row
+// drawn around it can leave the click to the link.
+bool linkHovered = false;
+
 // linkBehaviour makes the last item open url when clicked.
 void linkBehaviour(const std::string& url) {
     if (url.empty() || !ImGui::IsItemHovered()) return;
+    linkHovered = true;
     ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, max.y), max, u32(Colours().muted));
@@ -995,11 +1000,12 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
                                   ImGuiWindowFlags_NoScrollWithMouse);
             panelHead(s);
-            localHovered_ = false;
+            localHovered_ = linkHovered = false;
             measure_ = fullTable(s, s.summaryBlock[0]);
             block(s.monitor, s.summaryBlock[0]);
             measure_ = nullptr;
-            onButton = onButton || localHovered_;
+            // A click on a link or local button is for it, not the row.
+            onButton = onButton || localHovered_ || (clicked && linkHovered);
             ImGui::EndChild();
         } else if (!s.summary.empty()) {
             float w = avail - (y == top.y ? rightW : 0);
@@ -1012,7 +1018,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         }
         bottom = std::max(bottom, ImGui::GetItemRectMax().y);
 
-        // Clicking anywhere on the row, bar the buttons and grip, opens it.
+        // Clicking anywhere on the row, bar the buttons, links and grip, opens it.
         ImVec2 hitMin = winMin, hitMax(winRight, bottom + 8 * scale_);
         dl->ChannelsSetCurrent(0);
         bool hovered = clicked && dragging_.empty() && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
@@ -1812,6 +1818,7 @@ void App::list(const Block& b) {
         ImGui::InvisibleButton("##item", ImVec2(right - start.x, end.y - start.y));
         dl->ChannelsSetCurrent(0);
         if (ImGui::IsItemHovered() && !it.url.empty()) {
+            linkHovered = true;
             dl->AddRectFilled(start, end, u32(p.hover));
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         }
