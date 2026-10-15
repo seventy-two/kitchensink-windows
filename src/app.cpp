@@ -771,11 +771,16 @@ void App::refreshButton(const Snapshot& s) {
 }
 
 // actionButton is a table cell's button that sends its monitor an action,
-// e.g. eBay's ignore. Once sent it shows a tick until the server's next
-// snapshot, which usually drops the button.
-void App::actionButton(const std::string& monitor, const Cell& cell) {
+// e.g. eBay's ignore. It shows only while its row is hovered (show), its
+// space kept so nothing moves. Once sent it shows a tick until the server's
+// next snapshot, which usually drops the button.
+void App::actionButton(const std::string& monitor, const Cell& cell, bool show) {
     std::string key = monitor + "\n" + cell.actionType + "\n" + cell.actionId;
     bool sent = sentActions_.count(key) > 0;
+    if (!show && !sent) {
+        ImGui::Dummy(ImVec2(ImGui::CalcTextSize(icon::Dismiss).x + 8 * scale_, ImGui::GetTextLineHeight()));
+        return;
+    }
     ImGui::PushID(key.c_str());
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Text, Colours().muted);
@@ -1775,6 +1780,8 @@ void App::table(const std::string& monitor, const Block& b) {
     }
     for (const auto& row : b.rows) {
         ImGui::TableNextRow();
+        // As of the last frame; the window keeps drawing a few after input.
+        bool rowHovered = ImGui::TableGetHoveredRow() == ImGui::TableGetRowIndex();
         for (size_t c = 0; c < cols && c < row.size(); c++) {
             ImGui::TableSetColumnIndex(int(c));
             const Cell& cell = row[c];
@@ -1783,7 +1790,7 @@ void App::table(const std::string& monitor, const Block& b) {
                 continue;
             }
             if (!cell.actionType.empty()) {
-                actionButton(monitor, cell);
+                actionButton(monitor, cell, rowHovered);
                 continue;
             }
             textAligned(cell.text, b.columns[c].align, ToneColour(cell.tone));

@@ -99,7 +99,7 @@ private:
     // pasteButton sends the clipboard's text to a monitor that takes it.
     void pasteButton(const Snapshot& s);
     void localButton(const Cell& cell);
-    void actionButton(const std::string& monitor, const Cell& cell);
+    void actionButton(const std::string& monitor, const Cell& cell, bool show);
     void panelHead(const Snapshot& s);
     const Block* fullTable(const Snapshot& s, const Block& b);
     bool grip(const Snapshot& s, float y, bool shown);
