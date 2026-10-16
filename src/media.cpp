@@ -33,10 +33,13 @@ double unixSeconds(winrt::clock::time_point t) {
 std::string readCover(const GlobalSystemMediaTransportControlsSessionMediaProperties& props) {
     auto ref = props.Thumbnail();
     if (!ref) return {};
+    // Null checks as in run(): a closing session can hand back nulls.
     auto stream = ref.OpenReadAsync().get();
+    if (!stream) return {};
     uint32_t size = uint32_t(std::min<uint64_t>(stream.Size(), 8 << 20));
     Buffer buf(size);
     auto read = stream.ReadAsync(buf, size, InputStreamOptions::None).get();
+    if (!read) return {};
     return std::string(reinterpret_cast<const char*>(read.data()), read.Length());
 }
 
@@ -132,9 +135,10 @@ void MediaWatcher::run() {
                 }
                 auto props = session.TryGetMediaPropertiesAsync().get();
                 auto playback = session.GetPlaybackInfo();
+                if (!playback) throw winrt::hresult_error(E_POINTER);
                 auto controls = playback.Controls();
                 auto timeline = session.GetTimelineProperties();
-                if (!props || !playback || !controls || !timeline) throw winrt::hresult_error(E_POINTER);
+                if (!props || !controls || !timeline) throw winrt::hresult_error(E_POINTER);
                 np.active = true;
                 np.title = Narrow(props.Title());
                 np.artist = Narrow(props.Artist());
