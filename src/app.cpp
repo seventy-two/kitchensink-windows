@@ -379,7 +379,8 @@ void App::Frame() {
                                   ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
                 feed(kFew);
                 ImGui::EndChild();
-                ImGui::Dummy(ImVec2(0, 6 * scale_));
+                // As far below the cards as the panels are apart.
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2 * scale_);
                 sidePanels(side, feedW);
             }
             ImGui::EndGroup();
