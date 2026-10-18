@@ -60,6 +60,7 @@ static void testParseSnapshot() {
     auto j = nlohmann::json::parse(R"({
         "monitor": "weather", "kind": "weather", "title": "Weather",
         "updated": "2026-10-10T18:07:31Z", "error": "site down", "subtitle": "Mazda3 · Automatic", "timely": true, "background": true,
+        "relevant": {"from": "2026-10-10T18:00:00Z", "until": "2026-10-10T19:00:00Z"},
         "blocks": [
             {"type": "stats", "title": "Bristol", "stats": [
                 {"label": "Now", "value": "13°C", "detail": "Clear", "tone": "accent", "series": [0, 0.4, 1.5]}
@@ -84,6 +85,10 @@ static void testParseSnapshot() {
     CHECK(s.timely);
     CHECK(s.background);
     CHECK_EQ(s.updated, int64_t(1791655651));
+    CHECK(!Relevant(s, 1791655200 - 1));
+    CHECK(Relevant(s, 1791655200));
+    CHECK(Relevant(s, 1791658799));
+    CHECK(!Relevant(s, 1791658800));
     CHECK_EQ(s.blocks.size(), size_t(5));
     CHECK_EQ(s.blocks[4].addHint, std::string("Add a task…"));
     CHECK_EQ(s.blocks[4].deleteHint, std::string("Put off a day"));
@@ -116,6 +121,9 @@ static void testParseSnapshot() {
     Snapshot odd = ParseSnapshot(nlohmann::json::parse(R"({"monitor": 5, "blocks": {"x": 1}})"));
     CHECK(!odd.timely);
     CHECK(!odd.background);
+    CHECK(!Relevant(odd, 1791655651));
+    Snapshot open = ParseSnapshot(nlohmann::json::parse(R"({"relevant": {"until": "2026-10-10T19:00:00Z"}})"));
+    CHECK(Relevant(open, 1791655651));
     CHECK(odd.monitor.empty());
     CHECK(odd.blocks.empty());
     CHECK(odd.summaryBlock.empty());

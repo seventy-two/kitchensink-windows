@@ -119,6 +119,10 @@ Priority ParsePriority(const std::string& s) {
     return Priority::Normal;
 }
 
+bool Relevant(const Snapshot& s, int64_t now) {
+    return s.relevantUntil > now && s.relevantFrom <= now;
+}
+
 Snapshot ParseSnapshot(const json& j) {
     Snapshot s;
     s.monitor = str(j, "monitor");
@@ -128,6 +132,10 @@ Snapshot ParseSnapshot(const json& j) {
     s.subtitle = str(j, "subtitle");
     s.timely = j.value("timely", false);
     s.background = j.value("background", false);
+    if (j.contains("relevant") && j["relevant"].is_object()) {
+        s.relevantFrom = std::max<int64_t>(0, ParseTime(str(j["relevant"], "from")));
+        s.relevantUntil = std::max<int64_t>(0, ParseTime(str(j["relevant"], "until")));
+    }
     s.paste = str(j, "paste");
     // Go sends its zero time, year 1, for a monitor that hasn't polled yet.
     s.updated = std::max<int64_t>(0, ParseTime(str(j, "updated")));

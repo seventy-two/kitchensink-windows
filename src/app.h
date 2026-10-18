@@ -87,9 +87,11 @@ private:
     // into; by default This PC, Now playing (while something is), then the
     // server's monitors in config order.
     std::vector<Snapshot> panels() const;
-    void cards(float width);
+    // cards draws the main column's panels; compactCards the same in the
+    // compact layout.
+    void cards(float width, const std::vector<Snapshot>& snaps);
     void card(const Snapshot& s, float width);
-    void compactCards(float width);
+    void compactCards(float width, const std::vector<Snapshot>& snaps);
     float compactCard(const Snapshot& s, float width, Show show, float body, bool* clicked);
     void summary(const std::vector<Stat>& stats, float width);
     // chips draws a summary as chips. With live, chips with a URL open it
@@ -113,8 +115,12 @@ private:
     void list(const Block& b);
     void checklist(const std::string& monitor, const Block& b);
     void mediaBlock(const Block& b);
-    void feedHeading(float width);
-    void feed();
+    // feedHeading draws Recent's heading; more is how many events are
+    // hidden (with a link to show them), or -1 for a link to hide them again.
+    void feedHeading(float width, int more);
+    void feed(size_t limit);
+    // sidePanels draws the relevant panels under Recent.
+    void sidePanels(const std::vector<Snapshot>& side, float width);
     bool eventCard(const Event& e, int64_t t, float left);
     void temporaries();
     void cat(float width);
@@ -160,6 +166,9 @@ private:
     bool busy_ = false;
     unsigned long frameInterval_ = 0, catInterval_ = 0;
     ImRect feedRect_;  // the Recent column, last frame
+    // Recent shows every event, rather than its newest few with the
+    // relevant panels under them.
+    bool allRecent_ = false;
 
     // Checklist ticks shown before the server confirms them, by
     // "monitor/item", with when they were made; a snapshot replaces them.

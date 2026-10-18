@@ -103,6 +103,9 @@ struct Snapshot {
     std::string monitor, kind, title, error;
     std::string subtitle;  // what it's watching, when that isn't obvious
     bool timely = false;   // when it was updated matters at the moment
+    // When the panel matters most (Unix seconds; from 0 for now, until
+    // exclusive, 0 for never): it moves under Recent then. See Relevant.
+    int64_t relevantFrom = 0, relevantUntil = 0;
     // It only feeds other panels (the mail reader), so it's shown with the
     // settings rather than on the dashboard.
     bool background = false;
@@ -132,6 +135,9 @@ struct Event {
 };
 
 Snapshot ParseSnapshot(const nlohmann::json& j);
+
+// Relevant says whether a snapshot's panel matters most at time now.
+bool Relevant(const Snapshot& s, int64_t now);
 
 // HasPrivate says whether a snapshot has any private blocks or stats.
 bool HasPrivate(const Snapshot& s);

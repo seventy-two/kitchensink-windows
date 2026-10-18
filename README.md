@@ -64,8 +64,14 @@ result is a single `kitchensink.exe` with nothing to install.
   she kneads her bed before curling up again. Asleep she needs ten frames a
   second, awake about thirty, and none while the window's minimised or
   dimmed.
-- There are no scrollbars: the Recent column, the panels column and a
-  panel cut short to fit scroll with the mouse wheel.
+- There are no scrollbars: the Recent column, the panels under it, the
+  panels column and a panel cut short to fit scroll with the mouse wheel.
+- Panels that matter at the moment (the server's `relevant` window: a
+  game on, an hour before a calendar event until it ends, half an hour after
+  Dink last heard from the OSRS player) and Now playing move under Recent,
+  in full, and the column widens a little for their tables. Recent then
+  shows only its three newest events; "N earlier" by the heading shows the
+  rest, with those panels back in the main column, until "Show fewer".
 - Hovering a Recent card shows an × that clears it; the × by the heading
   (shown while the mouse is over the column) clears them all. Cleared events stay cleared after a restart (they're
   remembered in `config.json` as `cleared`), and only for this install.

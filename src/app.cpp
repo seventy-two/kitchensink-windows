@@ -338,6 +338,25 @@ void App::Frame() {
     } else if (model_.Snapshots().empty() && localPanels_.empty()) {
         empty(state == ConnState::Offline ? "Can't reach the server." : "Connecting…", state == ConnState::Offline);
     } else {
+        // Panels relevant at the moment (a game on, a meeting soon, Now
+        // playing) move under Recent, which then shows only its newest few:
+        // older ones have most likely been seen.
+        std::vector<Snapshot> main, side;
+        for (Snapshot& s : panels()) {
+            bool relevant = Relevant(s, t) || s.monitor == mediaPanel_.monitor;
+            (feedW > 0 && relevant ? side : main).push_back(std::move(s));
+        }
+        constexpr size_t kFew = 3;
+        size_t events = model_.Events().size();
+        int more = side.empty() || events <= kFew ? 0 : allRecent_ ? -1 : int(events - kFew);
+        if (side.empty()) allRecent_ = false;  // so the few come back with the next one
+        if (allRecent_) main.insert(main.end(), side.begin(), side.end()), side.clear();
+        // Wider while it holds panels, so their tables fit.
+        if (!side.empty()) {
+            feedW += (compact_ ? 100 : 80) * scale_;
+            cardsW = avail - feedW - gap;
+        }
+
         // OLED care swaps the side column's side every other hour.
         bool feedFirst = feedW > 0 && config_.oled.swap && OledSwapSides(t);
         auto drawFeed = [&] {
@@ -347,13 +366,22 @@ void App::Frame() {
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
             temporaries();
             ImGui::EndChild();
-            feedHeading(feedW);
-            // Scrolled with the wheel; no scrollbar, which would take width
-            // and get in the way.
-            ImGui::BeginChild("##feed", ImVec2(feedW, 0), ImGuiChildFlags_None,
-                              ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
-            feed();
-            ImGui::EndChild();
+            feedHeading(feedW, more);
+            if (side.empty()) {
+                // Scrolled with the wheel; no scrollbar, which would take
+                // width and get in the way.
+                ImGui::BeginChild("##feed", ImVec2(feedW, 0), ImGuiChildFlags_None,
+                                  ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+                feed(SIZE_MAX);
+                ImGui::EndChild();
+            } else {
+                ImGui::BeginChild("##few", ImVec2(feedW, 0), ImGuiChildFlags_AutoResizeY,
+                                  ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+                feed(kFew);
+                ImGui::EndChild();
+                ImGui::Dummy(ImVec2(0, 6 * scale_));
+                sidePanels(side, feedW);
+            }
             ImGui::EndGroup();
             feedRect_ = ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
         };
@@ -364,7 +392,7 @@ void App::Frame() {
         // Like Recent, scrolled with the wheel, without a scrollbar.
         ImGui::BeginChild("##cards", ImVec2(cardsW, 0), ImGuiChildFlags_None,
                           ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
-        cards(ImGui::GetContentRegionAvail().x);
+        cards(ImGui::GetContentRegionAvail().x, main);
         ImGui::EndChild();
         if (feedW > 0 && !feedFirst) {
             ImGui::SameLine(0, gap);
@@ -648,11 +676,10 @@ void App::empty(const char* message, bool settingsButton) {
     }
 }
 
-void App::cards(float width) {
-    const std::vector<Snapshot> snaps = panels();
+void App::cards(float width, const std::vector<Snapshot>& snaps) {
     cardRects_.clear();
     if (compact_) {
-        compactCards(width);
+        compactCards(width, snaps);
         dragDrop();
         return;
     }
@@ -848,8 +875,7 @@ void App::pasteButton(const Snapshot& s) {
 
 // compactCards fills the space with one row per monitor, full width so the
 // summaries line up, opening as many full panels as fit (see FitPanels).
-void App::compactCards(float width) {
-    const std::vector<Snapshot> snaps = panels();
+void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
     float gap = 8 * scale_;
     float height = ImGui::GetContentRegionAvail().y;
 
@@ -1886,7 +1912,7 @@ void App::cat(float width) {
 // feedHeading is the Recent column's heading, above its scrolling cards,
 // with an x at the right to clear them all while the mouse is over the
 // column.
-void App::feedHeading(float width) {
+void App::feedHeading(float width, int more) {
     const Palette& p = Colours();
     const ImGuiIO& io = ImGui::GetIO();
     ImVec2 at = ImGui::GetCursorScreenPos();
@@ -1894,6 +1920,24 @@ void App::feedHeading(float width) {
     ImGui::TextColored(p.heading, "Recent");
     ImGui::PopFont();
     float h = ImGui::GetItemRectSize().y;
+    if (more != 0) {
+        // On the heading's baseline, a link to show or hide the rest.
+        ImGui::SameLine(0, 10 * scale_);
+        ImGui::PushFont(fonts_.caption);
+        ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, at.y + h - ImGui::GetTextLineHeight() - 1 * scale_));
+        std::string label = more > 0 ? std::to_string(more) + " earlier" : "Show fewer";
+        mutedText(label);
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+            ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, max.y), max, u32(p.muted));
+            ImGui::SetTooltip("%s", more > 0 ? "Show every event here, with the panels back in the main column"
+                                             : "Show the newest few, with what's relevant now under them");
+        }
+        if (ImGui::IsItemClicked()) allRecent_ = more > 0;
+        ImGui::PopFont();
+        ImGui::SetCursorScreenPos(ImVec2(at.x, at.y + h + ImGui::GetStyle().ItemSpacing.y));
+    }
     ImGui::Dummy(ImVec2(0, 2 * scale_));
     if (model_.Events().empty() || !feedRect_.Contains(io.MousePos)) return;
 
@@ -2020,7 +2064,7 @@ void App::temporaries() {
     }
 }
 
-void App::feed() {
+void App::feed(size_t limit) {
     const Palette& p = Colours();
     const ImGuiIO& io = ImGui::GetIO();
     const auto& events = model_.Events();
@@ -2032,7 +2076,7 @@ void App::feed() {
     size_t shown = 0;
     int64_t clear = 0;
     for (const auto& e : events) {
-        if (++shown > 150) break;
+        if (++shown > std::min<size_t>(limit, 150)) break;
         if (eventCard(e, t, -1)) clear = e.id;
     }
     if (clear != 0) {
@@ -2040,6 +2084,21 @@ void App::feed() {
         config_.cleared = model_.GetCleared();
         SaveConfig(config_);
     }
+}
+
+// sidePanels draws the relevant panels in full, scrolling with the wheel
+// when they're taller than the space left.
+void App::sidePanels(const std::vector<Snapshot>& side, float width) {
+    ImGui::BeginChild("##side", ImVec2(width, 0), ImGuiChildFlags_None,
+                      ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+    float gap = (compact_ ? 8 : 16) * scale_;
+    for (Snapshot s : side) {
+        // Out of place, it says what it is where a subtitle would go.
+        if (s.subtitle.empty()) s.subtitle = s.title;
+        card(s, width);
+        ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y * 2));
+    }
+    ImGui::EndChild();
 }
 
 void App::openSettings() {
