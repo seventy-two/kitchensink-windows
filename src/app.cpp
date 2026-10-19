@@ -1260,7 +1260,8 @@ void App::dragDrop() {
 // they narrow to do so, shortening details that are too wide, though a chip
 // whose label or value wouldn't fit keeps its own width; if labels or
 // values would still be cut short, they stay on one line at their full
-// width, which scrolls sideways with the mouse wheel. A lead chip
+// width, which scrolls sideways with the mouse wheel past any lead chips
+// at its start. A lead chip
 // has no block, just its label and value on one line, as wide as they
 // are, with more room after it.
 bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
@@ -1370,27 +1371,6 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
     float h = pad.y * 2 + labelH + valueH + detailH;
     float iconSize = std::round(std::clamp(w - pad.x * 2 - beside - gap, valueH * 1.2f, labelH + valueH));
 
-    // Too wide for the line: they keep their size and the line scrolls
-    // sideways, in a window of its own, with the wheel while it's hovered.
-    float rowW = gaps;
-    for (float x : ws) rowW += x;
-    const bool scroll = rowW > width + 0.5f;
-    if (scroll) {
-        ImGui::BeginChild("##chips", ImVec2(width, h), ImGuiChildFlags_None,
-                          ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
-                              ImGuiWindowFlags_NoScrollWithMouse);
-        dl = ImGui::GetWindowDrawList();
-        if (ImGui::IsWindowHovered()) {
-            // Keep the wheel from the dashboard while it's ours; frame()
-            // gives it back once the chips aren't hovered.
-            ImGuiIO& io = ImGui::GetIO();
-            ImGui::SetKeyOwner(ImGuiKey_MouseWheelY, ChipsWheel);
-            wheelHeld_ = ImGui::GetFrameCount();
-            float step = (w + gap) * 2;
-            ImGui::SetScrollX(ImGui::GetScrollX() - (io.MouseWheel + io.MouseWheelH) * step);
-        }
-    }
-
     // Where each chip goes, in one row; row[i] is whether chip i starts
     // one. A pixel out to the left: a faint block's edge looks further in
     // than the bright text it lines up with in other panels.
@@ -1398,20 +1378,44 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
     origin.x -= std::round(scale_);
     std::vector<ImVec2> at(n);
     std::vector<bool> row(n);
-    {
-        float x = 0;
-        for (size_t i = 0; i < n; i++) {
-            row[i] = x == 0;
-            at[i] = ImVec2(origin.x + x, origin.y);
-            x += ws[i] + after[i];
-        }
+    float rowW = 0;
+    for (size_t i = 0; i < n; i++) {
+        row[i] = rowW == 0;
+        at[i] = ImVec2(origin.x + rowW, origin.y);
+        rowW += ws[i] + (i + 1 < n ? after[i] : 0);
     }
+    // Too wide for the line: they keep their size and the line scrolls
+    // sideways, in a window of its own, with the wheel while it's hovered.
+    // Lead chips at the start (the watchlist's day) stay put.
+    const bool scroll = rowW > width + 0.5f;
+    size_t pinned = 0;
+    if (scroll)
+        while (pinned < n && stats[pinned].lead) pinned++;
+    const float pinW = pinned < n ? at[pinned].x - origin.x : 0;
     bool levels = std::any_of(stats.begin(), stats.end(), [](const Stat& s) { return s.hasLevel; });
     bool onLink = false;
     ImGui::BeginGroup();
+    float shift = 0;  // where the scrolling chips are drawn, from where they'd be
     for (size_t i = 0; i < n; i++) {
+        if (scroll && i == pinned) {
+            ImGui::SetCursorScreenPos(at[i]);
+            ImGui::BeginChild("##chips", ImVec2(width - pinW, h), ImGuiChildFlags_None,
+                              ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
+                                  ImGuiWindowFlags_NoScrollWithMouse);
+            dl = ImGui::GetWindowDrawList();
+            if (ImGui::IsWindowHovered()) {
+                // Keep the wheel from the dashboard while it's ours;
+                // Frame() gives it back once the chips aren't hovered.
+                ImGuiIO& io = ImGui::GetIO();
+                ImGui::SetKeyOwner(ImGuiKey_MouseWheelY, ChipsWheel);
+                wheelHeld_ = ImGui::GetFrameCount();
+                float step = (w + gap) * 2;
+                ImGui::SetScrollX(ImGui::GetScrollX() - (io.MouseWheel + io.MouseWheelH) * step);
+            }
+            shift = ImGui::GetWindowPos().x - ImGui::GetScrollX() - at[i].x;
+        }
         const Stat& s = stats[i];
-        ImVec2 a = at[i];
+        ImVec2 a(at[i].x + shift, at[i].y);
         float w = ws[i];
         ImVec4 tone = ToneColour(s.tone);
         bool coloured = s.tone == Tone::Good || s.tone == Tone::Bad || s.tone == Tone::Warn || s.tone == Tone::Accent;
@@ -1490,8 +1494,8 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
         ImGui::SetCursorScreenPos(a);
         ImGui::Dummy(ImVec2(w, h));
     }
+    if (scroll && pinned < n) ImGui::EndChild();
     ImGui::EndGroup();
-    if (scroll) ImGui::EndChild();
     return onLink;
 }
 
