@@ -133,6 +133,7 @@ private:
     float captionH_ = 0;
     std::vector<ImRect> noDrag_;  // title bar buttons, from the last frame
     int hoverButton_ = -1;        // window button under the mouse, for its tooltip
+    int wheelHeld_ = -1;          // the frame chips last held the wheel
     double hoverSince_ = 0;
 
     float scale_ = 1;

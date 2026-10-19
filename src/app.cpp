@@ -18,6 +18,9 @@
 
 namespace ks {
 
+// ChipsWheel owns the mouse wheel while chips that scroll are hovered.
+const ImGuiID ChipsWheel = ImHashStr("kitchensink chips wheel");
+
 namespace {
 
 ImU32 u32(const ImVec4& c) { return ImGui::ColorConvertFloat4ToU32(c); }
@@ -292,6 +295,10 @@ bool App::NotificationClicked() {
 
 void App::Frame() {
     catInterval_ = 0;  // until she's drawn
+    // The wheel goes back to the dashboard once no scrolling chips held it
+    // last frame.
+    if (ImGui::GetKeyOwner(ImGuiKey_MouseWheelY) == ChipsWheel && wheelHeld_ < ImGui::GetFrameCount() - 1)
+        ImGui::SetKeyOwner(ImGuiKey_MouseWheelY, ImGuiKeyOwner_NoOwner);
     ImGuiIO& io = ImGui::GetIO();
     if (bool c = UseCompact(compact_, io.DisplaySize.x, io.DisplaySize.y, scale_); c != compact_) {
         compact_ = c;
@@ -1252,8 +1259,8 @@ void App::dragDrop() {
 // below, all one size so they line up. If they nearly fit on one line,
 // they narrow to do so, shortening details that are too wide, though a chip
 // whose label or value wouldn't fit keeps its own width; if labels or
-// values would still be cut short, their padding and the gaps between them
-// tighten, and only then do they flow onto more lines. A lead chip
+// values would still be cut short, they stay on one line at their full
+// width, which scrolls sideways with the mouse wheel. A lead chip
 // has no block, just its label and value on one line, as wide as they
 // are, with more room after it.
 bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
@@ -1317,31 +1324,24 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
         ImGui::PopFont();
     }
     if (icons) w = std::max(w, beside + gap + labelH + valueH);
-    const float textW = w;                    // the widest text, unpadded
-    const std::vector<float> text = need;     // each chip's, likewise
+    w += pad.x * 2;
     const size_t n = stats.size();
+    // The room after each chip.
+    std::vector<float> after(n, gap);
+    float gaps = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (stats[i].lead && i + 1 < n) after[i] += leadGap;
+        if (i + 1 < n) gaps += after[i];
+    }
+    for (size_t i = 0; i < n; i++) need[i] = own[i] > 0 ? own[i] : std::min(need[i] + pad.x * 2, width);
     const size_t shared = n - leads;  // the chips sharing a width
-    std::vector<float> after(n);      // the room after each chip
-    std::vector<float> ws(n);         // each chip's width
-    // layout sizes the chips with padding px either side and gaps g
-    // between them, all on one row if it can be; false if they'd still
-    // have to flow onto more.
-    auto layout = [&](float px, float g) {
-        pad.x = px, gap = g;
-        w = textW + px * 2;
-        float gaps = 0;
-        for (size_t i = 0; i < n; i++) {
-            after[i] = g + (stats[i].lead && i + 1 < n ? leadGap : 0);
-            if (i + 1 < n) gaps += after[i];
-        }
-        for (size_t i = 0; i < n; i++) need[i] = own[i] > 0 ? own[i] : std::min(text[i] + px * 2, width);
-        float oneRow = shared > 0 ? (width - gaps - fixed) / float(shared) : width;
-        // Each chip's width: the shared one, or its own if it needs more.
-        for (size_t i = 0; i < n; i++) ws[i] = own[i] > 0 ? own[i] : std::min(w, width);
-        float natural = gaps;
-        for (float x : ws) natural += x;
-        if (natural <= width + 0.5f) return true;
-        if (shared == 0 || oneRow <= 0) return false;
+    float oneRow = shared > 0 ? (width - gaps - fixed) / float(shared) : width;
+    // Each chip's width: the shared one, or its own if it needs more.
+    std::vector<float> ws(n);
+    for (size_t i = 0; i < n; i++) ws[i] = own[i] > 0 ? own[i] : std::min(w, width);
+    float natural = gaps;
+    for (float x : ws) natural += x;
+    if (natural > width + 0.5f && shared > 0 && oneRow > 0) {
         // All on one row: the chips that need more than an equal share
         // take it, and the rest share what's left. Short ones (the
         // dailies' "W", "C") can go narrow, as long as each still fits.
@@ -1361,32 +1361,48 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
         float total = gaps + fixed;
         for (size_t i = 0; i < n; i++)
             if (own[i] == 0) total += std::max(share, need[i]);
-        if (total > width + 0.5f) return false;
-        w = share;
-        for (size_t i = 0; i < n; i++)
-            if (own[i] == 0) ws[i] = std::max(share, need[i]);
-        return true;
-    };
-    // Tighter padding and gaps before a second row, e.g. the watchlist
-    // with the day's gain in front; if even that won't do, the usual ones.
-    float padX = pad.x, gapX = gap;
-    if (!layout(padX, gapX) && !layout(padX / 2, gapX / 2)) layout(padX, gapX);
+        if (total <= width + 0.5f) {
+            w = share;
+            for (size_t i = 0; i < n; i++)
+                if (own[i] == 0) ws[i] = std::max(share, need[i]);
+        }
+    }
     float h = pad.y * 2 + labelH + valueH + detailH;
     float iconSize = std::round(std::clamp(w - pad.x * 2 - beside - gap, valueH * 1.2f, labelH + valueH));
 
-    // Where each chip goes, wrapping onto new rows; row[i] is whether chip
-    // i starts one. A pixel out to the left: a faint block's edge looks
-    // further in than the bright text it lines up with in other panels.
+    // Too wide for the line: they keep their size and the line scrolls
+    // sideways, in a window of its own, with the wheel while it's hovered.
+    float rowW = gaps;
+    for (float x : ws) rowW += x;
+    const bool scroll = rowW > width + 0.5f;
+    if (scroll) {
+        ImGui::BeginChild("##chips", ImVec2(width, h), ImGuiChildFlags_None,
+                          ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
+                              ImGuiWindowFlags_NoScrollWithMouse);
+        dl = ImGui::GetWindowDrawList();
+        if (ImGui::IsWindowHovered()) {
+            // Keep the wheel from the dashboard while it's ours; frame()
+            // gives it back once the chips aren't hovered.
+            ImGuiIO& io = ImGui::GetIO();
+            ImGui::SetKeyOwner(ImGuiKey_MouseWheelY, ChipsWheel);
+            wheelHeld_ = ImGui::GetFrameCount();
+            float step = (w + gap) * 2;
+            ImGui::SetScrollX(ImGui::GetScrollX() - (io.MouseWheel + io.MouseWheelH) * step);
+        }
+    }
+
+    // Where each chip goes, in one row; row[i] is whether chip i starts
+    // one. A pixel out to the left: a faint block's edge looks further in
+    // than the bright text it lines up with in other panels.
     ImVec2 origin = ImGui::GetCursorScreenPos();
     origin.x -= std::round(scale_);
     std::vector<ImVec2> at(n);
     std::vector<bool> row(n);
     {
-        float x = 0, y = 0;
+        float x = 0;
         for (size_t i = 0; i < n; i++) {
-            if (x > 0 && x + ws[i] > width + 0.5f) x = 0, y += h + gap;
             row[i] = x == 0;
-            at[i] = ImVec2(origin.x + x, origin.y + y);
+            at[i] = ImVec2(origin.x + x, origin.y);
             x += ws[i] + after[i];
         }
     }
@@ -1475,6 +1491,7 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
         ImGui::Dummy(ImVec2(w, h));
     }
     ImGui::EndGroup();
+    if (scroll) ImGui::EndChild();
     return onLink;
 }
 
