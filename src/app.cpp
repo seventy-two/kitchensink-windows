@@ -1371,6 +1371,23 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
     float h = pad.y * 2 + labelH + valueH + detailH;
     float iconSize = std::round(std::clamp(w - pad.x * 2 - beside - gap, valueH * 1.2f, labelH + valueH));
 
+    // Scrolling anyway, a few long labels (an index's full name) needn't
+    // widen the rest: they share what most of them need, and longer ones
+    // take their own.
+    {
+        float natural = 0;
+        for (size_t i = 0; i < n; i++) natural += ws[i] + (i + 1 < n ? after[i] : 0);
+        std::vector<float> needs;
+        for (size_t i = 0; i < n; i++)
+            if (own[i] == 0) needs.push_back(need[i]);
+        if (natural > width + 0.5f && !needs.empty()) {
+            std::sort(needs.begin(), needs.end());
+            w = needs[(needs.size() - 1) * 4 / 5];
+            for (size_t i = 0; i < n; i++)
+                if (own[i] == 0) ws[i] = std::max(w, need[i]);
+        }
+    }
+
     // Where each chip goes, in one row; row[i] is whether chip i starts
     // one. A pixel out to the left: a faint block's edge looks further in
     // than the bright text it lines up with in other panels.
