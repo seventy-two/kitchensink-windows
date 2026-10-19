@@ -1019,20 +1019,32 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         // A short table is drawn as the open panel's body, which has no
         // such text: hover the refresh button for it.
         bool asPanel = !s.summaryBlock.empty();
+        // Chips can have the room kept for it (it only shows on hover):
+        // then it's left out if they reach it.
+        float chipsW = avail - (top.x + avail - x + 16 * scale_);
+        std::string when;
+        bool hidden = true;
         if (!local && !asPanel) {
             bool pending = refreshing_.count(s.monitor) && ImGui::GetTime() - refreshing_[s.monitor] < 15;
-            std::string when = failed      ? std::string(icon::Warning) + "  Failed"
-                               : pending   ? "refreshing…"
-                               : s.updated ? (s.timely ? Ago(s.updated, now()) : "")
-                                           : "waiting…";
-            bool hidden = !failed && !pending && s.updated && !shown;
+            when = failed      ? std::string(icon::Warning) + "  Failed"
+                   : pending   ? "refreshing…"
+                   : s.updated ? (s.timely ? Ago(s.updated, now()) : "")
+                               : "waiting…";
+            hidden = !failed && !pending && s.updated && !shown;
             ImGui::PushFont(fonts_.caption);
             if (!when.empty()) x -= ImGui::CalcTextSize(when.c_str()).x + 4 * scale_;
-            ImGui::SetCursorScreenPos(ImVec2(x, top.y + st.FramePadding.y));
-            if (!when.empty() && !hidden) ImGui::TextColored(failed ? p.warn : p.muted, "%s", when.c_str());
-            if (failed && clicked && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", s.error.c_str());
             ImGui::PopFont();
         }
+        float whenX = x;
+        // drawWhen draws it, unless something on its line reaches it.
+        auto drawWhen = [&](float reach) {
+            if (when.empty() || hidden || reach > whenX - 8 * scale_) return;
+            ImGui::PushFont(fonts_.caption);
+            ImGui::SetCursorScreenPos(ImVec2(whenX, top.y + st.FramePadding.y));
+            ImGui::TextColored(failed ? p.warn : p.muted, "%s", when.c_str());
+            if (failed && clicked && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", s.error.c_str());
+            ImGui::PopFont();
+        };
         float rightW = top.x + avail - x + 16 * scale_;
         float bottom = top.y + lineH;
 
@@ -1067,13 +1079,20 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
             onButton = onButton || localHovered_ || (clicked && linkHovered);
             ImGui::EndChild();
         } else if (!s.summary.empty()) {
-            float w = avail - (y == top.y ? rightW : 0);
-            if (s.summaryStyle == "chips") onButton = chips(s.summary, w, clicked && dragging_.empty()) || onButton;
-            else summary(s.summary, w);
+            if (s.summaryStyle == "chips") {
+                float w = y == top.y && !failed ? chipsW : avail - (y == top.y ? rightW : 0);
+                onButton = chips(s.summary, w, clicked && dragging_.empty()) || onButton;
+                drawWhen(y == top.y ? ImGui::GetItemRectMax().x : 0);
+            } else {
+                summary(s.summary, avail - (y == top.y ? rightW : 0));
+                drawWhen(0);
+            }
         } else if (s.blocks.empty() && !failed) {
             mutedText("Waiting for the first check…");
+            drawWhen(0);
         } else {
             mutedText("Click for details");
+            drawWhen(0);
         }
         bottom = std::max(bottom, ImGui::GetItemRectMax().y);
 
@@ -1233,7 +1252,8 @@ void App::dragDrop() {
 // below, all one size so they line up. If they nearly fit on one line,
 // they narrow to do so, shortening details that are too wide, though a chip
 // whose label or value wouldn't fit keeps its own width; if labels or
-// values would still be cut short, they flow onto more lines. A lead chip
+// values would still be cut short, their padding and the gaps between them
+// tighten, and only then do they flow onto more lines. A lead chip
 // has no block, just its label and value on one line, as wide as they
 // are, with more room after it.
 bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
@@ -1297,24 +1317,31 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
         ImGui::PopFont();
     }
     if (icons) w = std::max(w, beside + gap + labelH + valueH);
-    w += pad.x * 2;
+    const float textW = w;                    // the widest text, unpadded
+    const std::vector<float> text = need;     // each chip's, likewise
     const size_t n = stats.size();
-    // The room after each chip.
-    std::vector<float> after(n, gap);
-    float gaps = 0;
-    for (size_t i = 0; i < n; i++) {
-        if (stats[i].lead && i + 1 < n) after[i] += leadGap;
-        if (i + 1 < n) gaps += after[i];
-    }
-    for (size_t i = 0; i < n; i++) need[i] = own[i] > 0 ? own[i] : std::min(need[i] + pad.x * 2, width);
     const size_t shared = n - leads;  // the chips sharing a width
-    float oneRow = shared > 0 ? (width - gaps - fixed) / float(shared) : width;
-    // Each chip's width: the shared one, or its own if it needs more.
-    std::vector<float> ws(n);
-    for (size_t i = 0; i < n; i++) ws[i] = own[i] > 0 ? own[i] : std::min(w, width);
-    float natural = gaps;
-    for (float x : ws) natural += x;
-    if (natural > width + 0.5f && shared > 0 && oneRow > 0) {
+    std::vector<float> after(n);      // the room after each chip
+    std::vector<float> ws(n);         // each chip's width
+    // layout sizes the chips with padding px either side and gaps g
+    // between them, all on one row if it can be; false if they'd still
+    // have to flow onto more.
+    auto layout = [&](float px, float g) {
+        pad.x = px, gap = g;
+        w = textW + px * 2;
+        float gaps = 0;
+        for (size_t i = 0; i < n; i++) {
+            after[i] = g + (stats[i].lead && i + 1 < n ? leadGap : 0);
+            if (i + 1 < n) gaps += after[i];
+        }
+        for (size_t i = 0; i < n; i++) need[i] = own[i] > 0 ? own[i] : std::min(text[i] + px * 2, width);
+        float oneRow = shared > 0 ? (width - gaps - fixed) / float(shared) : width;
+        // Each chip's width: the shared one, or its own if it needs more.
+        for (size_t i = 0; i < n; i++) ws[i] = own[i] > 0 ? own[i] : std::min(w, width);
+        float natural = gaps;
+        for (float x : ws) natural += x;
+        if (natural <= width + 0.5f) return true;
+        if (shared == 0 || oneRow <= 0) return false;
         // All on one row: the chips that need more than an equal share
         // take it, and the rest share what's left. Short ones (the
         // dailies' "W", "C") can go narrow, as long as each still fits.
@@ -1334,12 +1361,16 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
         float total = gaps + fixed;
         for (size_t i = 0; i < n; i++)
             if (own[i] == 0) total += std::max(share, need[i]);
-        if (total <= width + 0.5f) {
-            w = share;
-            for (size_t i = 0; i < n; i++)
-                if (own[i] == 0) ws[i] = std::max(share, need[i]);
-        }
-    }
+        if (total > width + 0.5f) return false;
+        w = share;
+        for (size_t i = 0; i < n; i++)
+            if (own[i] == 0) ws[i] = std::max(share, need[i]);
+        return true;
+    };
+    // Tighter padding and gaps before a second row, e.g. the watchlist
+    // with the day's gain in front; if even that won't do, the usual ones.
+    float padX = pad.x, gapX = gap;
+    if (!layout(padX, gapX) && !layout(padX / 2, gapX / 2)) layout(padX, gapX);
     float h = pad.y * 2 + labelH + valueH + detailH;
     float iconSize = std::round(std::clamp(w - pad.x * 2 - beside - gap, valueH * 1.2f, labelH + valueH));
 
