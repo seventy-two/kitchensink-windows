@@ -64,6 +64,10 @@ result is a single `kitchensink.exe` with nothing to install.
   she kneads her bed before curling up again. Asleep she needs ten frames a
   second, awake about thirty, and none while the window's minimised or
   dimmed.
+- **Lick of the Day**, if it's installed (`%LOCALAPPDATA%\Programs\dailylick`),
+  starts with the dashboard and has no taskbar button of its own: the
+  guitar in the bottom-right corner hides and shows it (clearer while
+  it's showing).
 - There are no scrollbars: the Recent column, the panels under it, the
   panels column and a panel cut short to fit scroll with the mouse wheel.
 - Panels that matter at the moment (the server's `relevant` window: a
@@ -122,6 +126,7 @@ g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/mo
 | `src/local.cpp` | turns those readings into the This PC panel |
 | `src/grab.cpp` | watchgrab's state and results, and how each film's button looks |
 | `src/grabber.cpp` | runs watchgrab for the download buttons and follows its state file |
+| `src/lick.cpp` | starts Lick of the Day with the dashboard, and hides and shows it |
 | `src/images.cpp` | thumbnail download, WIC decoding and textures |
 | `src/config.cpp` | settings and start-with-Windows |
 | `src/theme.cpp` | palettes, fonts and ImGui style |

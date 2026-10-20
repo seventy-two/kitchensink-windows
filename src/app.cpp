@@ -176,6 +176,7 @@ App::App(HWND hwnd, ID3D11Device* device, std::function<void()> wake,
     model_.SetCleared(config_.cleared);
     client_->Start(config_.url, config_.token);
     if (config_.url.empty() || config_.token.empty()) openSettings();
+    lick_.Start();
 }
 
 App::~App() {
@@ -409,6 +410,7 @@ void App::Frame() {
     }
 
     ImGui::EndChild();
+    lickButton();
     settings();
 
     // OLED care dims everything when the mouse hasn't been over the window
@@ -420,6 +422,9 @@ void App::Frame() {
     frameInterval_ = dimmed ? 0 : catInterval_;
     // The retro theme's clock shows seconds.
     if (!dimmed && Colours().retro) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 1000ul) : 1000;
+    // Lick of the Day hides or shows a moment after its button's clicked;
+    // draw again to show which.
+    if (ImGui::GetTime() - lickClicked_ < 1) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 100ul) : 100;
     busy_ = ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || settingsOpen_;
     ImGui::End();
 }
@@ -1964,6 +1969,59 @@ void App::list(const Block& b) {
 }
 
 // cat draws the black cat along the top of the Recent column.
+// lickButton draws a guitar in the bottom-right corner that hides and
+// shows Lick of the Day: clearer while it's showing, fainter while hidden.
+// It's a window of its own so what's under it doesn't take the click.
+void App::lickButton() {
+    if (!lick_.Installed()) return;
+    const Palette& p = Colours();
+    const ImGuiIO& io = ImGui::GetIO();
+    float size = std::round(30 * scale_), margin = std::round(8 * scale_);
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - margin - size, io.DisplaySize.y - margin - size));
+    ImGui::SetNextWindowSize(ImVec2(size, size));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::Begin("##lick", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove);
+    ImGui::PopStyleVar();
+    ImVec2 min = ImGui::GetCursorScreenPos();
+    bool clicked = ImGui::InvisibleButton("guitar", ImVec2(size, size));
+    bool hovered = ImGui::IsItemHovered();
+    bool shown = lick_.Shown();
+    if (clicked) lick_.Toggle(), lickClicked_ = ImGui::GetTime();
+
+    // Translucent, but mixed with the background by hand rather than drawn
+    // see-through, so the overlapping parts don't show darker.
+    ImVec4 back = p.retro ? p.bgBottom : p.bg;
+    ImVec4 ink = dark_ || p.retro ? ImVec4(0.85f, 0.85f, 0.87f, 1) : p.muted;
+    float a = hovered ? 0.9f : shown ? 0.55f : 0.25f;
+    ImU32 body = u32(ImVec4(back.x + (ink.x - back.x) * a, back.y + (ink.y - back.y) * a,
+                            back.z + (ink.z - back.z) * a, 1));
+    ImU32 hole = u32(back);
+
+    // Drawn upright about the middle, then leant over to the right.
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 c(min.x + size / 2, min.y + size / 2);
+    float r = size * 0.47f, ca = std::cos(0.7f), sa = std::sin(0.7f);
+    auto at = [&](float x, float y) {
+        y += 0.12f;  // so the whole guitar is centred
+        return ImVec2(c.x + (x * ca - y * sa) * r, c.y + (x * sa + y * ca) * r);
+    };
+    auto rect = [&](float x0, float y0, float x1, float y1, ImU32 col) {
+        dl->AddQuadFilled(at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), col);
+    };
+    dl->AddCircleFilled(at(0, 0.38f), 0.36f * r, body, 24);  // lower bout
+    dl->AddCircleFilled(at(0, 0.0f), 0.27f * r, body, 24);   // upper bout
+    rect(-0.07f, -0.15f, 0.07f, -0.8f, body);                 // neck
+    rect(-0.11f, -0.8f, 0.11f, -0.98f, body);                 // headstock
+    dl->AddCircleFilled(at(0, 0.1f), 0.1f * r, hole, 16);     // sound hole
+    rect(-0.12f, 0.46f, 0.12f, 0.52f, hole);                  // bridge
+
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip(shown ? "Hide Lick of the Day" : "Show Lick of the Day");
+    ImGui::End();
+}
+
 void App::cat(float width) {
     float size = 1.6f * scale_;
     // Her space is 68 units tall: 64 above the floor (an arched tail),

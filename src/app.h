@@ -16,6 +16,7 @@
 #include "grabber.h"
 #include "images.h"
 #include "imgui_internal.h"
+#include "lick.h"
 #include "model.h"
 #include "net.h"
 #include "media.h"
@@ -124,6 +125,7 @@ private:
     bool eventCard(const Event& e, int64_t t, float left);
     void temporaries();
     void cat(float width);
+    void lickButton();
     void empty(const char* message, bool settingsButton);
     void settings();
     void diagnostics();
@@ -152,6 +154,8 @@ private:
     std::vector<Snapshot> localPanels_;  // This PC, drives and all
     std::unique_ptr<MediaWatcher> media_;
     std::unique_ptr<Grabber> grabber_;  // the watchlist's download buttons
+    LickOfTheDay lick_;                 // hidden and shown by the button in the corner
+    double lickClicked_ = -1;           // when its button was last clicked
     const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths
     bool localHovered_ = false;         // a local or action button is under the mouse, so a row's click isn't for the row
     std::set<std::string> sentActions_;  // cells' actions sent, by monitor, type and ID, drawn as done
