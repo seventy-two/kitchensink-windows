@@ -376,17 +376,12 @@ void App::Frame() {
             temporaries();
             ImGui::EndChild();
             feedHeading(feedW);
-            // The landscape sits at the bottom, clear of Lick of the Day's
-            // button in the corner.
-            float skyH = skyHeight(), below = 0;
-            if (skyH > 0 && !feedFirst && lick_.Installed()) {
-                float bottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y - ImGui::GetStyle().WindowPadding.y;
-                below = std::max(0.0f, bottom - (lickTop() - 6 * scale_));
-            }
+            // The landscape sits at the bottom.
+            float skyH = skyHeight();
             float gap = skyH > 0 ? 10 * scale_ : 0;
             // Scrolled with the wheel; no scrollbar, which would take width
             // and get in the way.
-            ImGui::BeginChild("##feed", ImVec2(feedW, skyH > 0 ? -(skyH + gap + below) : 0), ImGuiChildFlags_None,
+            ImGui::BeginChild("##feed", ImVec2(feedW, skyH > 0 ? -(skyH + gap) : 0), ImGuiChildFlags_None,
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
             feed();
             ImGui::EndChild();
@@ -413,7 +408,6 @@ void App::Frame() {
     }
 
     ImGui::EndChild();
-    lickButton();
     settings();
 
     // OLED care dims everything when the mouse hasn't been over the window
@@ -591,6 +585,7 @@ void App::header() {
             SaveConfig(config_);
         }
     }
+    if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float x = buttonsLeft - 16 * scale_ - clockW;
@@ -1971,60 +1966,52 @@ void App::list(const Block& b) {
     }
 }
 
-// cat draws the black cat along the top of the Recent column.
-// lickButton draws a guitar in the bottom-right corner that hides and
-// shows Lick of the Day: clearer while it's showing, fainter while hidden.
-// It's a window of its own so what's under it doesn't take the click.
-void App::lickButton() {
-    if (!lick_.Installed()) return;
+// lickButton draws an electric guitar (an Ibanez XPT, all points) in the
+// title bar, ending at right, that hides and shows Lick of the Day: in the
+// text colour while it's showing, muted while hidden. It returns its left
+// edge.
+float App::lickButton(float right, float mid) {
     const Palette& p = Colours();
-    const ImGuiIO& io = ImGui::GetIO();
-    float size = std::round(30 * scale_), margin = std::round(8 * scale_);
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - margin - size, lickTop()));
-    ImGui::SetNextWindowSize(ImVec2(size, size));
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    ImGui::Begin("##lick", nullptr,
-                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBackground |
-                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove);
-    ImGui::PopStyleVar();
+    float size = ImGui::GetFrameHeight();
+    ImVec2 origin = ImGui::GetWindowPos();
+    ImGui::SetCursorPos(ImVec2(right - origin.x - size, mid - size / 2));
     ImVec2 min = ImGui::GetCursorScreenPos();
-    bool clicked = ImGui::InvisibleButton("guitar", ImVec2(size, size));
+    bool clicked = ImGui::InvisibleButton("##lick", ImVec2(size, size));
     bool hovered = ImGui::IsItemHovered();
     bool shown = lick_.Shown();
     if (clicked) lick_.Toggle(), lickClicked_ = ImGui::GetTime();
-
-    // Translucent, but mixed with the background by hand rather than drawn
-    // see-through, so the overlapping parts don't show darker.
-    ImVec4 back = p.retro ? p.bgBottom : p.bg;
-    ImVec4 ink = dark_ || p.retro ? ImVec4(0.85f, 0.85f, 0.87f, 1) : p.muted;
-    float a = hovered ? 0.9f : shown ? 0.55f : 0.25f;
-    ImU32 body = u32(ImVec4(back.x + (ink.x - back.x) * a, back.y + (ink.y - back.y) * a,
-                            back.z + (ink.z - back.z) * a, 1));
-    ImU32 hole = u32(back);
-
-    // Drawn upright about the middle, then leant over to the right.
+    noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    ImVec2 c(min.x + size / 2, min.y + size / 2);
-    float r = size * 0.47f, ca = std::cos(0.7f), sa = std::sin(0.7f);
-    auto at = [&](float x, float y) {
-        y += 0.12f;  // so the whole guitar is centred
-        return ImVec2(c.x + (x * ca - y * sa) * r, c.y + (x * sa + y * ca) * r);
-    };
-    auto rect = [&](float x0, float y0, float x1, float y1, ImU32 col) {
-        dl->AddQuadFilled(at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1), col);
-    };
-    dl->AddCircleFilled(at(0, 0.38f), 0.36f * r, body, 24);  // lower bout
-    dl->AddCircleFilled(at(0, 0.0f), 0.27f * r, body, 24);   // upper bout
-    rect(-0.07f, -0.15f, 0.07f, -0.8f, body);                 // neck
-    rect(-0.11f, -0.8f, 0.11f, -0.98f, body);                 // headstock
-    dl->AddCircleFilled(at(0, 0.1f), 0.1f * r, hole, 16);     // sound hole
-    rect(-0.12f, 0.46f, 0.12f, 0.52f, hole);                  // bridge
+    // Flat until hovered, like the buttons beside it.
+    if (hovered)
+        dl->AddRectFilled(min, ImVec2(min.x + size, min.y + size),
+                          ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
+                          ImGui::GetStyle().FrameRounding);
+    ImU32 body = u32(shown || hovered ? p.text : p.muted);
 
+    // Drawn upright about the middle, from -1 (the headstock's tip) to 1
+    // (the body's), then leant over to the right.
+    ImVec2 c(min.x + size / 2, min.y + size / 2);
+    float r = size * 0.44f, ca = std::cos(0.75f), sa = std::sin(0.75f);
+    auto at = [&](float x, float y) { return ImVec2(c.x + (x * ca - y * sa) * r, c.y + (x * sa + y * ca) * r); };
+    auto shape = [&](std::initializer_list<ImVec2> pts) {
+        std::vector<ImVec2> out;
+        for (ImVec2 q : pts) out.push_back(at(q.x, q.y));
+        dl->AddConcavePolyFilled(out.data(), int(out.size()), body);
+    };
+    // The body: two long horns forward, the treble one longer, and two
+    // points behind with a notch between.
+    shape({{0.07f, 0.08f}, {0.32f, -0.30f}, {0.24f, 0.12f}, {0.36f, 0.62f}, {0.30f, 0.98f}, {0.04f, 0.72f},
+           {-0.30f, 1.0f}, {-0.32f, 0.56f}, {-0.19f, 0.2f}, {-0.27f, -0.14f}, {-0.07f, 0.08f}});
+    shape({{-0.05f, 0.2f}, {0.05f, 0.2f}, {0.05f, -0.76f}, {-0.05f, -0.76f}});  // neck
+    // A pointed headstock, swept back to one side.
+    shape({{-0.06f, -0.74f}, {0.08f, -0.74f}, {0.13f, -0.84f}, {-0.1f, -1.04f}, {-0.09f, -0.86f}});
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip(shown ? "Hide Lick of the Day" : "Show Lick of the Day");
-    ImGui::End();
+    return min.x;
 }
 
+// cat draws the black cat along the top of the Recent column.
 void App::cat(float width) {
     float size = 1.6f * scale_;
     // Her space is 68 units tall: 64 above the floor (an arched tail),
@@ -2047,10 +2034,6 @@ float App::skyHeight() const {
     if (!ParsePlace(config_.place)) return 0;
     float pad = (compact_ ? 7 : 10) * scale_;
     return landHeight() + std::round(pad * 0.7f) * 2 + fonts_.caption->FontSize;
-}
-
-float App::lickTop() const {
-    return ImGui::GetIO().DisplaySize.y - std::round(8 * scale_) - std::round(30 * scale_);
 }
 
 // sky draws a strip of countryside under the sky as it is now: the sun

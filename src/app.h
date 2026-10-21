@@ -124,12 +124,10 @@ private:
     void sky(float width, int64_t t);
     float skyHeight() const;
     float landHeight() const;
-    // lickTop is the top of Lick of the Day's button, in the corner.
-    float lickTop() const;
     bool eventCard(const Event& e, int64_t t, float left);
     void temporaries();
     void cat(float width);
-    void lickButton();
+    float lickButton(float right, float mid);
     void empty(const char* message, bool settingsButton);
     void settings();
     void diagnostics();

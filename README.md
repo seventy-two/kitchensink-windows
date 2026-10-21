@@ -66,11 +66,11 @@ result is a single `kitchensink.exe` with nothing to install.
   dimmed.
 - **Lick of the Day**, if it's installed (`%LOCALAPPDATA%\Programs\dailylick`),
   starts with the dashboard and has no taskbar button of its own: the
-  guitar in the bottom-right corner hides and shows it (clearer while
-  it's showing).
+  electric guitar in the title bar, by the eye, hides and shows it
+  (muted while it's hidden).
 - There are no scrollbars: the Recent column, the panels under it, the
   panels column and a panel cut short to fit scroll with the mouse wheel.
-- Under Recent, at the bottom, a strip of countryside shows the sky as it is now: the
+- In the bottom-right corner, under Recent, a strip of countryside shows the sky as it is now: the
   sun and moon at their bearing (north at both ends, south in the middle)
   and height, the moon in its phase, today's path of the sun dotted across,
   stars at night, and sunrise, sunset and the phase beneath; hover it for
