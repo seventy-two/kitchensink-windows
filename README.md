@@ -73,8 +73,9 @@ result is a single `kitchensink.exe` with nothing to install.
 - Panels that matter at the moment (the server's `relevant` window: a
   game on, an hour before a calendar event until it ends, half an hour after
   Dink last heard from the OSRS player) and Now playing move under Recent,
-  in full, and the column widens a little for their tables. Recent then
-  shows only its three newest events; "N earlier" by the heading shows the
+  in full. The column is always wide enough for their tables, so it doesn't
+  shift when they come and go. Recent then shows only its three newest
+  events; "N earlier" by the heading shows the
   rest, with those panels back in the main column, until "Show fewer".
 - Hovering a Recent card shows an × that clears it; the × by the heading
   (shown while the mouse is over the column) clears them all. Cleared events stay cleared after a restart (they're
