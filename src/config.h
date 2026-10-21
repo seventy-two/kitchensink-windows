@@ -27,6 +27,9 @@ struct Config {
     OledCare oled;
     // A black cat asleep above the Recent column.
     bool cat = false;
+    // Where the landscape under Recent shows the sun and moon from, as
+    // "latitude, longitude"; empty for no landscape.
+    std::string place;
     // The colour theme: empty to follow Windows' light or dark mode, or
     // "retro", after the Weather Channel's 90s WeatherStar screens.
     std::string theme;

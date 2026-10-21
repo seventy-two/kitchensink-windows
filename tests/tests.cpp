@@ -1,6 +1,7 @@
 // Tests for the dashboard's portable code. Build and run with build.bat, or
 // on Linux with the command in the README.
 #include <cstdio>
+#include <cstdlib>
 #include <set>
 #include <string>
 
@@ -11,6 +12,7 @@
 #include "../src/local.h"
 #include "../src/model.h"
 #include "../src/retro.h"
+#include "../src/sky.h"
 #include "../src/sse.h"
 #include "../src/weather_icon.h"
 
@@ -794,8 +796,55 @@ static void testGrab() {
     CHECK_EQ(ViewGrab({GrabState::Failed, "Not enough space"}).tooltip, std::string("Not enough space. Click to try again."));
 }
 
+static void testSky() {
+    Place london{51.5, -0.12};
+    auto near = [](int64_t a, int64_t b, int64_t within) { return std::llabs(a - b) <= within; };
+    // 21 June 2024: sunrise 03:43 UTC, sunset 20:21 UTC.
+    int64_t midsummer = 1718928000;
+    Crossings sun = SunCrossings(midsummer, midsummer + 86400, london);
+    CHECK(near(sun.rise, midsummer + 3 * 3600 + 43 * 60, 120));
+    CHECK(near(sun.set, midsummer + 20 * 3600 + 21 * 60, 120));
+    // Noon at the equinox: due south, 90 - 51.5 degrees up.
+    Position noon = SunPosition(1710892800 + 12 * 3600 + 10 * 60, london);
+    CHECK(std::abs(noon.altitude - 38.5) < 1);
+    CHECK(std::abs(noon.azimuth - 180) < 3);
+    Position morning = SunPosition(midsummer + 6 * 3600, london);
+    CHECK(morning.azimuth > 60 && morning.azimuth < 100 && morning.altitude > 10);
+    CHECK(SunPosition(midsummer, london).altitude < 0);
+    // Above the Arctic circle at midsummer it doesn't set.
+    Crossings arctic = SunCrossings(midsummer, midsummer + 86400, Place{78, 15});
+    CHECK_EQ(arctic.rise, int64_t(0));
+    CHECK_EQ(arctic.set, int64_t(0));
+
+    // Full moon 23 April 2024 23:49 UTC; new moon 8 April 2024 18:21 UTC.
+    Moon full = MoonPhase(1713830400 + 23 * 3600 + 49 * 60);
+    CHECK(full.lit > 0.99);
+    CHECK(std::abs(full.phase - 0.5) < 0.02);
+    CHECK_EQ(std::string(PhaseName(full.phase)), std::string("Full moon"));
+    Moon fresh = MoonPhase(1712534400 + 18 * 3600 + 21 * 60);
+    CHECK(fresh.lit < 0.01);
+    CHECK_EQ(std::string(PhaseName(fresh.phase)), std::string("New moon"));
+    Moon waxing = MoonPhase(1712534400 + 4 * 86400);
+    CHECK_EQ(std::string(PhaseName(waxing.phase)), std::string("Waxing crescent"));
+    CHECK_EQ(std::string(PhaseName(MoonPhase(1713830400 + 4 * 86400).phase)), std::string("Waning gibbous"));
+    // The moon rises and sets about once a day.
+    Crossings moon = MoonCrossings(midsummer, midsummer + 86400, london);
+    CHECK(moon.rise != 0 || moon.set != 0);
+    if (moon.rise) CHECK(std::abs(MoonPosition(moon.rise, london).altitude + 0.27) < 0.05);
+
+    auto place = ParsePlace(" 51.5, -0.12");
+    CHECK(place && place->lat == 51.5 && place->lon == -0.12);
+    CHECK(ParsePlace("51.5,-0.12").has_value());
+    CHECK(!ParsePlace("").has_value());
+    CHECK(!ParsePlace("51.5").has_value());
+    CHECK(!ParsePlace("91, 0").has_value());
+    CHECK(!ParsePlace("51.5, -0.12 x").has_value());
+    CHECK_EQ(FormatPlace(Place{51.5, -0.12}), std::string("51.5000, -0.1200"));
+}
+
 int main() {
     testGrab();
+    testSky();
     testRetro();
     testCat();
     testTemporaryEvents();

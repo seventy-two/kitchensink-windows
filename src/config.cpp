@@ -83,6 +83,7 @@ Config LoadConfig() {
     }
     c.hidePrivate = j.value("hidePrivate", false);
     c.cat = j.value("cat", false);
+    c.place = j.value("place", "");
     c.theme = j.value("theme", "");
     if (auto it = j.find("cleared"); it != j.end() && it->is_object()) {
         c.cleared.through = it->value("through", int64_t(0));
@@ -112,6 +113,7 @@ bool SaveConfig(const Config& c) {
         {"oled", {{"shift", c.oled.shift}, {"black", c.oled.black}, {"dim", c.oled.dim}, {"swap", c.oled.swap}}},
         {"hidePrivate", c.hidePrivate},
         {"cat", c.cat},
+        {"place", c.place},
         {"theme", c.theme},
         {"cleared", {{"through", c.cleared.through}, {"ids", c.cleared.ids}}},
         {"expanded", c.expanded},

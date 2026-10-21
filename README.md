@@ -70,12 +70,12 @@ result is a single `kitchensink.exe` with nothing to install.
   it's showing).
 - There are no scrollbars: the Recent column, the panels under it, the
   panels column and a panel cut short to fit scroll with the mouse wheel.
-- Panels that matter at the moment (the server's `relevant` window: a
-  game on, an hour before a calendar event until it ends, half an hour after
-  Dink last heard from the OSRS player) and Now playing move under Recent,
-  in full, and the column widens a little for their tables. Recent then
-  shows only its three newest events; "N earlier" by the heading shows the
-  rest, with those panels back in the main column, until "Show fewer".
+- Under Recent, at the bottom, a strip of countryside shows the sky as it is now: the
+  sun and moon at their bearing (north at both ends, south in the middle)
+  and height, the moon in its phase, today's path of the sun dotted across,
+  stars at night, and sunrise, sunset and the phase beneath; hover it for
+  the details. It needs where you are, set in Settings as "latitude,
+  longitude"; without it there's no landscape.
 - Hovering a Recent card shows an × that clears it; the × by the heading
   (shown while the mouse is over the column) clears them all. Cleared events stay cleared after a restart (they're
   remembered in `config.json` as `cleared`), and only for this install.
@@ -109,7 +109,7 @@ test on Linux:
 
 ```sh
 g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/model.cpp src/sse.cpp src/local.cpp src/grab.cpp \
-    src/cat.cpp src/weather_icon.cpp src/retro.cpp third_party/imgui/imgui*.cpp && ./a.out
+    src/cat.cpp src/weather_icon.cpp src/retro.cpp src/sky.cpp third_party/imgui/imgui*.cpp && ./a.out
 ```
 
 ## Layout
@@ -133,6 +133,7 @@ g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/mo
 | `src/retro.cpp` | the retro theme's text shadows and clock |
 | `src/cat.cpp` | the cat above Recent: her poses, routine and drawing |
 | `src/weather_icon.cpp` | weather icons for the forecast's chips, drawn from shapes |
+| `src/sky.cpp` | where the sun and moon are, sunrise and sunset and the moon's phase, for the landscape under Recent |
 | `src/canvas.h` | the simple drawing interface those two draw through |
 
 `third_party` holds Dear ImGui v1.91.9b and nlohmann/json v3.11.3, both MIT

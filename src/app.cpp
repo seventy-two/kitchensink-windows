@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
+#include <tuple>
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -15,6 +16,7 @@
 #include "weather_icon.h"
 #include "local.h"
 #include "retro.h"
+#include "sky.h"
 
 namespace ks {
 
@@ -31,6 +33,22 @@ ImVec4 fade(ImVec4 c, float a) {
 }
 
 int64_t now() { return int64_t(std::time(nullptr)); }
+
+// mix is k of the way from colour a to b, alpha and all.
+ImVec4 mix(const ImVec4& a, const ImVec4& b, float k) {
+    return ImVec4(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, a.z + (b.z - a.z) * k, a.w + (b.w - a.w) * k);
+}
+
+// clockTime is a Unix time as local hours and minutes, or a dash for 0.
+std::string clockTime(int64_t t) {
+    if (t == 0) return "\xE2\x80\x93";
+    std::time_t tt = std::time_t(t);
+    std::tm l{};
+    localtime_s(&l, &tt);
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "%02d:%02d", l.tm_hour, l.tm_min);
+    return buf;
+}
 
 const Priority kPriorities[] = {Priority::Low, Priority::Normal, Priority::High};
 const char* kPriorityNames[] = {"Everything", "Normal and high priority", "High priority only"};
@@ -346,24 +364,7 @@ void App::Frame() {
     } else if (model_.Snapshots().empty() && localPanels_.empty()) {
         empty(state == ConnState::Offline ? "Can't reach the server." : "Connecting…", state == ConnState::Offline);
     } else {
-        // Panels relevant at the moment (a game on, a meeting soon, Now
-        // playing) move under Recent, which then shows only its newest few:
-        // older ones have most likely been seen.
-        std::vector<Snapshot> main, side;
-        for (Snapshot& s : panels()) {
-            bool relevant = Relevant(s, t) || s.monitor == mediaPanel_.monitor;
-            (feedW > 0 && relevant ? side : main).push_back(std::move(s));
-        }
-        constexpr size_t kFew = 3;
-        size_t events = model_.Events().size();
-        int more = side.empty() || events <= kFew ? 0 : allRecent_ ? -1 : int(events - kFew);
-        if (side.empty()) allRecent_ = false;  // so the few come back with the next one
-        if (allRecent_) main.insert(main.end(), side.begin(), side.end()), side.clear();
-        // Wider while it holds panels, so their tables fit.
-        if (!side.empty()) {
-            feedW += (compact_ ? 100 : 80) * scale_;
-            cardsW = avail - feedW - gap;
-        }
+        std::vector<Snapshot> main = panels();
 
         // OLED care swaps the side column's side every other hour.
         bool feedFirst = feedW > 0 && config_.oled.swap && OledSwapSides(t);
@@ -374,22 +375,24 @@ void App::Frame() {
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
             temporaries();
             ImGui::EndChild();
-            feedHeading(feedW, more);
-            if (side.empty()) {
-                // Scrolled with the wheel; no scrollbar, which would take
-                // width and get in the way.
-                ImGui::BeginChild("##feed", ImVec2(feedW, 0), ImGuiChildFlags_None,
-                                  ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
-                feed(SIZE_MAX);
-                ImGui::EndChild();
-            } else {
-                ImGui::BeginChild("##few", ImVec2(feedW, 0), ImGuiChildFlags_AutoResizeY,
-                                  ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
-                feed(kFew);
-                ImGui::EndChild();
-                // As far below the cards as the panels are apart.
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2 * scale_);
-                sidePanels(side, feedW);
+            feedHeading(feedW);
+            // The landscape sits at the bottom, clear of Lick of the Day's
+            // button in the corner.
+            float skyH = skyHeight(), below = 0;
+            if (skyH > 0 && !feedFirst && lick_.Installed()) {
+                float bottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y - ImGui::GetStyle().WindowPadding.y;
+                below = std::max(0.0f, bottom - (lickTop() - 6 * scale_));
+            }
+            float gap = skyH > 0 ? 10 * scale_ : 0;
+            // Scrolled with the wheel; no scrollbar, which would take width
+            // and get in the way.
+            ImGui::BeginChild("##feed", ImVec2(feedW, skyH > 0 ? -(skyH + gap + below) : 0), ImGuiChildFlags_None,
+                              ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
+            feed();
+            ImGui::EndChild();
+            if (skyH > 0) {
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - ImGui::GetStyle().ItemSpacing.y);
+                sky(feedW, t);
             }
             ImGui::EndGroup();
             feedRect_ = ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
@@ -1977,7 +1980,7 @@ void App::lickButton() {
     const Palette& p = Colours();
     const ImGuiIO& io = ImGui::GetIO();
     float size = std::round(30 * scale_), margin = std::round(8 * scale_);
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - margin - size, io.DisplaySize.y - margin - size));
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - margin - size, lickTop()));
     ImGui::SetNextWindowSize(ImVec2(size, size));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("##lick", nullptr,
@@ -2037,10 +2040,172 @@ void App::cat(float width) {
     catInterval_ = c.asleep >= 1 ? 100 : 33;
 }
 
+float App::landHeight() const { return std::round((compact_ ? 140 : 160) * scale_); }
+
+// skyHeight is how tall sky draws, 0 when it draws nothing.
+float App::skyHeight() const {
+    if (!ParsePlace(config_.place)) return 0;
+    float pad = (compact_ ? 7 : 10) * scale_;
+    return landHeight() + std::round(pad * 0.7f) * 2 + fonts_.caption->FontSize;
+}
+
+float App::lickTop() const {
+    return ImGui::GetIO().DisplaySize.y - std::round(8 * scale_) - std::round(30 * scale_);
+}
+
+// sky draws a strip of countryside under the sky as it is now: the sun
+// and moon at their bearing (north at both ends, south in the middle) and
+// height, the sun's path for today dotted across, stars at night, and
+// sunrise, sunset and the moon's phase beneath.
+void App::sky(float width, int64_t t) {
+    auto place = ParsePlace(config_.place);
+    if (!place) return;
+    if (skyDay_.minute != t / 60 || skyDay_.place != config_.place) {
+        skyDay_.minute = t / 60;
+        skyDay_.place = config_.place;
+        std::time_t tt = std::time_t(t);
+        std::tm l{};
+        localtime_s(&l, &tt);
+        l.tm_hour = l.tm_min = l.tm_sec = 0;
+        l.tm_isdst = -1;
+        int64_t midnight = int64_t(std::mktime(&l));
+        l.tm_mday++;
+        l.tm_isdst = -1;
+        int64_t tomorrow = int64_t(std::mktime(&l));
+        skyDay_.sun = SunCrossings(midnight, tomorrow, *place);
+        skyDay_.moon = MoonCrossings(t, t + 36 * 3600, *place);  // the next of each
+        skyDay_.path.clear();
+        for (int64_t s = midnight; s <= tomorrow; s += 600) skyDay_.path.push_back(SunPosition(s, *place));
+    }
+    Position sun = SunPosition(t, *place), moonAt = MoonPosition(t, *place);
+    Moon moon = MoonPhase(t);
+
+    const Palette& p = Colours();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float s = scale_;
+    float pad = (compact_ ? 7 : 10) * s;
+    ImVec2 start = ImGui::GetCursorScreenPos();
+    float landH = landHeight();
+    ImVec2 landEnd(start.x + width, start.y + landH);
+    float horizon = start.y + std::round(landH * 0.74f);
+    auto px = [&](double az) { return start.x + width * float(az / 360); };
+    auto py = [&](double alt) { return horizon - (horizon - start.y - 9 * s) * float(alt / 70); };
+
+    // How much it's day, 0 at night to 1, and how near the sun is to the
+    // horizon, for a warm glow at either end of the day.
+    float day = std::clamp(float((sun.altitude + 6) / 14), 0.0f, 1.0f);
+    float dusk = std::clamp(1 - float(std::abs(sun.altitude - 1) / 9), 0.0f, 1.0f);
+    // Natural colours, toned towards the theme's card, less so on OLED.
+    float strength = config_.oled.black ? 0.4f : 0.7f;
+    auto tone = [&](ImVec4 c) { return mix(p.card, c, strength); };
+    ImVec4 top = mix(ImVec4(0.03f, 0.05f, 0.13f, 1), ImVec4(0.36f, 0.6f, 0.9f, 1), day);
+    ImVec4 bottom = mix(ImVec4(0.1f, 0.13f, 0.26f, 1), ImVec4(0.72f, 0.85f, 0.96f, 1), day);
+    bottom = mix(bottom, ImVec4(0.98f, 0.58f, 0.32f, 1), dusk * 0.7f);
+    top = mix(top, ImVec4(0.55f, 0.45f, 0.62f, 1), dusk * 0.35f);
+
+    dl->PushClipRect(start, landEnd, true);
+    dl->AddRectFilledMultiColor(start, ImVec2(landEnd.x, horizon + 6 * s), u32(tone(top)), u32(tone(top)),
+                                u32(tone(bottom)), u32(tone(bottom)));
+    // Stars, in the same places every night.
+    if (day < 1) {
+        unsigned h = 2166136261u;
+        for (int i = 0; i < 28; i++) {
+            h = (h ^ unsigned(i)) * 16777619u;
+            float x = float(h % 1000) / 1000, y = float((h / 1000) % 1000) / 1000;
+            float a = (1 - day) * (0.35f + 0.5f * float((h >> 20) % 100) / 100);
+            dl->AddCircleFilled(ImVec2(start.x + x * width, start.y + y * (horizon - start.y)), 0.9f * s,
+                                u32(ImVec4(1, 1, 1, a * strength)));
+        }
+    }
+    // Today's path, dotted while it's up.
+    ImVec4 sunColour = mix(p.warn, ImVec4(1, 0.85f, 0.4f, 1), 0.4f);
+    for (const Position& q : skyDay_.path)
+        if (q.altitude > 0) dl->AddCircleFilled(ImVec2(px(q.azimuth), py(q.altitude)), 1.1f * s, u32(fade(sunColour, 0.45f)));
+    if (sun.altitude > -2) {
+        ImVec2 c(px(sun.azimuth), py(sun.altitude));
+        dl->AddCircleFilled(c, 14 * s, u32(fade(sunColour, 0.18f)));
+        dl->AddCircleFilled(c, 8 * s, u32(sunColour));
+    }
+    if (moonAt.altitude > -2) {
+        // The lit part: the limb down one side, then the terminator, an
+        // ellipse, back up. Lit on the right while waxing, seen from the
+        // north; the other way round from the south.
+        ImVec2 c(px(moonAt.azimuth), py(moonAt.altitude));
+        float r = 7 * s;
+        float shown = 0.55f + 0.45f * (1 - day);  // fainter by day
+        dl->AddCircleFilled(c, r, u32(fade(mix(tone(top), ImVec4(1, 1, 1, 1), 0.15f), shown)));
+        float side = (moon.phase < 0.5) != (place->lat < 0) ? 1.0f : -1.0f;
+        float k = float(std::cos(2 * 3.14159265 * moon.phase));  // the terminator, as a fraction of the limb
+        constexpr int n = 24;
+        std::vector<ImVec2> lit;
+        for (int i = 0; i <= n; i++) {
+            float a = 3.14159265f * float(i) / n;
+            lit.push_back(ImVec2(c.x + side * r * std::sin(a), c.y - r * std::cos(a)));
+        }
+        for (int i = n - 1; i > 0; i--) {
+            float a = 3.14159265f * float(i) / n;
+            lit.push_back(ImVec2(c.x + side * k * r * std::sin(a), c.y - r * std::cos(a)));
+        }
+        if (side < 0) std::reverse(lit.begin(), lit.end());  // ImGui fills it only wound one way
+        if (moon.lit > 0.01) dl->AddConcavePolyFilled(lit.data(), int(lit.size()), u32(ImVec4(0.96f, 0.95f, 0.88f, shown)));
+    }
+    // Two lines of hills, darker at night, and a couple of trees.
+    float night = 0.55f * (1 - day);
+    ImVec4 back = mix(tone(ImVec4(0.38f, 0.55f, 0.38f, 1)), ImVec4(0, 0, 0, 1), night);
+    ImVec4 front = mix(tone(ImVec4(0.22f, 0.4f, 0.25f, 1)), ImVec4(0, 0, 0, 1), night);
+    auto hill = [&](float u, bool closer) {
+        return closer ? horizon + s * (7 + 3 * std::sin(u * 7 + 4) + 1.5f * std::sin(u * 19))
+                      : horizon - s * (2 + 3 * std::sin(u * 9 + 1) + 2 * std::sin(u * 23 + 2));
+    };
+    for (bool closer : {false, true}) {
+        float step = 3 * s;
+        for (float x = 0; x < width; x += step) {
+            float x1 = std::min(x + step, width);
+            ImVec2 q[4] = {ImVec2(start.x + x, hill(x / width, closer)), ImVec2(start.x + x1, hill(x1 / width, closer)),
+                           ImVec2(start.x + x1, landEnd.y), ImVec2(start.x + x, landEnd.y)};
+            dl->AddConvexPolyFilled(q, 4, u32(closer ? front : back));
+        }
+    }
+    for (float u : {0.17f, 0.21f, 0.83f}) {
+        float x = start.x + u * width, ground = hill(u, true) + 1 * s;
+        float h = (u == 0.21f ? 9 : 12) * s;
+        dl->AddRectFilled(ImVec2(x - 0.8f * s, ground - h * 0.35f), ImVec2(x + 0.8f * s, ground), u32(front));
+        dl->AddTriangleFilled(ImVec2(x, ground - h), ImVec2(x - h * 0.3f, ground - h * 0.3f),
+                              ImVec2(x + h * 0.3f, ground - h * 0.3f), u32(mix(front, ImVec4(0, 0, 0, 1), 0.25f)));
+    }
+    dl->PopClipRect();
+
+    // Beneath it, on the card: sunrise and sunset, and the moon's phase.
+    ImGui::PushFont(fonts_.caption);
+    float lineH = ImGui::GetTextLineHeight();
+    ImVec2 end(landEnd.x, landEnd.y + std::round(pad * 0.7f) * 2 + lineH);
+    dl->AddRectFilled(ImVec2(start.x, landEnd.y), end, u32(p.card));
+    float ty = landEnd.y + std::round(pad * 0.7f);
+    std::string times = std::string(icon::Up) + " " + clockTime(skyDay_.sun.rise) + "    " + icon::Down + " " +
+                        clockTime(skyDay_.sun.set);
+    dl->AddText(ImVec2(start.x + pad, ty), u32(p.text), times.c_str());
+    const char* phase = PhaseName(moon.phase);
+    float pw = ImGui::CalcTextSize(phase).x;
+    dl->AddText(ImVec2(end.x - pad - pw, ty), u32(p.muted), phase);
+    ImGui::PopFont();
+    bevel(start, end);
+
+    ImGui::Dummy(ImVec2(width, end.y - start.y));
+    if (ImGui::IsItemHovered()) {
+        int len = skyDay_.sun.rise && skyDay_.sun.set ? int(skyDay_.sun.set - skyDay_.sun.rise) / 60 : 0;
+        std::string sunLine = sun.altitude > 0 ? "Sun " + std::to_string(int(std::lround(sun.altitude))) + "\xC2\xB0 up"
+                                               : std::string("Sun down");
+        if (len > 0) sunLine += ", " + std::to_string(len / 60) + "h " + std::to_string(len % 60) + "m of daylight today";
+        ImGui::SetTooltip("%s\n%s, %d%% lit\nMoon %s, rises %s, sets %s", sunLine.c_str(), phase,
+                          int(std::lround(moon.lit * 100)), moonAt.altitude > 0 ? "up" : "down",
+                          clockTime(skyDay_.moon.rise).c_str(), clockTime(skyDay_.moon.set).c_str());
+    }
+}
+
 // feedHeading is the Recent column's heading, above its scrolling cards,
 // with an x at the right to clear them all while the mouse is over the
 // column.
-void App::feedHeading(float width, int more) {
+void App::feedHeading(float width) {
     const Palette& p = Colours();
     const ImGuiIO& io = ImGui::GetIO();
     ImVec2 at = ImGui::GetCursorScreenPos();
@@ -2048,24 +2213,6 @@ void App::feedHeading(float width, int more) {
     ImGui::TextColored(p.heading, "Recent");
     ImGui::PopFont();
     float h = ImGui::GetItemRectSize().y;
-    if (more != 0) {
-        // On the heading's baseline, a link to show or hide the rest.
-        ImGui::SameLine(0, 10 * scale_);
-        ImGui::PushFont(fonts_.caption);
-        ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, at.y + h - ImGui::GetTextLineHeight() - 1 * scale_));
-        std::string label = more > 0 ? std::to_string(more) + " earlier" : "Show fewer";
-        mutedText(label);
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-            ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
-            ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, max.y), max, u32(p.muted));
-            ImGui::SetTooltip("%s", more > 0 ? "Show every event here, with the panels back in the main column"
-                                             : "Show the newest few, with what's relevant now under them");
-        }
-        if (ImGui::IsItemClicked()) allRecent_ = more > 0;
-        ImGui::PopFont();
-        ImGui::SetCursorScreenPos(ImVec2(at.x, at.y + h + ImGui::GetStyle().ItemSpacing.y));
-    }
     ImGui::Dummy(ImVec2(0, 2 * scale_));
     if (model_.Events().empty() || !feedRect_.Contains(io.MousePos)) return;
 
@@ -2192,7 +2339,7 @@ void App::temporaries() {
     }
 }
 
-void App::feed(size_t limit) {
+void App::feed() {
     const Palette& p = Colours();
     const ImGuiIO& io = ImGui::GetIO();
     const auto& events = model_.Events();
@@ -2204,7 +2351,7 @@ void App::feed(size_t limit) {
     size_t shown = 0;
     int64_t clear = 0;
     for (const auto& e : events) {
-        if (++shown > std::min<size_t>(limit, 150)) break;
+        if (++shown > 150) break;
         if (eventCard(e, t, -1)) clear = e.id;
     }
     if (clear != 0) {
@@ -2212,21 +2359,6 @@ void App::feed(size_t limit) {
         config_.cleared = model_.GetCleared();
         SaveConfig(config_);
     }
-}
-
-// sidePanels draws the relevant panels in full, scrolling with the wheel
-// when they're taller than the space left.
-void App::sidePanels(const std::vector<Snapshot>& side, float width) {
-    ImGui::BeginChild("##side", ImVec2(width, 0), ImGuiChildFlags_None,
-                      ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
-    float gap = (compact_ ? 8 : 16) * scale_;
-    for (Snapshot s : side) {
-        // Out of place, it says what it is where a subtitle would go.
-        if (s.subtitle.empty()) s.subtitle = s.title;
-        card(s, width);
-        ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y * 2));
-    }
-    ImGui::EndChild();
 }
 
 void App::openSettings() {
@@ -2237,6 +2369,7 @@ void App::openSettings() {
     startChoice_ = StartsWithWindows();
     oledChoice_ = config_.oled;
     catChoice_ = config_.cat;
+    snprintf(placeBuf_, sizeof(placeBuf_), "%s", config_.place.c_str());
     themeChoice_ = config_.theme == "retro" ? 1 : 0;
     settingsOpen_ = true;
 }
@@ -2321,6 +2454,16 @@ void App::settings() {
     ImGui::AlignTextToFramePadding();
     mutedText("a black cat asleep above the Recent column");
     ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, 4 * scale_));
+    mutedText("Where you are, for the sun and moon under Recent");
+    ImGui::SetNextItemWidth(w);
+    ImGui::InputTextWithHint("##place", "latitude, longitude, e.g. 51.5, -0.12", placeBuf_, sizeof(placeBuf_));
+    bool placeOK = placeBuf_[0] == '\0' || ParsePlace(placeBuf_);
+    if (!placeOK) {
+        ImGui::PushFont(fonts_.caption);
+        ImGui::TextColored(ToneColour(Tone::Bad), "Two numbers, latitude then longitude, with a comma between");
+        ImGui::PopFont();
+    }
     ImGui::Dummy(ImVec2(0, 8 * scale_));
     diagnostics();
 
@@ -2345,6 +2488,7 @@ void App::settings() {
         c.notify = notifyChoice_;
         c.oled = oledChoice_;
         c.cat = catChoice_;
+        if (placeOK) c.place = placeBuf_;
         c.theme = themeChoice_ == 1 ? "retro" : "";
         c.minPriority = kPriorities[std::clamp(priorityChoice_, 0, 2)];
         bool reconnect = c.url != config_.url || c.token != config_.token;
