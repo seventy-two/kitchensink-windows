@@ -30,9 +30,14 @@ result is a single `kitchensink.exe` with nothing to install.
   reorder; the order also decides which open first in the compact layout.
 - **Now playing**: what's playing on this PC, from Windows' media
   sessions (the same source as the volume keys' media pop-up), so Spotify,
-  browsers and other players all show. Cover, track, progress and
-  previous / play-pause / next. A playing app wins over a paused one, and
-  a paused track hides ten minutes after it last played.
+  browsers and other players all show. A slim bar at the bottom of the
+  Recent column, just above the landscape, always there (it says "Nothing
+  playing" when nothing is) so nothing moves when a track starts or stops:
+  a small cover, track and artist, previous / play-pause / next and a thin
+  progress line; hover it for the rest. When the window is too narrow for
+  the Recent column it's a panel among the others instead. A playing app
+  wins over a paused one, and a paused track hides ten minutes after it
+  last played.
 - **Buttons for apps on this PC**: a table cell can name a local app
   (`local`), drawn as a button only where that app is installed. The one
   known is watchgrab (`%LOCALAPPDATA%\Programs\watchgrab\watchgrab.exe`),

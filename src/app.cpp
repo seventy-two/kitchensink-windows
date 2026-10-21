@@ -364,6 +364,7 @@ void App::Frame() {
     } else if (model_.Snapshots().empty() && localPanels_.empty()) {
         empty(state == ConnState::Offline ? "Can't reach the server." : "Connecting…", state == ConnState::Offline);
     } else {
+        mediaBarShown_ = feedW > 0;
         std::vector<Snapshot> main = panels();
 
         // OLED care swaps the side column's side every other hour.
@@ -376,17 +377,22 @@ void App::Frame() {
             temporaries();
             ImGui::EndChild();
             feedHeading(feedW);
-            // The landscape sits at the bottom.
-            float skyH = skyHeight();
-            float gap = skyH > 0 ? 10 * scale_ : 0;
+            // Now playing and the landscape sit at the bottom, always the
+            // same height so Recent doesn't move.
+            float skyH = skyHeight(), barH = mediaBarHeight();
+            float gap = 10 * scale_, tight = 4 * scale_;
+            float below = barH + gap + (skyH > 0 ? skyH + tight : 0);
             // Scrolled with the wheel; no scrollbar, which would take width
             // and get in the way.
-            ImGui::BeginChild("##feed", ImVec2(feedW, skyH > 0 ? -(skyH + gap) : 0), ImGuiChildFlags_None,
+            ImGui::BeginChild("##feed", ImVec2(feedW, -below), ImGuiChildFlags_None,
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
             feed();
             ImGui::EndChild();
+            float spacing = ImGui::GetStyle().ItemSpacing.y;
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
+            mediaBar(feedW);
             if (skyH > 0) {
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - ImGui::GetStyle().ItemSpacing.y);
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
                 sky(feedW, t);
             }
             ImGui::EndGroup();
@@ -429,7 +435,7 @@ void App::Frame() {
 std::vector<Snapshot> App::panels() const {
     std::vector<Snapshot> out;
     if (!localPanels_.empty()) out.push_back(localPanels_.front());
-    if (!mediaPanel_.blocks.empty()) out.push_back(mediaPanel_);
+    if (!mediaBarShown_ && !mediaPanel_.blocks.empty()) out.push_back(mediaPanel_);
     for (const Snapshot& s : model_.Snapshots()) {
         if (s.background) continue;  // in the settings' diagnostics instead
         out.push_back(config_.hidePrivate ? WithoutPrivate(s) : s);
@@ -2044,6 +2050,105 @@ float App::skyHeight() const {
     if (!ParsePlace(config_.place)) return 0;
     float pad = (compact_ ? 7 : 10) * scale_;
     return landHeight() + std::round(pad * 0.7f) * 2 + fonts_.caption->FontSize;
+}
+
+float App::mediaBarHeight() const {
+    return std::round(fonts_.caption->FontSize + (compact_ ? 8 : 10) * scale_);
+}
+
+// mediaBar draws what's playing in one line: a small cover, the track and
+// artist, previous, play/pause and next, and its progress as a thin line
+// along the bottom. With nothing playing it says so and stays put.
+void App::mediaBar(float width) {
+    const Palette& p = Colours();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float s = scale_, h = mediaBarHeight();
+    float pad = (compact_ ? 6 : 8) * s;
+    ImVec2 start = ImGui::GetCursorScreenPos(), end(start.x + width, start.y + h);
+    const Block* b = mediaPanel_.blocks.empty() ? nullptr : &mediaPanel_.blocks[0];
+    const Item* it = b && !b->items.empty() ? &b->items[0] : nullptr;
+    Media m = b ? b->media : Media{};
+
+    ImGui::PushID("##media");
+    dl->AddRectFilled(start, end, u32(p.card));
+    ImGui::PushFont(fonts_.caption);
+    float lineH = ImGui::GetTextLineHeight(), ty = std::round(start.y + (h - lineH) / 2);
+
+    // Controls at the right, flat and dim until hovered.
+    float btn = h, right = end.x - 2 * s;
+    bool overControl = false;
+    auto control = [&](const char* glyph, bool enabled, MediaCommand c, const char* tip) {
+        right -= btn;
+        ImVec2 a(right, start.y), z(right + btn, end.y);
+        ImGui::SetCursorScreenPos(a);
+        ImGui::PushID(glyph);
+        bool clicked = ImGui::InvisibleButton("##c", ImVec2(btn, h)) && enabled;
+        bool hovered = ImGui::IsItemHovered() && enabled;
+        ImGui::PopID();
+        if (hovered) {
+            overControl = true;
+            dl->AddRectFilled(a, z, u32(p.hover));
+            ImGui::SetTooltip("%s", tip);
+        }
+        if (clicked) media_->Command(c);
+        ImVec2 gs = ImGui::CalcTextSize(glyph);
+        ImVec4 col = !enabled ? mix(p.muted, p.card, 0.5f) : hovered ? p.text : p.muted;
+        dl->AddText(ImVec2(std::round(right + (btn - gs.x) / 2), ty), u32(col), glyph);
+    };
+    control(icon::Next, m.canNext, MediaCommand::Next, "Next");
+    control(m.playing ? icon::Pause : icon::Play, m.canToggle, MediaCommand::TogglePlay, m.playing ? "Pause" : "Play");
+    control(icon::Previous, m.canPrevious, MediaCommand::Previous, "Previous");
+
+    // The cover, square, the bar's full height.
+    float x = start.x;
+    if (it) {
+        if (const Texture* tex = images_->Get(it->image)) {
+            float ta = float(tex->width) / float(tex->height);
+            ImVec2 uv0(0, 0), uv1(1, 1);
+            if (ta > 1) uv0.x = (1 - 1 / ta) / 2, uv1.x = 1 - uv0.x;
+            else uv0.y = (1 - ta) / 2, uv1.y = 1 - uv0.y;
+            dl->AddImage((ImTextureID)(intptr_t)tex->srv, start, ImVec2(start.x + h, end.y), uv0, uv1);
+            x += h;
+        }
+    }
+    x += pad;
+    float textW = right - 4 * s - x;
+    if (it) {
+        std::string title = fit(it->title, textW);
+        dl->AddText(ImVec2(x, ty), u32(m.playing ? p.text : p.muted), title.c_str());
+        float tw = ImGui::CalcTextSize(title.c_str()).x;
+        if (!it->subtitle.empty() && textW - tw > 30 * s) {
+            std::string artist = fit("  " + it->subtitle, textW - tw);
+            dl->AddText(ImVec2(x + tw, ty), u32(p.muted), artist.c_str());
+        }
+    } else {
+        dl->AddText(ImVec2(x, ty), u32(mix(p.muted, p.card, 0.3f)), "Nothing playing");
+    }
+
+    // Progress, moved on by the time since Windows last said where it was.
+    double pos = 0;
+    if (m.duration > 0) {
+        double now = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
+        pos = std::clamp(m.position + (m.playing ? now - m.asOf : 0), 0.0, m.duration);
+        float lh = std::max(1.0f, std::round(2 * s));
+        dl->AddRectFilled(ImVec2(start.x, end.y - lh), ImVec2(start.x + width * float(pos / m.duration), end.y),
+                          u32(m.playing ? p.accent : p.muted));
+    }
+    ImGui::PopFont();
+    bevel(start, end);
+
+    // Over the rest of the bar, the whole story.
+    ImGui::SetCursorScreenPos(start);
+    ImGui::Dummy(ImVec2(width, h));
+    if (it && !overControl && ImGui::IsItemHovered()) {
+        std::string tip = it->title;
+        if (!it->subtitle.empty()) tip += "\n" + it->subtitle;
+        if (!it->detail.empty()) tip += "\n" + it->detail;
+        if (m.duration > 0) tip += "\n" + FormatTime(pos) + " / " + FormatTime(m.duration);
+        if (!m.playing) tip += "\nPaused";
+        ImGui::SetTooltip("%s", tip.c_str());
+    }
+    ImGui::PopID();
 }
 
 // sky draws a strip of countryside under the sky as it is now: the sun

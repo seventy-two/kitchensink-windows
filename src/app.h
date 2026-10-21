@@ -86,7 +86,8 @@ private:
     void header();
     float windowButtons();
     // panels lists everything to draw, in the order the user dragged them
-    // into; by default This PC, Now playing (while something is), then the
+    // into; by default This PC, Now playing (while something is and Recent's
+    // column, which has it as a bar, isn't shown), then the
     // server's monitors in config order.
     std::vector<Snapshot> panels() const;
     // cards draws the main column's panels; compactCards the same in the
@@ -123,6 +124,10 @@ private:
     // they are now, for config_.place; nothing without one.
     void sky(float width, int64_t t);
     float skyHeight() const;
+    // mediaBar is Now playing as one slim line above the landscape, there
+    // whether or not anything's playing so nothing shifts.
+    void mediaBar(float width);
+    float mediaBarHeight() const;
     float landHeight() const;
     bool eventCard(const Event& e, int64_t t, float left);
     void temporaries();
@@ -162,6 +167,7 @@ private:
     bool localHovered_ = false;         // a local or action button is under the mouse, so a row's click isn't for the row
     std::set<std::string> sentActions_;  // cells' actions sent, by monitor, type and ID, drawn as done
     Snapshot mediaPanel_;  // no blocks while nothing's playing
+    bool mediaBarShown_ = false;  // Recent's column is up, so Now playing is a bar in it, not a panel
     std::function<void(const std::string&, const std::string&)> notify_;
     std::string lastNotifyURL_;
     // Notifications are held briefly so a burst becomes one notification.
