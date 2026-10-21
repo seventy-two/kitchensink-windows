@@ -1987,25 +1987,35 @@ float App::lickButton(float right, float mid) {
         dl->AddRectFilled(min, ImVec2(min.x + size, min.y + size),
                           ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
                           ImGui::GetStyle().FrameRounding);
-    ImU32 body = u32(shown || hovered ? p.text : p.muted);
+    // Solid, so it looks brighter than the line icons beside it: muted
+    // while showing, fainter still while hidden, the text colour hovered.
+    ImU32 body = u32(hovered ? p.text : shown ? p.muted : mix(p.muted, p.bg, 0.45f));
 
-    // Drawn upright about the middle, from -1 (the headstock's tip) to 1
-    // (the body's), then leant over to the right.
-    ImVec2 c(min.x + size / 2, min.y + size / 2);
+    // Drawn upright, from -1 (the headstock's tip) to 1 (the body's), leant
+    // over to the right, then centred in the button by its bounds: the body
+    // is heavier than the headstock.
     float r = size * 0.44f, ca = std::cos(0.75f), sa = std::sin(0.75f);
-    auto at = [&](float x, float y) { return ImVec2(c.x + (x * ca - y * sa) * r, c.y + (x * sa + y * ca) * r); };
-    auto shape = [&](std::initializer_list<ImVec2> pts) {
-        std::vector<ImVec2> out;
-        for (ImVec2 q : pts) out.push_back(at(q.x, q.y));
-        dl->AddConcavePolyFilled(out.data(), int(out.size()), body);
+    std::vector<std::vector<ImVec2>> shapes = {
+        // The body: two long horns forward, the treble one longer, and two
+        // points behind with a notch between.
+        {{0.07f, 0.08f}, {0.32f, -0.30f}, {0.24f, 0.12f}, {0.36f, 0.62f}, {0.30f, 0.98f}, {0.04f, 0.72f},
+         {-0.30f, 1.0f}, {-0.32f, 0.56f}, {-0.19f, 0.2f}, {-0.27f, -0.14f}, {-0.07f, 0.08f}},
+        {{-0.05f, 0.2f}, {0.05f, 0.2f}, {0.05f, -0.76f}, {-0.05f, -0.76f}},  // neck
+        // A pointed headstock, swept back to one side.
+        {{-0.06f, -0.74f}, {0.08f, -0.74f}, {0.13f, -0.84f}, {-0.1f, -1.04f}, {-0.09f, -0.86f}},
     };
-    // The body: two long horns forward, the treble one longer, and two
-    // points behind with a notch between.
-    shape({{0.07f, 0.08f}, {0.32f, -0.30f}, {0.24f, 0.12f}, {0.36f, 0.62f}, {0.30f, 0.98f}, {0.04f, 0.72f},
-           {-0.30f, 1.0f}, {-0.32f, 0.56f}, {-0.19f, 0.2f}, {-0.27f, -0.14f}, {-0.07f, 0.08f}});
-    shape({{-0.05f, 0.2f}, {0.05f, 0.2f}, {0.05f, -0.76f}, {-0.05f, -0.76f}});  // neck
-    // A pointed headstock, swept back to one side.
-    shape({{-0.06f, -0.74f}, {0.08f, -0.74f}, {0.13f, -0.84f}, {-0.1f, -1.04f}, {-0.09f, -0.86f}});
+    ImVec2 lo(FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX);
+    for (auto& shape : shapes)
+        for (ImVec2& q : shape) {
+            q = ImVec2((q.x * ca - q.y * sa) * r, (q.x * sa + q.y * ca) * r);
+            lo = ImVec2(std::min(lo.x, q.x), std::min(lo.y, q.y));
+            hi = ImVec2(std::max(hi.x, q.x), std::max(hi.y, q.y));
+        }
+    ImVec2 c(min.x + size / 2 - (lo.x + hi.x) / 2, min.y + size / 2 - (lo.y + hi.y) / 2);
+    for (auto& shape : shapes) {
+        for (ImVec2& q : shape) q = ImVec2(c.x + q.x, c.y + q.y);
+        dl->AddConcavePolyFilled(shape.data(), int(shape.size()), body);
+    }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip(shown ? "Hide Lick of the Day" : "Show Lick of the Day");
     return min.x;
