@@ -337,9 +337,7 @@ void App::Frame() {
 
     float gap = (compact_ ? 8 : 16) * scale_;
     float avail = ImGui::GetContentRegionAvail().x;
-    // Wide enough for the relevant panels' tables, and kept that wide
-    // whether or not any are there, so the cards don't shift when one moves.
-    float feedW = avail >= 980 * scale_ ? (compact_ ? 400 : 420) * scale_ : 0;
+    float feedW = avail >= 980 * scale_ ? (compact_ ? 300 : 340) * scale_ : 0;
     float cardsW = feedW > 0 ? avail - feedW - gap : avail;
 
     ConnState state = client_->State();
@@ -361,6 +359,11 @@ void App::Frame() {
         int more = side.empty() || events <= kFew ? 0 : allRecent_ ? -1 : int(events - kFew);
         if (side.empty()) allRecent_ = false;  // so the few come back with the next one
         if (allRecent_) main.insert(main.end(), side.begin(), side.end()), side.clear();
+        // Wider while it holds panels, so their tables fit.
+        if (!side.empty()) {
+            feedW += (compact_ ? 100 : 80) * scale_;
+            cardsW = avail - feedW - gap;
+        }
 
         // OLED care swaps the side column's side every other hour.
         bool feedFirst = feedW > 0 && config_.oled.swap && OledSwapSides(t);
