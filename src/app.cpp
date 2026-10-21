@@ -2056,9 +2056,9 @@ float App::mediaBarHeight() const {
     return std::round(fonts_.caption->FontSize + (compact_ ? 8 : 10) * scale_);
 }
 
-// mediaBar draws what's playing in one line: a small cover, the track and
-// artist, previous, play/pause and next, and its progress as a thin line
-// along the bottom. With nothing playing it says so and stays put.
+// mediaBar draws what's playing in one line: the track and artist,
+// previous, play/pause and next, and its progress as a thin line along the
+// bottom. With nothing playing it says so and stays put.
 void App::mediaBar(float width) {
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -2099,19 +2099,7 @@ void App::mediaBar(float width) {
     control(m.playing ? icon::Pause : icon::Play, m.canToggle, MediaCommand::TogglePlay, m.playing ? "Pause" : "Play");
     control(icon::Previous, m.canPrevious, MediaCommand::Previous, "Previous");
 
-    // The cover, square, the bar's full height.
-    float x = start.x;
-    if (it) {
-        if (const Texture* tex = images_->Get(it->image)) {
-            float ta = float(tex->width) / float(tex->height);
-            ImVec2 uv0(0, 0), uv1(1, 1);
-            if (ta > 1) uv0.x = (1 - 1 / ta) / 2, uv1.x = 1 - uv0.x;
-            else uv0.y = (1 - ta) / 2, uv1.y = 1 - uv0.y;
-            dl->AddImage((ImTextureID)(intptr_t)tex->srv, start, ImVec2(start.x + h, end.y), uv0, uv1);
-            x += h;
-        }
-    }
-    x += pad;
+    float x = start.x + pad;
     float textW = right - 4 * s - x;
     if (it) {
         std::string title = fit(it->title, textW);

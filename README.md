@@ -33,7 +33,7 @@ result is a single `kitchensink.exe` with nothing to install.
   browsers and other players all show. A slim bar at the bottom of the
   Recent column, just above the landscape, always there (it says "Nothing
   playing" when nothing is) so nothing moves when a track starts or stops:
-  a small cover, track and artist, previous / play-pause / next and a thin
+  track and artist, previous / play-pause / next and a thin
   progress line; hover it for the rest. When the window is too narrow for
   the Recent column it's a panel among the others instead. A playing app
   wins over a paused one, and a paused track hides ten minutes after it
