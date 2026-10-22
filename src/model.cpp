@@ -261,6 +261,7 @@ Event ParseEvent(const json& j) {
     e.priority = ParsePriority(str(j, "priority"));
     if (auto it = j.find("quiet"); it != j.end() && it->is_boolean()) e.quiet = it->get<bool>();
     if (std::string x = str(j, "expires"); !x.empty()) e.expires = ParseTime(x);
+    if (std::string x = str(j, "until"); !x.empty()) e.until = ParseTime(x);
     return e;
 }
 
@@ -362,6 +363,8 @@ bool Model::AddEvent(Event e) {
 void Model::DropExpired(int64_t now) {
     temporary_.erase(std::remove_if(temporary_.begin(), temporary_.end(), [&](const Event& e) { return e.expires <= now; }),
                      temporary_.end());
+    events_.erase(std::remove_if(events_.begin(), events_.end(), [&](const Event& e) { return e.until > 0 && e.until <= now; }),
+                  events_.end());
 }
 
 void Model::Clear(int64_t id) {

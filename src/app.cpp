@@ -263,6 +263,7 @@ void App::Pump() {
         case Inbound::Type::Event: {
             Event e = m.event;
             if (!model_.AddEvent(std::move(m.event))) break;
+            if (e.until > 0 && e.until <= now()) break;  // missed while offline and no longer relevant
             // History from before the app started has already been seen
             // (or missed for good); events missed while offline are new.
             if (!m.history && (!e.quiet || e.expires > 0)) wakeUntil_ = now() + 2 * 60;  // OLED care: show it
@@ -272,6 +273,7 @@ void App::Pump() {
         }
         }
     }
+    model_.DropExpired(now());
     images_->Upload();
     local_->Take(localPanels_);
     media_->Take(mediaPanel_);
@@ -2401,7 +2403,6 @@ bool App::eventCard(const Event& e, int64_t t, float left) {
 // temporaries draws the temporary events above Recent, under their own
 // heading, until each one's time is up.
 void App::temporaries() {
-    model_.DropExpired(now());
     const auto& temp = model_.Temporary();
     if (temp.empty()) return;
     const Palette& p = Colours();

@@ -84,6 +84,9 @@ result is a single `kitchensink.exe` with nothing to install.
 - Hovering a Recent card shows an × that clears it; the × by the heading
   (shown while the mouse is over the column) clears them all. Cleared events stay cleared after a restart (they're
   remembered in `config.json` as `cleared`), and only for this install.
+- Events go from Recent by themselves once they stop being relevant (the
+  server's `until`: a day after for anything below high priority, sooner
+  for weather alerts); high-priority ones stay until cleared.
 - **OLED care** (in settings, each part off by default) guards OLED
   screens against burn-in: **Shift** moves the contents round a 6px circle
   every three minutes, **True black** is a black theme with dimmer text

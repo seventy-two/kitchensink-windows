@@ -741,6 +741,23 @@ static void testTemporaryEvents() {
     CHECK(!m.AddEvent(again));
 }
 
+static void testStaleEvents() {
+    Model m;
+    Event kept = ParseEvent(nlohmann::json::parse(R"({"id": 1, "title": "Pet", "time": "2026-10-14T10:00:00Z"})"));
+    Event rain = ParseEvent(nlohmann::json::parse(
+        R"({"id": 2, "title": "Rain", "time": "2026-10-14T10:00:00Z", "until": "2026-10-14T11:00:00Z"})"));
+    CHECK_EQ(rain.until - rain.time, int64_t(3600));
+    CHECK(m.AddEvent(kept));
+    CHECK(m.AddEvent(rain));
+    CHECK_EQ(m.Events().size(), size_t(2));  // in Recent, not temporary
+    CHECK(m.Temporary().empty());
+    m.DropExpired(rain.until - 1);
+    CHECK_EQ(m.Events().size(), size_t(2));
+    m.DropExpired(rain.until);
+    CHECK_EQ(m.Events().size(), size_t(1));
+    CHECK_EQ(m.Events().front().title, std::string("Pet"));
+}
+
 static void testGrab() {
     // A table cell with a local app's button.
     Snapshot s = ParseSnapshot(nlohmann::json::parse(R"({"monitor":"letterboxd","blocks":[{"type":"table","columns":[{"title":"Film"},{"title":""}],
@@ -848,6 +865,7 @@ int main() {
     testRetro();
     testCat();
     testTemporaryEvents();
+    testStaleEvents();
     testWeatherIcons();
     testPrivate();
     testParseTime();

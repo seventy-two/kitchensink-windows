@@ -132,6 +132,9 @@ struct Event {
     // expires, if set (Unix seconds), makes the event temporary: shown
     // apart from Recent until then, then dropped.
     int64_t expires = 0;
+    // until, if set (Unix seconds), is when the event stops being relevant:
+    // it's in Recent as usual until then, then dropped.
+    int64_t until = 0;
 };
 
 Snapshot ParseSnapshot(const nlohmann::json& j);
@@ -227,8 +230,8 @@ public:
     // stored again, e.g. when history is replayed.
     bool AddEvent(Event e);
     // Temporary events go in their own list, newest first, rather than
-    // Recent. DropExpired removes the ones whose time is up, including old
-    // ones replayed from the history.
+    // Recent. DropExpired removes the ones whose time is up, and events in
+    // Recent past their until, including old ones replayed from the history.
     const std::deque<Event>& Temporary() const { return temporary_; }
     void DropExpired(int64_t now);
 
