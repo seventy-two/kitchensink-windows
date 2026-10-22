@@ -7,6 +7,7 @@
 #include <deque>
 #include <set>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -112,6 +113,12 @@ struct Snapshot {
     // paste, if set, is the tooltip of a button that sends the clipboard's
     // text as a "paste" action (the dailies' share text).
     std::string paste;
+    // uploadPath, if set, is a file on this machine the monitor wants
+    // (e.g. RuneLite's saved farming data), with %VARS%: its lines starting
+    // with one of uploadPrefixes (all if none) are sent as an "upload"
+    // action when they change. See Uploader.
+    std::string uploadPath;
+    std::vector<std::string> uploadPrefixes;
     int64_t updated = 0;  // Unix seconds; 0 if never polled
     std::vector<Block> blocks;
     // The few things most worth seeing at a glance, shown in place of the
@@ -157,6 +164,10 @@ int64_t ParseTime(const std::string& s);
 // Ago describes how long before now a time was: "just now", "4m ago",
 // "2h ago", "3d ago".
 std::string Ago(int64_t then, int64_t now);
+
+// KeepLines returns text's lines that start with one of prefixes (every
+// line if there are none), joined with \n, without their \r.
+std::string KeepLines(std::string_view text, const std::vector<std::string>& prefixes);
 
 // Arrange orders panel IDs by a saved order. Panels in saved come in that
 // order; ones it doesn't mention (e.g. added since) keep their place after

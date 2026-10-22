@@ -23,6 +23,7 @@
 #include "sky.h"
 #include "sysinfo.h"
 #include "theme.h"
+#include "upload.h"
 
 namespace ks {
 
@@ -161,6 +162,7 @@ private:
     std::vector<Snapshot> localPanels_;  // This PC, drives and all
     std::unique_ptr<MediaWatcher> media_;
     std::unique_ptr<Grabber> grabber_;  // the watchlist's download buttons
+    Uploader uploader_;                 // local files monitors ask for
     LickOfTheDay lick_;                 // hidden and shown by the button in the corner
     double lickClicked_ = -1;           // when its button was last clicked
     const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths

@@ -46,6 +46,10 @@ result is a single `kitchensink.exe` with nothing to install.
   film stands from watchgrab's `state.json`: added (green tick), already
   had (grey tick), no release yet (amber, click to look again) or a failure
   (red, click to retry), with the detail on hover.
+- **Files for monitors**: a monitor can ask for a file on this PC
+  (`upload`): every 5 seconds the client looks at its last-write time and,
+  when the wanted lines have changed (and once each start), sends them.
+  The farming monitor asks for RuneLite's Time Tracking data this way.
 - Checklists (the `todo` monitor) can be ticked, added to and deleted
   from; a tick shows at once, ahead of the server's update.
 - Keeps the server's event stream open, reconnects with backoff, and
@@ -134,6 +138,7 @@ g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/mo
 | `src/local.cpp` | turns those readings into the This PC panel |
 | `src/grab.cpp` | watchgrab's state and results, and how each film's button looks |
 | `src/grabber.cpp` | runs watchgrab for the download buttons and follows its state file |
+| `src/upload.cpp` | sends monitors the local files they ask for |
 | `src/lick.cpp` | starts Lick of the Day with the dashboard, and hides and shows it |
 | `src/images.cpp` | thumbnail download, WIC decoding and textures |
 | `src/config.cpp` | settings and start-with-Windows |

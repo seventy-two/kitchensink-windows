@@ -137,6 +137,11 @@ Snapshot ParseSnapshot(const json& j) {
         s.relevantUntil = std::max<int64_t>(0, ParseTime(str(j["relevant"], "until")));
     }
     s.paste = str(j, "paste");
+    if (j.contains("upload") && j["upload"].is_object()) {
+        s.uploadPath = str(j["upload"], "path");
+        for (const auto& p : array(j["upload"], "prefixes"))
+            if (p.is_string()) s.uploadPrefixes.push_back(p.get<std::string>());
+    }
     // Go sends its zero time, year 1, for a monitor that hasn't polled yet.
     s.updated = std::max<int64_t>(0, ParseTime(str(j, "updated")));
     for (const auto& b : array(j, "blocks")) s.blocks.push_back(parseBlock(b));
@@ -284,6 +289,23 @@ int64_t ParseTime(const std::string& s) {
         return 0;
     }
     return daysFromCivil(y, mo, d) * 86400 + h * 3600 + mi * 60 + sec - offset;
+}
+
+std::string KeepLines(std::string_view text, const std::vector<std::string>& prefixes) {
+    std::string out;
+    while (!text.empty()) {
+        size_t end = text.find('\n');
+        std::string_view line = text.substr(0, end);
+        text = end == std::string_view::npos ? std::string_view() : text.substr(end + 1);
+        if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+        bool keep = prefixes.empty();
+        for (const auto& p : prefixes)
+            if (line.substr(0, p.size()) == p) keep = true;
+        if (!keep || line.empty()) continue;
+        if (!out.empty()) out += '\n';
+        out += line;
+    }
+    return out;
 }
 
 std::string Ago(int64_t then, int64_t now) {

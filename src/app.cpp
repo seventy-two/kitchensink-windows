@@ -274,6 +274,7 @@ void App::Pump() {
         }
     }
     model_.DropExpired(now());
+    if (client_->State() == ConnState::Connected) uploader_.Check(model_.Snapshots(), *client_);
     images_->Upload();
     local_->Take(localPanels_);
     media_->Take(mediaPanel_);

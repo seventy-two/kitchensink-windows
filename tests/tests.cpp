@@ -741,6 +741,16 @@ static void testTemporaryEvents() {
     CHECK(!m.AddEvent(again));
 }
 
+static void testUpload() {
+    Snapshot s = ParseSnapshot(nlohmann::json::parse(
+        R"({"monitor":"farming","blocks":[],"upload":{"path":"%USERPROFILE%\\x.properties","prefixes":["a.","b."]}})"));
+    CHECK_EQ(s.uploadPath, std::string("%USERPROFILE%\\x.properties"));
+    CHECK_EQ(s.uploadPrefixes.size(), size_t(2));
+    CHECK(ParseSnapshot(nlohmann::json::parse(R"({"monitor":"x","blocks":[]})")).uploadPath.empty());
+    CHECK_EQ(KeepLines("a.1=2\r\nc.3=4\nb.5=6\n\na.7", s.uploadPrefixes), std::string("a.1=2\nb.5=6\na.7"));
+    CHECK_EQ(KeepLines("x\r\ny", {}), std::string("x\ny"));
+}
+
 static void testStaleEvents() {
     Model m;
     Event kept = ParseEvent(nlohmann::json::parse(R"({"id": 1, "title": "Pet", "time": "2026-10-14T10:00:00Z"})"));
@@ -866,6 +876,7 @@ int main() {
     testCat();
     testTemporaryEvents();
     testStaleEvents();
+    testUpload();
     testWeatherIcons();
     testPrivate();
     testParseTime();
