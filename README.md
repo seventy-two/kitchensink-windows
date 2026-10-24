@@ -77,6 +77,12 @@ result is a single `kitchensink.exe` with nothing to install.
   starts with the dashboard and has no taskbar button of its own: the
   electric guitar in the title bar, by the eye, hides and shows it
   (muted while it's hidden).
+- **Apps**: a greyed-out Windows 95 flag left of the guitar opens a menu of
+  your own apps, each with its icon and a green dot while it's running.
+  Picking one brings its window to the front, or starts it. List them in
+  `config.json` as `"apps"`: a name for
+  `%LOCALAPPDATA%\Programs\<name>\<name>.exe`, or a full path to an exe.
+  Ones that aren't there are left out, and with none the flag doesn't show.
 - There are no scrollbars: the Recent column, the panels under it, the
   panels column and a panel cut short to fit scroll with the mouse wheel.
 - In the bottom-right corner, under Recent, a strip of countryside shows the sky as it is now: the
@@ -140,6 +146,7 @@ g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/mo
 | `src/grabber.cpp` | runs watchgrab for the download buttons and follows its state file |
 | `src/upload.cpp` | sends monitors the local files they ask for |
 | `src/lick.cpp` | starts Lick of the Day with the dashboard, and hides and shows it |
+| `src/launcher.cpp` | the apps menu: finding, starting and bringing up the apps, and their icons |
 | `src/images.cpp` | thumbnail download, WIC decoding and textures |
 | `src/config.cpp` | settings and start-with-Windows |
 | `src/theme.cpp` | palettes, fonts and ImGui style |

@@ -42,6 +42,9 @@ struct Config {
     std::set<std::string> expanded, collapsed;
     // Panel order, as dragged; empty for the server's config order.
     std::vector<std::string> order;
+    // The apps menu in the title bar: each a name, for
+    // %LOCALAPPDATA%\Programs\<name>\<name>.exe, or a full path to an exe.
+    std::vector<std::string> apps;
 };
 
 // LoadConfig reads the settings, leaving defaults for anything missing.

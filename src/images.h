@@ -37,6 +37,9 @@ public:
     // album art read from Windows. Any thread may call it; call it before
     // the first Get of that key.
     void Provide(const std::string& key, std::string bytes);
+    // Has reports whether the key is cached or loading, i.e. a Get now
+    // wouldn't start loading it again (e.g. once evicted).
+    bool Has(const std::string& key) const { return entries_.count(key) > 0; }
 
 private:
     struct Decoded {

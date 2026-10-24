@@ -101,6 +101,9 @@ Config LoadConfig() {
     if (auto it = j.find("order"); it != j.end() && it->is_array())
         for (const auto& id : *it)
             if (id.is_string()) c.order.push_back(id.get<std::string>());
+    if (auto it = j.find("apps"); it != j.end() && it->is_array())
+        for (const auto& a : *it)
+            if (a.is_string()) c.apps.push_back(a.get<std::string>());
     return c;
 }
 
@@ -119,6 +122,7 @@ bool SaveConfig(const Config& c) {
         {"expanded", c.expanded},
         {"collapsed", c.collapsed},
         {"order", c.order},
+        {"apps", c.apps},
     };
     std::wstring path = configPath(true);
     std::wstring tmp = path + L".tmp";

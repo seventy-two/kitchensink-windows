@@ -195,6 +195,7 @@ App::App(HWND hwnd, ID3D11Device* device, std::function<void()> wake,
     client_->Start(config_.url, config_.token);
     if (config_.url.empty() || config_.token.empty()) openSettings();
     lick_.Start();
+    launcher_.Set(config_.apps);
 }
 
 App::~App() {
@@ -557,10 +558,14 @@ void App::header() {
     float bw = ImGui::CalcTextSize(icon::Settings).x + ImGui::GetStyle().FramePadding.x * 2;
     ImGui::SameLine();
     ImGui::SetCursorPos(ImVec2(left - origin.x - 8 * scale_ - bw, mid - ImGui::GetFrameHeight() / 2));
-    // Flat until hovered, like the window buttons beside it.
+    // Flat until hovered, like the window buttons beside it, and muted
+    // like the guitar: the text colour only while hovered.
+    ImVec2 at = ImGui::GetCursorScreenPos();
+    bool lit = ImGui::IsMouseHoveringRect(at, ImVec2(at.x + bw, at.y + ImGui::GetFrameHeight()));
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text, lit ? p.text : p.muted);
     bool open = ImGui::Button(icon::Settings);
-    ImGui::PopStyleColor();
+    ImGui::PopStyleColor(2);
     if (open) openSettings();
     noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
     float buttonsLeft = ImGui::GetItemRectMin().x;
@@ -595,6 +600,7 @@ void App::header() {
         }
     }
     if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
+    if (!launcher_.Installed().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float x = buttonsLeft - 16 * scale_ - clockW;
@@ -2027,6 +2033,92 @@ float App::lickButton(float right, float mid) {
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip(shown ? "Hide Lick of the Day" : "Show Lick of the Day");
+    return min.x;
+}
+
+// appsButton draws a grid in the title bar, ending at right, that opens a
+// menu of the user's own apps (config.json's "apps"): each with its icon,
+// and a dot while it's running. Picking one brings it to the front or
+// starts it. It returns its left edge.
+float App::appsButton(float right, float mid) {
+    const Palette& p = Colours();
+    float size = ImGui::GetFrameHeight();
+    ImVec2 origin = ImGui::GetWindowPos();
+    ImGui::SetCursorPos(ImVec2(right - origin.x - size, mid - size / 2));
+    bool open = ImGui::IsPopupOpen("##apps");
+    if (ImGui::InvisibleButton("##appsButton", ImVec2(size, size))) ImGui::OpenPopup("##apps");
+    ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+    noDrag_.push_back(ImRect(min, max));
+    ImDrawList* bar = ImGui::GetWindowDrawList();
+    bool lit = open || ImGui::IsItemHovered();
+    // Flat until hovered or open, like the buttons beside it.
+    if (lit)
+        bar->AddRectFilled(min, max, ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
+                           ImGui::GetStyle().FrameRounding);
+    // Windows 95's waving flag, greyed out: solid and muted like the
+    // guitar, the text colour while hovered or open. Four panes with gaps
+    // between, bowed by a wave, and a trail of fainter bits off to the left.
+    ImU32 col = u32(lit ? p.text : p.muted), trail = u32(mix(lit ? p.text : p.muted, p.bg, 0.5f));
+    float fw = size * 0.54f, fh = size * 0.5f, amp = size * 0.08f, gap = std::max(1.0f, std::round(size * 0.05f));
+    ImVec2 o(min.x + size * 0.34f, min.y + (size - fh) / 2 + amp / 2);
+    // flag maps (u, v) across the flag, each 0 to 1, to the screen: the
+    // wave lifts the middle and leans it a little.
+    auto flag = [&](float u, float v) {
+        return ImVec2(o.x + u * fw, o.y + v * fh - amp * std::sin(u * 3.14159f) + amp * 0.6f * (u - 0.5f));
+    };
+    float gu = gap / fw / 2, gv = gap / fh / 2;
+    for (int i = 0; i < 4; i++) {
+        float u0 = i % 2 ? 0.5f + gu : 0, u1 = i % 2 ? 1 : 0.5f - gu;
+        float v0 = i / 2 ? 0.5f + gv : 0, v1 = i / 2 ? 1 : 0.5f - gv;
+        std::vector<ImVec2> pane;
+        for (int k = 0; k <= 6; k++) pane.push_back(flag(u0 + (u1 - u0) * k / 6, v0));
+        for (int k = 6; k >= 0; k--) pane.push_back(flag(u0 + (u1 - u0) * k / 6, v1));
+        bar->AddConcavePolyFilled(pane.data(), int(pane.size()), col);
+    }
+    // The trail: two short bits on each row, shrinking leftwards.
+    for (int row = 0; row < 2; row++) {
+        float v0 = row ? 0.5f + gv : 0, v1 = row ? 1 : 0.5f - gv;
+        float x = o.x - gap;
+        for (int k = 0; k < 2; k++) {
+            float w = std::max(1.0f, std::round(size * (k ? 0.05f : 0.08f)));
+            ImVec2 t0 = flag(0, v0), t1 = flag(0, v1);
+            float inset = (t1.y - t0.y) * (k ? 0.25f : 0.12f);
+            bar->AddRectFilled(ImVec2(x - w, t0.y + inset), ImVec2(x, t1.y - inset), trail);
+            x -= w + gap;
+        }
+    }
+    if (!open && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Apps");
+
+    // Under the button, its right edge lined up with the button's.
+    ImGui::SetNextWindowPos(ImVec2(max.x, max.y + 4 * scale_), ImGuiCond_Always, ImVec2(1, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6 * scale_, 6 * scale_));
+    if (ImGui::BeginPopup("##apps")) {
+        float iconSize = std::round(20 * scale_), pad = 6 * scale_;
+        float rowH = std::max(iconSize, ImGui::GetTextLineHeight()) + pad * 2;
+        float w = 0;
+        for (const auto& a : launcher_.Installed()) w = std::max(w, ImGui::CalcTextSize(a.name.c_str()).x);
+        w += iconSize + pad * 4 + 14 * scale_;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        for (const auto& a : launcher_.Installed()) {
+            ImGui::PushID(a.name.c_str());
+            ImVec2 at = ImGui::GetCursorScreenPos();
+            if (ImGui::Selectable("##app", false, 0, ImVec2(w, rowH - ImGui::GetStyle().ItemSpacing.y))) launcher_.Open(a);
+            float cy = at.y + (rowH - ImGui::GetStyle().ItemSpacing.y) / 2;
+            ImVec2 ic(at.x + pad, std::round(cy - iconSize / 2));
+            std::string key = launcher_.Icon(a, *images_, int(iconSize));
+            if (const Texture* t = images_->Get(key))
+                dl->AddImage((ImTextureID)(intptr_t)t->srv, ic, ImVec2(ic.x + iconSize, ic.y + iconSize));
+            float th = ImGui::GetTextLineHeight();
+            dl->AddText(ImVec2(ic.x + iconSize + pad * 1.5f, std::round(cy - th / 2)), u32(p.text), a.name.c_str());
+            if (launcher_.Running(a))
+                dl->AddCircleFilled(ImVec2(at.x + w - pad - 3 * scale_, cy), 3 * scale_, u32(p.good));
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                ImGui::SetTooltip("%s", launcher_.Running(a) ? "Running: bring to the front" : "Start");
+            ImGui::PopID();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
     return min.x;
 }
 

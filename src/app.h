@@ -16,6 +16,7 @@
 #include "grabber.h"
 #include "images.h"
 #include "imgui_internal.h"
+#include "launcher.h"
 #include "lick.h"
 #include "model.h"
 #include "net.h"
@@ -134,6 +135,7 @@ private:
     void temporaries();
     void cat(float width);
     float lickButton(float right, float mid);
+    float appsButton(float right, float mid);
     void empty(const char* message, bool settingsButton);
     void settings();
     void diagnostics();
@@ -165,6 +167,7 @@ private:
     Uploader uploader_;                 // local files monitors ask for
     LickOfTheDay lick_;                 // hidden and shown by the button in the corner
     double lickClicked_ = -1;           // when its button was last clicked
+    Launcher launcher_;                 // the apps menu's apps
     const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths
     bool localHovered_ = false;         // a local or action button is under the mouse, so a row's click isn't for the row
     std::set<std::string> sentActions_;  // cells' actions sent, by monitor, type and ID, drawn as done
