@@ -19,6 +19,7 @@ class Launcher {
 public:
     // Set takes config.json's "apps": each a name, found at
     // %LOCALAPPDATA%\Programs\<name>\<name>.exe, or a full path to an exe.
+    // They're listed in A-Z order.
     void Set(const std::vector<std::string>& apps);
     // Installed lists the apps whose exe is there (looked for again every
     // few seconds).

@@ -78,7 +78,7 @@ result is a single `kitchensink.exe` with nothing to install.
   electric guitar in the title bar, by the eye, hides and shows it
   (muted while it's hidden).
 - **Apps**: a greyed-out Windows 95 flag left of the guitar opens a menu of
-  your own apps, each with its icon and a green dot while it's running.
+  your own apps, A to Z, each with its icon and a green dot while it's running.
   Picking one brings its window to the front, or starts it. List them in
   `config.json` as `"apps"`: a name for
   `%LOCALAPPDATA%\Programs\<name>\<name>.exe`, or a full path to an exe.

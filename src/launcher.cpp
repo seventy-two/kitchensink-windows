@@ -129,6 +129,9 @@ void Launcher::Set(const std::vector<std::string>& apps) {
         }
         all_.push_back(app);
     }
+    std::sort(all_.begin(), all_.end(), [](const LaunchApp& a, const LaunchApp& b) {
+        return lower(widen(a.name)) < lower(widen(b.name));
+    });
     checked_ = -1e9;
 }
 
