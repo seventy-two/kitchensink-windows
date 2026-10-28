@@ -63,13 +63,44 @@ struct Cell {
     std::string actionType, actionId, actionLabel;
 };
 
+// Slider is a checklist item's 0-100 control (a light's brightness): let
+// go at a new value, it sends action with the value as text.
+struct Slider {
+    bool present = false;
+    int value = 0;
+    std::string action, hint;
+};
+
+// Swatch is a preset colour: value is sent when it's picked (e.g. "2700K"),
+// show ("#rrggbb") is what it looks like.
+struct Swatch {
+    std::string label, value, show;
+};
+
+// Colour is a checklist item's colour swatch (a light's colour), opening a
+// picker that sends action with "#rrggbb" or a preset's value.
+struct Colour {
+    bool present = false;
+    std::string value;  // "#rrggbb" now, or empty (e.g. off)
+    std::string action;
+    bool wheel = false;  // any colour, not only presets
+    std::vector<Swatch> presets;
+};
+
 struct Item {
     std::string title, subtitle, detail, url, image;
     Tone tone = Tone::None;
     // For checklists.
     std::string id;
     bool done = false;
+    Slider slider;
+    Colour colour;
 };
+
+// ParseHexColour reads "#rrggbb" into rgb (0-1); false if it isn't one.
+bool ParseHexColour(const std::string& s, float rgb[3]);
+// HexColour writes rgb (0-1) as "#rrggbb".
+std::string HexColour(const float rgb[3]);
 
 // Media is what a "media" block is playing. Only local panels make these.
 struct Media {

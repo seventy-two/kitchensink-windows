@@ -52,6 +52,9 @@ result is a single `kitchensink.exe` with nothing to install.
   The farming monitor asks for RuneLite's Time Tracking data this way.
 - Checklists (the `todo` monitor) can be ticked, added to and deleted
   from; a tick shows at once, ahead of the server's update.
+- Checklist items with a `slider` or `colour` (the `lights` monitor) get a
+  slider, sent when let go, and a swatch opening presets and a colour
+  wheel, lined up after the titles in place of the up and down buttons.
 - Keeps the server's event stream open, reconnects with backoff, and
   catches up on events missed while offline. A burst of events becomes one
   notification.

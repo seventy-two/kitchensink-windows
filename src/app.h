@@ -119,6 +119,8 @@ private:
     void table(const std::string& monitor, const Block& b);
     void list(const Block& b);
     void checklist(const std::string& monitor, const Block& b);
+    void itemControls(const std::string& monitor, const std::string& key, const Item& it, bool done, ImVec2 pos,
+                      float w, float h);
     void mediaBlock(const Block& b);
     void feedHeading(float width);
     void feed();
@@ -196,6 +198,12 @@ private:
     // Checklist ticks shown before the server confirms them, by
     // "monitor/item", with when they were made; a snapshot replaces them.
     std::unordered_map<std::string, std::pair<bool, double>> ticked_;
+    // Checklist sliders' values and colours set here, shown for 10 seconds
+    // (lights report their new state a moment late), by "monitor/item";
+    // unlike ticks, a snapshot doesn't replace them.
+    std::unordered_map<std::string, std::pair<int, double>> levelSet_;
+    std::unordered_map<std::string, std::pair<std::string, double>> colourSet_;
+    float pickColour_[3] = {1, 1, 1};  // the open colour picker's wheel
     std::unordered_map<std::string, std::array<char, 512>> newItem_;  // add boxes, by monitor
 
     // Dragging panels into a new order: the one being dragged, and where

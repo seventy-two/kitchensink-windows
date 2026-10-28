@@ -1704,9 +1704,10 @@ void App::mediaBlock(const Block& b) {
 
 // checklist draws items with checkboxes, up, down and delete buttons on
 // the one under the mouse (as the block has them), and a box for new
-// items if the block takes them. Each change is
-// sent to the monitor as an action; ticks show at once, ahead of the
-// server's snapshot.
+// items if the block takes them. Items with a slider or colour (lights)
+// get them in a column after the titles, and no up and down buttons. Each
+// change is sent to the monitor as an action; ticks, slider values and
+// colours show at once, ahead of the server's snapshot.
 void App::checklist(const std::string& monitor, const Block& b) {
     const Palette& p = Colours();
     const ImGuiStyle& st = ImGui::GetStyle();
@@ -1715,27 +1716,50 @@ void App::checklist(const std::string& monitor, const Block& b) {
     ImGui::PushFont(fonts_.caption);
     float bw = ImGui::CalcTextSize(icon::Close).x + st.FramePadding.x * 2;
     ImGui::PopFont();
-    int buttons = (b.movable ? 2 : 0) + (b.noDelete ? 0 : 1);
-    float bsw = buttons * bw;  // the hover buttons' width
+    // Items with controls lose their up and down buttons.
+    auto buttonsFor = [&](const Item& it) {
+        bool controls = it.slider.present || it.colour.present;
+        return (b.movable && !controls ? 2 : 0) + (b.noDelete ? 0 : 1);
+    };
+    // The titles' column, when any item has controls: as wide as the
+    // longest, up to 45% of the row.
+    float titleW = 0;
+    for (const Item& it : b.items)
+        if (it.slider.present || it.colour.present) titleW = std::max(titleW, 1.0f);
+    if (titleW > 0) {
+        for (const Item& it : b.items) titleW = std::max(titleW, ImGui::CalcTextSize(it.title.c_str()).x);
+        titleW = std::min(titleW, ImGui::GetContentRegionAvail().x * 0.45f);
+    }
+    double now = ImGui::GetTime();
 
     for (const Item& it : b.items) {
         ImGui::PushID(it.id.c_str());
         std::string key = monitor + "/" + it.id;
         bool done = it.done;
-        if (auto t = ticked_.find(key); t != ticked_.end() && ImGui::GetTime() - t->second.second < 10)
+        if (auto t = ticked_.find(key); t != ticked_.end() && now - t->second.second < 10)
             done = t->second.first;
+        bool controls = it.slider.present || it.colour.present;
+        int buttons = buttonsFor(it);
+        float bsw = buttons * bw;  // the hover buttons' width
 
         ImVec2 rowMin = ImGui::GetCursorScreenPos();
         bool toggle = false;
         bool v = done;
         if (ImGui::Checkbox("##done", &v)) toggle = true;
         ImGui::SameLine();
-        // The text wraps short of the buttons, and clicking it ticks the
-        // box too.
-        ImGui::PushTextWrapPos(right - bsw - st.ItemSpacing.x - ImGui::GetWindowPos().x);
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextColored(done ? p.muted : it.tone == Tone::None ? p.text : ToneColour(it.tone), "%s", it.title.c_str());
-        ImGui::PopTextWrapPos();
+        ImVec4 titleColour = done ? p.muted : it.tone == Tone::None ? p.text : ToneColour(it.tone);
+        if (controls) {
+            // One line, cut to the column, so the controls line up.
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(titleColour, "%s", fit(it.title, titleW).c_str());
+        } else {
+            // The text wraps short of the buttons, and clicking it ticks
+            // the box too.
+            ImGui::PushTextWrapPos(right - bsw - st.ItemSpacing.x - ImGui::GetWindowPos().x);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(titleColour, "%s", it.title.c_str());
+            ImGui::PopTextWrapPos();
+        }
         ImVec2 textMin = ImGui::GetItemRectMin(), textMax = ImGui::GetItemRectMax();
         if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         if (ImGui::IsItemClicked()) toggle = true;
@@ -1745,6 +1769,11 @@ void App::checklist(const std::string& monitor, const Block& b) {
         }
         ImVec2 next = ImGui::GetCursorScreenPos();
         float rowBottom = std::max(textMax.y, ImGui::GetItemRectMax().y);
+        if (controls) {
+            float x = textMin.x + titleW + st.ItemSpacing.x * 2;
+            itemControls(monitor, key, it, done, ImVec2(x, rowMin.y), right - bsw - x, rowBottom - rowMin.y);
+            ImGui::SetCursorScreenPos(next);
+        }
 
         // Allowing for an active item keeps the button there while it's
         // held, so the click completes.
@@ -1762,7 +1791,7 @@ void App::checklist(const std::string& monitor, const Block& b) {
                 return clicked;
             };
             // Ticked items stay in the order they were ticked.
-            if (b.movable) {
+            if (b.movable && !controls) {
                 ImGui::BeginDisabled(done);
                 if (button(icon::Up, "##up", b.upHint, "Move up")) act({{"type", "move"}, {"id", it.id}, {"text", "up"}});
                 if (button(icon::Down, "##down", b.downHint, "Move down")) act({{"type", "move"}, {"id", it.id}, {"text", "down"}});
@@ -1792,6 +1821,126 @@ void App::checklist(const std::string& monitor, const Block& b) {
             buf[0] = 0;
             ImGui::SetKeyboardFocusHere(-1);  // stay in the box for the next one
         }
+    }
+}
+
+// itemControls draws a checklist item's slider and colour swatch in w x h
+// at pos: the slider takes the width the swatch leaves. Letting go of the
+// slider, or picking a colour, sends the item's action.
+void App::itemControls(const std::string& monitor, const std::string& key, const Item& it, bool done, ImVec2 pos,
+                       float w, float h) {
+    const Palette& p = Colours();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    double now = ImGui::GetTime();
+    auto act = [&](const std::string& type, const std::string& text) {
+        client_->Act(monitor, nlohmann::json{{"type", type}, {"id", it.id}, {"text", text}}.dump());
+    };
+
+    // The colour now: one just picked, else the server's.
+    std::string colour = it.colour.value;
+    if (auto c = colourSet_.find(key); c != colourSet_.end() && now - c->second.second < 10) colour = c->second.first;
+    float rgb[3];
+    bool hasColour = ParseHexColour(colour, rgb);
+
+    float sw = it.colour.present ? std::round(h * 0.7f) : 0;  // the swatch
+    float gap = std::round(8 * scale_);
+    if (it.slider.present) {
+        float sliderW = w - (sw > 0 ? sw + gap : 0);
+        int value = it.slider.value;
+        if (auto l = levelSet_.find(key); l != levelSet_.end() && now - l->second.second < 10) value = l->second.first;
+        if (sliderW > 20 * scale_) {
+            ImGui::SetCursorScreenPos(pos);
+            ImGui::InvisibleButton("##level", ImVec2(sliderW, h));
+            float knob = std::round(5 * scale_);
+            float x0 = pos.x + knob, x1 = pos.x + sliderW - knob;
+            if (ImGui::IsItemActive()) {
+                float t = (ImGui::GetIO().MousePos.x - x0) / std::max(1.0f, x1 - x0);
+                value = std::clamp(int(std::lround(t * 100)), 0, 100);
+                levelSet_[key] = {value, now};
+            }
+            if (ImGui::IsItemDeactivated() && value != it.slider.value) {
+                act(it.slider.action, std::to_string(value));
+                ticked_[key] = {value == 0, now};
+                levelSet_[key] = {value, now};
+            }
+            if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+                ImGui::SetTooltip("%s %d%%", it.slider.hint.empty() ? "Level" : it.slider.hint.c_str(), value);
+            }
+            // A thin track, filled in the light's colour up to the knob.
+            ImVec4 fill = hasColour ? ImVec4(rgb[0], rgb[1], rgb[2], 1) : p.accent;
+            if (value == 0 || done) fill = p.muted;
+            float y = std::round(pos.y + h / 2), th = std::max(2.0f, std::round(3 * scale_));
+            float kx = x0 + (x1 - x0) * value / 100.0f;
+            dl->AddRectFilled(ImVec2(x0, y - th / 2), ImVec2(x1, y + th / 2), u32(p.frame), th / 2);
+            dl->AddRectFilled(ImVec2(x0, y - th / 2), ImVec2(kx, y + th / 2), u32(fill), th / 2);
+            dl->AddCircleFilled(ImVec2(kx, y), knob, u32(fill));
+            dl->AddCircle(ImVec2(kx, y), knob, u32(p.card), 0, std::max(1.0f, scale_));
+        }
+    }
+
+    if (!it.colour.present) return;
+    ImVec2 sp(pos.x + w - sw, std::round(pos.y + (h - sw) / 2));
+    ImGui::SetCursorScreenPos(sp);
+    if (ImGui::InvisibleButton("##colour", ImVec2(sw, sw))) {
+        if (!hasColour) rgb[0] = rgb[1] = rgb[2] = 1;
+        std::copy(rgb, rgb + 3, pickColour_);
+        ImGui::OpenPopup("##colours");
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        ImGui::SetTooltip("Colour");
+    }
+    float round = std::round(3 * scale_);
+    if (hasColour && !done)
+        dl->AddRectFilled(sp, ImVec2(sp.x + sw, sp.y + sw), u32(ImVec4(rgb[0], rgb[1], rgb[2], 1)), round);
+    dl->AddRect(sp, ImVec2(sp.x + sw, sp.y + sw), u32(ImGui::IsItemHovered() ? p.text : p.muted), round, 0,
+                std::max(1.0f, scale_));
+
+    if (ImGui::BeginPopup("##colours")) {
+        auto pick = [&](const std::string& value, const std::string& show) {
+            act(it.colour.action, value);
+            colourSet_[key] = {show, now};
+            ticked_[key] = {false, now};  // picking a colour turns a light on
+        };
+        // Presets in rows of six, the whites (sent as kelvin, not
+        // "#rrggbb") on rows of their own above the hues.
+        float ps = std::round(26 * scale_);
+        int n = 0, col = 0;
+        bool lastWhite = false;
+        for (const Swatch& s : it.colour.presets) {
+            float c[3];
+            if (!ParseHexColour(s.show, c)) continue;
+            bool white = s.value.empty() || s.value[0] != '#';
+            if (n > 0 && white != lastWhite) col = 0;
+            if (col++ % 6 != 0) ImGui::SameLine();
+            lastWhite = white;
+            ImGui::PushID(n++);
+            if (ImGui::ColorButton(s.label.c_str(), ImVec4(c[0], c[1], c[2], 1),
+                                   ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop, ImVec2(ps, ps))) {
+                pick(s.value, s.show);
+                ImGui::CloseCurrentPopup();
+            }
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", s.label.c_str());
+            ImGui::PopID();
+        }
+        if (it.colour.wheel) {
+            if (n > 0) ImGui::Dummy(ImVec2(0, gap / 2));
+            ImGui::SetNextItemWidth(6 * ps + 5 * ImGui::GetStyle().ItemSpacing.x);
+            ImGui::ColorPicker3("##wheel", pickColour_,
+                                ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_NoInputs |
+                                    ImGuiColorEditFlags_NoSidePreview | ImGuiColorEditFlags_NoLabel |
+                                    ImGuiColorEditFlags_NoAlpha);
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
+                // Only hue and saturation count: brightness is the slider's.
+                float hh, ss, vv;
+                ImGui::ColorConvertRGBtoHSV(pickColour_[0], pickColour_[1], pickColour_[2], hh, ss, vv);
+                ImGui::ColorConvertHSVtoRGB(hh, ss, 1, pickColour_[0], pickColour_[1], pickColour_[2]);
+                std::string hex = HexColour(pickColour_);
+                pick(hex, hex);
+            }
+        }
+        ImGui::EndPopup();
     }
 }
 

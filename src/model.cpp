@@ -1,6 +1,7 @@
 #include "model.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 
@@ -87,8 +88,24 @@ Block parseBlock(const json& j) {
     }
     for (const auto& i : array(j, "items")) {
         auto done = i.find("done");
-        b.items.push_back({str(i, "title"), str(i, "subtitle"), str(i, "detail"), str(i, "url"), str(i, "image"),
-                           tone(i), str(i, "id"), done != i.end() && done->is_boolean() && done->get<bool>()});
+        Item item{str(i, "title"), str(i, "subtitle"), str(i, "detail"), str(i, "url"), str(i, "image"),
+                  tone(i), str(i, "id"), done != i.end() && done->is_boolean() && done->get<bool>()};
+        if (auto sl = i.find("slider"); sl != i.end() && sl->is_object()) {
+            item.slider.present = true;
+            auto v = sl->find("value");
+            if (v != sl->end() && v->is_number()) item.slider.value = std::clamp(v->get<int>(), 0, 100);
+            item.slider.action = str(*sl, "action");
+            item.slider.hint = str(*sl, "hint");
+        }
+        if (auto c = i.find("colour"); c != i.end() && c->is_object()) {
+            item.colour.present = true;
+            item.colour.value = str(*c, "value");
+            item.colour.action = str(*c, "action");
+            item.colour.wheel = flag(*c, "wheel");
+            for (const auto& p : array(*c, "presets"))
+                item.colour.presets.push_back({str(p, "label"), str(p, "value"), str(p, "show")});
+        }
+        b.items.push_back(std::move(item));
     }
     b.addHint = str(j, "addHint");
     b.deleteHint = str(j, "deleteHint");
@@ -411,6 +428,21 @@ void Model::SetCleared(Cleared c) {
     events_.erase(std::remove_if(events_.begin(), events_.end(),
                                  [&](const Event& e) { return e.id <= cleared_.through || cleared_.ids.count(e.id); }),
                   events_.end());
+}
+
+bool ParseHexColour(const std::string& s, float rgb[3]) {
+    if (s.size() != 7 || s[0] != '#') return false;
+    for (size_t i = 1; i < 7; i++)
+        if (!std::isxdigit(static_cast<unsigned char>(s[i]))) return false;
+    for (int i = 0; i < 3; i++) rgb[i] = std::stoi(s.substr(1 + 2 * i, 2), nullptr, 16) / 255.0f;
+    return true;
+}
+
+std::string HexColour(const float rgb[3]) {
+    char buf[8];
+    auto byte = [](float v) { return static_cast<int>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255)); };
+    std::snprintf(buf, sizeof buf, "#%02x%02x%02x", byte(rgb[0]), byte(rgb[1]), byte(rgb[2]));
+    return buf;
 }
 
 std::string Model::TitleOf(const std::string& monitor) const {
