@@ -119,7 +119,8 @@ private:
     void table(const std::string& monitor, const Block& b);
     void list(const Block& b);
     void checklist(const std::string& monitor, const Block& b);
-    void switchTile(const std::string& monitor, const std::string& key, const Item& it, bool done, float w);
+    void switchTile(const std::string& monitor, const std::string& key, const Item& it, bool done, float w,
+                    float titleW);
     void colourPopup(const std::string& monitor, const std::string& key, const Item& it);
     void itemControls(const std::string& monitor, const std::string& key, const Item& it, bool done, ImVec2 pos,
                       float w, float h);
@@ -205,7 +206,6 @@ private:
     // unlike ticks, a snapshot doesn't replace them.
     std::unordered_map<std::string, std::pair<int, double>> levelSet_;
     std::unordered_map<std::string, std::pair<std::string, double>> colourSet_;
-    int dragFrom_ = 0;  // a switch tile's level when the drag across it began
     float pickColour_[3] = {1, 1, 1};  // the open colour picker's wheel
     std::unordered_map<std::string, std::array<char, 512>> newItem_;  // add boxes, by monitor
 

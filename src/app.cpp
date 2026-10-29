@@ -1744,7 +1744,7 @@ void App::checklist(const std::string& monitor, const Block& b) {
         float bsw = buttons * bw;  // the hover buttons' width
 
         if (b.switches) {
-            switchTile(monitor, key, it, done, right - ImGui::GetCursorScreenPos().x);
+            switchTile(monitor, key, it, done, right - ImGui::GetCursorScreenPos().x, titleW);
             ImGui::PopID();
             continue;
         }
@@ -1830,11 +1830,12 @@ void App::checklist(const std::string& monitor, const Block& b) {
     }
 }
 
-// switchTile draws an item of a switches block (a light) as a tile w wide:
-// title, subtitle (its level), colour swatch and a switch, on one line.
-// A click on the tile toggles it; with a slider, its level fills the tile
-// in its colour and a drag across the tile sets it, sent when let go.
-void App::switchTile(const std::string& monitor, const std::string& key, const Item& it, bool done, float w) {
+// switchTile draws an item of a switches block (a light) as a slim tile w
+// wide: its title (in a column titleW wide), a thin level line if it has a
+// slider (click or drag along it, sent when let go), its colour swatch and
+// a switch. A click elsewhere on the tile toggles it.
+void App::switchTile(const std::string& monitor, const std::string& key, const Item& it, bool done, float w,
+                     float titleW) {
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     double now = ImGui::GetTime();
@@ -1848,9 +1849,6 @@ void App::switchTile(const std::string& monitor, const std::string& key, const I
     int value = it.slider.value;
     if (auto l = levelSet_.find(key); l != levelSet_.end() && now - l->second.second < 10) value = l->second.first;
 
-    ImGui::PushFont(fonts_.caption);
-    float captionH = ImGui::GetTextLineHeight();
-    ImGui::PopFont();
     float pad = std::round(10 * scale_), lineH = ImGui::GetTextLineHeight();
     float h = std::round(lineH + 12 * scale_);
     float gap = std::round(4 * scale_);
@@ -1858,88 +1856,98 @@ void App::switchTile(const std::string& monitor, const std::string& key, const I
     ImVec2 end(pos.x + w, pos.y + h);
     float round = std::round(4 * scale_);
 
-    // The tile goes first, letting the swatch over it take its own clicks.
+    // The tile goes first, letting the line and swatch over it take their
+    // own clicks.
     ImGui::SetNextItemAllowOverlap();
-    ImGui::InvisibleButton("##tile", ImVec2(w, h));
-    bool hovered = ImGui::IsItemHovered(), active = ImGui::IsItemActive();
-    float dx = ImGui::GetMouseDragDelta(ImGuiMouseButton_Left).x;
-    bool dragging = it.slider.present && active && std::abs(dx) > 4 * scale_;
-    if (ImGui::IsItemActivated()) dragFrom_ = done ? 0 : value;
-    if (dragging) {
-        value = std::clamp(int(std::lround(dragFrom_ + dx / w * 100)), 0, 100);
-        levelSet_[key] = {value, now};
+    if (ImGui::InvisibleButton("##tile", ImVec2(w, h))) {
+        ticked_[key] = {!done, now};
+        act("toggle", "");
+        done = !done;
     }
-    if (ImGui::IsItemDeactivated()) {
-        if (it.slider.present && std::abs(dx) > 4 * scale_) {
-            if (value != it.slider.value) {
-                act(it.slider.action, std::to_string(value));
-                ticked_[key] = {value == 0, now};
-                levelSet_[key] = {value, now};
-            }
-        } else if (hovered) {
-            ticked_[key] = {!done, now};
-            act("toggle", "");
-            done = !done;
-        }
-    }
-    bool on = !done || dragging;
-    if (hovered || active) ImGui::SetMouseCursor(dragging ? ImGuiMouseCursor_ResizeEW : ImGuiMouseCursor_Hand);
-    if (hovered && !active && it.slider.present) ImGui::SetTooltip("Click to switch, drag across to dim");
+    bool hovered = ImGui::IsItemHovered();
+    if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    dl->AddRectFilled(pos, end, u32(hovered ? p.hover : p.frame), round);
+    bool on = !done;
 
-    dl->AddRectFilled(pos, end, u32(hovered || active ? p.hover : p.frame), round);
-    if (on && it.slider.present && value > 0) {
-        ImVec4 fill = hasColour ? ImVec4(rgb[0], rgb[1], rgb[2], 0.3f) : ImVec4(p.accent.x, p.accent.y, p.accent.z, 0.3f);
-        dl->PushClipRect(pos, ImVec2(pos.x + w * value / 100.0f, end.y), true);
-        dl->AddRectFilled(pos, end, u32(fill), round);
-        dl->PopClipRect();
-    }
-
-    // The swatch, just before the switch: filled while it's on, a ring
-    // while it's off.
+    // From the right: the switch, the swatch, then the line up to the title.
     float sh = std::round(lineH * 0.75f), sw = std::round(sh * 1.8f);
-    float sr = std::round(lineH * 0.4f);
     float right = pos.x + w - pad - sw - pad;
-    ImVec2 sc(right - sr, std::round(pos.y + h / 2));
+    float cy = std::round(pos.y + h / 2);
+
+    float sr = std::round(lineH * 0.4f);
     if (it.colour.present) {
+        ImVec2 sc(right - sr, cy);
         ImGui::SetCursorScreenPos(ImVec2(sc.x - sr - gap, sc.y - sr - gap));
         if (ImGui::InvisibleButton("##colour", ImVec2(2 * (sr + gap), 2 * (sr + gap)))) {
             if (!hasColour) rgb[0] = rgb[1] = rgb[2] = 1;
             std::copy(rgb, rgb + 3, pickColour_);
             ImGui::OpenPopup("##colours");
         }
-        bool sh = ImGui::IsItemHovered();
-        if (sh) {
+        bool over = ImGui::IsItemHovered();
+        if (over) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
             ImGui::SetTooltip("Colour");
         }
         float lw = std::max(1.0f, std::round(1.5f * scale_));
-        if (hasColour && !done) {
+        if (hasColour && on) {
             dl->AddCircleFilled(sc, sr, u32(ImVec4(rgb[0], rgb[1], rgb[2], 1)));
-            dl->AddCircle(sc, sr, u32(sh ? p.text : ImVec4(1, 1, 1, 0.25f)), 0, lw);
+            dl->AddCircle(sc, sr, u32(over ? p.text : ImVec4(1, 1, 1, 0.25f)), 0, lw);
         } else {
-            dl->AddCircle(sc, sr, u32(sh ? p.text : p.muted), 0, lw);
+            dl->AddCircle(sc, sr, u32(over ? p.text : p.muted), 0, lw);
         }
-        right -= 2 * sr + pad;
+        right -= 2 * sr + pad * 1.5f;
         colourPopup(monitor, key, it);
     }
 
-    // The title, then the subtitle (its level) before the swatch.
     float x = pos.x + pad;
-    std::string sub = dragging ? std::to_string(value) + "%" : !it.subtitle.empty() ? it.subtitle : on ? "" : "Off";
-    ImGui::PushFont(fonts_.caption);
-    float subW = ImGui::CalcTextSize(sub.c_str()).x;
-    dl->AddText(ImVec2(right - subW, std::round(pos.y + (h - captionH) / 2)),
-                u32(it.tone == Tone::None ? p.muted : ToneColour(it.tone)), sub.c_str());
-    ImGui::PopFont();
-    float textW = right - subW - pad - x;
-    dl->AddText(ImVec2(x, std::round(pos.y + (h - lineH) / 2)), u32(on ? p.text : p.muted), fit(it.title, textW).c_str());
+    std::string sub = it.tone == Tone::None ? "" : it.subtitle;  // only a warning, e.g. unavailable
+    if (!sub.empty()) {
+        ImGui::PushFont(fonts_.caption);
+        float subW = ImGui::CalcTextSize(sub.c_str()).x;
+        dl->AddText(ImVec2(right - subW, std::round(cy - ImGui::GetTextLineHeight() / 2)), u32(ToneColour(it.tone)), sub.c_str());
+        ImGui::PopFont();
+        right -= subW + pad;
+    }
+
+    float tw = it.slider.present ? titleW : right - x;
+    dl->AddText(ImVec2(x, std::round(cy - lineH / 2)), u32(on ? p.text : p.muted), fit(it.title, tw).c_str());
+
+    if (it.slider.present && right - (x + tw + pad) > 30 * scale_) {
+        float knob = std::round(5 * scale_);
+        float x0 = x + tw + pad + knob, x1 = right - knob;
+        ImGui::SetCursorScreenPos(ImVec2(x0 - knob, pos.y));
+        ImGui::InvisibleButton("##level", ImVec2(x1 - x0 + 2 * knob, h));
+        if (ImGui::IsItemActive()) {
+            float t = (ImGui::GetIO().MousePos.x - x0) / std::max(1.0f, x1 - x0);
+            value = std::clamp(int(std::lround(t * 100)), 0, 100);
+            levelSet_[key] = {value, now};
+            on = true;
+        }
+        if (ImGui::IsItemDeactivated() && value != it.slider.value) {
+            act(it.slider.action, std::to_string(value));
+            ticked_[key] = {value == 0, now};
+            levelSet_[key] = {value, now};
+        }
+        if (ImGui::IsItemHovered() || ImGui::IsItemActive()) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            ImGui::SetTooltip("%s %d%%", it.slider.hint.empty() ? "Level" : it.slider.hint.c_str(), on ? value : 0);
+        }
+        int shown = on ? value : 0;
+        ImVec4 fill = hasColour ? ImVec4(rgb[0], rgb[1], rgb[2], 1) : p.accent;
+        if (shown == 0) fill = p.muted;
+        float th = std::max(2.0f, std::round(3 * scale_));
+        float kx = x0 + (x1 - x0) * shown / 100.0f;
+        dl->AddRectFilled(ImVec2(x0, cy - th / 2), ImVec2(x1, cy + th / 2), u32(p.card), th / 2);
+        if (shown > 0) dl->AddRectFilled(ImVec2(x0, cy - th / 2), ImVec2(kx, cy + th / 2), u32(fill), th / 2);
+        dl->AddCircleFilled(ImVec2(kx, cy), knob, u32(fill));
+    }
 
     // The switch shows the state; the tile takes its clicks.
-    ImVec2 s0(pos.x + w - pad - sw, std::round(pos.y + (h - sh) / 2));
-    dl->AddRectFilled(s0, ImVec2(s0.x + sw, s0.y + sh), u32(on ? p.accent : p.card), sh / 2);
+    ImVec2 s0(pos.x + w - pad - sw, std::round(cy - sh / 2));
+    dl->AddRectFilled(s0, ImVec2(s0.x + sw, s0.y + sh), u32(!done ? p.accent : p.card), sh / 2);
     float kr = sh / 2 - std::max(2.0f, std::round(2 * scale_));
-    float kx = on ? s0.x + sw - sh / 2 : s0.x + sh / 2;
-    dl->AddCircleFilled(ImVec2(kx, s0.y + sh / 2), kr, u32(on ? ImVec4(1, 1, 1, 1) : p.muted));
+    float kx = !done ? s0.x + sw - sh / 2 : s0.x + sh / 2;
+    dl->AddCircleFilled(ImVec2(kx, s0.y + sh / 2), kr, u32(!done ? ImVec4(1, 1, 1, 1) : p.muted));
 
     ImGui::SetCursorScreenPos(ImVec2(pos.x, end.y + gap));
     ImGui::Dummy(ImVec2(0, 0));
