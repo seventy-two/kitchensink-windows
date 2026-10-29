@@ -55,9 +55,9 @@ result is a single `kitchensink.exe` with nothing to install.
 - Checklist items with a `slider` or `colour` get a slider, sent when let
   go, and a swatch opening presets and a colour wheel, lined up after the
   titles in place of the up and down buttons. A `switch` block (the `lights` monitor) draws each item as a
-  slim tile: its title, its slider as a thin line (click or drag along it,
+  slim row, flat on the panel: its title, its slider as a thin line (click or drag along it,
   sent when let go), a round colour swatch opening presets and a colour
-  wheel, and an on/off switch. Clicking elsewhere on the tile toggles it;
+  wheel, and an on/off switch. Clicking elsewhere on the row toggles it;
   a warning subtitle (e.g. unavailable) shows before the swatch.
 - Keeps the server's event stream open, reconnects with backoff, and
   catches up on events missed while offline. A burst of events becomes one
