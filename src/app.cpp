@@ -1831,7 +1831,7 @@ void App::checklist(const std::string& monitor, const Block& b) {
 }
 
 // switchTile draws an item of a switches block (a light) as a tile w wide:
-// colour swatch, title, subtitle (its level) and a switch, on one line.
+// title, subtitle (its level), colour swatch and a switch, on one line.
 // A click on the tile toggles it; with a slider, its level fills the tile
 // in its colour and a drag across the tile sets it, sent when let go.
 void App::switchTile(const std::string& monitor, const std::string& key, const Item& it, bool done, float w) {
@@ -1894,10 +1894,12 @@ void App::switchTile(const std::string& monitor, const std::string& key, const I
         dl->PopClipRect();
     }
 
-    // The swatch: filled while it's on, a ring while it's off.
+    // The swatch, just before the switch: filled while it's on, a ring
+    // while it's off.
+    float sh = std::round(lineH * 0.75f), sw = std::round(sh * 1.8f);
     float sr = std::round(lineH * 0.4f);
-    ImVec2 sc(pos.x + pad + sr, std::round(pos.y + h / 2));
-    float x = pos.x + pad;
+    float right = pos.x + w - pad - sw - pad;
+    ImVec2 sc(right - sr, std::round(pos.y + h / 2));
     if (it.colour.present) {
         ImGui::SetCursorScreenPos(ImVec2(sc.x - sr - gap, sc.y - sr - gap));
         if (ImGui::InvisibleButton("##colour", ImVec2(2 * (sr + gap), 2 * (sr + gap)))) {
@@ -1917,13 +1919,12 @@ void App::switchTile(const std::string& monitor, const std::string& key, const I
         } else {
             dl->AddCircle(sc, sr, u32(sh ? p.text : p.muted), 0, lw);
         }
-        x += 2 * sr + pad;
+        right -= 2 * sr + pad;
         colourPopup(monitor, key, it);
     }
 
-    // The title, then the subtitle (its level) just before the switch.
-    float sh = std::round(lineH * 0.75f), sw = std::round(sh * 1.8f);
-    float right = pos.x + w - pad - sw - pad;
+    // The title, then the subtitle (its level) before the swatch.
+    float x = pos.x + pad;
     std::string sub = dragging ? std::to_string(value) + "%" : !it.subtitle.empty() ? it.subtitle : on ? "" : "Off";
     ImGui::PushFont(fonts_.caption);
     float subW = ImGui::CalcTextSize(sub.c_str()).x;
