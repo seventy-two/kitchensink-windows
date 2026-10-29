@@ -1913,10 +1913,11 @@ void App::switchTile(const std::string& monitor, const std::string& key, const I
     dl->AddText(ImVec2(x, std::round(cy - lineH / 2)), u32(on ? p.text : p.muted), fit(it.title, tw).c_str());
 
     if (it.slider.present && right - (x + tw + pad) > 30 * scale_) {
-        float knob = std::round(5 * scale_);
-        float x0 = x + tw + pad + knob, x1 = right - knob;
-        ImGui::SetCursorScreenPos(ImVec2(x0 - knob, pos.y));
-        ImGui::InvisibleButton("##level", ImVec2(x1 - x0 + 2 * knob, h));
+        // The whole row's height, and a little past each end, takes clicks.
+        float slack = std::round(6 * scale_);
+        float x0 = x + tw + pad, x1 = right;
+        ImGui::SetCursorScreenPos(ImVec2(x0 - slack, pos.y));
+        ImGui::InvisibleButton("##level", ImVec2(x1 - x0 + 2 * slack, h));
         if (ImGui::IsItemActive()) {
             float t = (ImGui::GetIO().MousePos.x - x0) / std::max(1.0f, x1 - x0);
             value = std::clamp(int(std::lround(t * 100)), 0, 100);
@@ -1939,7 +1940,6 @@ void App::switchTile(const std::string& monitor, const std::string& key, const I
         float kx = x0 + (x1 - x0) * shown / 100.0f;
         dl->AddRectFilled(ImVec2(x0, cy - th / 2), ImVec2(x1, cy + th / 2), u32(p.frame), th / 2);
         if (shown > 0) dl->AddRectFilled(ImVec2(x0, cy - th / 2), ImVec2(kx, cy + th / 2), u32(fill), th / 2);
-        dl->AddCircleFilled(ImVec2(kx, cy), knob, u32(fill));
     }
 
     // The switch shows the state; the tile takes its clicks.
