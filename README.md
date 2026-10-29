@@ -58,7 +58,10 @@ result is a single `kitchensink.exe` with nothing to install.
   slim row, flat on the panel: its title, its slider as a thin line (click or drag along it,
   sent when let go), a round colour swatch opening presets and a colour
   wheel, and an on/off switch. Clicking elsewhere on the row toggles it;
-  a warning subtitle (e.g. unavailable) shows before the swatch.
+  a warning subtitle (e.g. unavailable) shows before the swatch. A `buttons` block (the lights'
+  summary block, drawn when the panel is short) is a row of small buttons,
+  lit with a dot of the item's colour while on; clicking one opens its
+  tile in a popup under it.
 - Keeps the server's event stream open, reconnects with backoff, and
   catches up on events missed while offline. A burst of events becomes one
   notification.

@@ -121,6 +121,7 @@ private:
     void checklist(const std::string& monitor, const Block& b);
     void switchTile(const std::string& monitor, const std::string& key, const Item& it, bool done, float w,
                     float titleW);
+    void checklistButtons(const std::string& monitor, const Block& b);
     void colourPopup(const std::string& monitor, const std::string& key, const Item& it);
     void itemControls(const std::string& monitor, const std::string& key, const Item& it, bool done, ImVec2 pos,
                       float w, float h);

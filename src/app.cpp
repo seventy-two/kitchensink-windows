@@ -1710,6 +1710,7 @@ void App::mediaBlock(const Block& b) {
 // change is sent to the monitor as an action; ticks, slider values and
 // colours show at once, ahead of the server's snapshot.
 void App::checklist(const std::string& monitor, const Block& b) {
+    if (b.buttons) return checklistButtons(monitor, b);
     const Palette& p = Colours();
     const ImGuiStyle& st = ImGui::GetStyle();
     auto act = [&](nlohmann::json action) { client_->Act(monitor, action.dump()); };
@@ -1828,6 +1829,75 @@ void App::checklist(const std::string& monitor, const Block& b) {
             ImGui::SetKeyboardFocusHere(-1);  // stay in the box for the next one
         }
     }
+}
+
+// checklistButtons draws a checklist's items as small buttons in a row,
+// wrapping; in a switches block, lit (with a dot of the item's colour)
+// while on. Clicking one opens its controls, as a switch tile, in a popup.
+void App::checklistButtons(const std::string& monitor, const Block& b) {
+    const Palette& p = Colours();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    double now = ImGui::GetTime();
+    ImVec2 start = ImGui::GetCursorScreenPos();
+    float right = start.x + ImGui::GetContentRegionAvail().x;
+    float gap = std::round(4 * scale_), padX = std::round(7 * scale_), dot = std::round(3 * scale_);
+    ImGui::PushFont(fonts_.caption);
+    float h = std::round(ImGui::GetTextLineHeight() + 6 * scale_);
+    float x = start.x, y = start.y;
+    for (const Item& it : b.items) {
+        ImGui::PushID(it.id.c_str());
+        std::string key = monitor + "/" + it.id;
+        bool done = it.done;
+        if (auto t = ticked_.find(key); t != ticked_.end() && now - t->second.second < 10) done = t->second.first;
+        bool on = b.switches ? !done : done;
+        std::string colour = it.colour.value;
+        if (auto c = colourSet_.find(key); c != colourSet_.end() && now - c->second.second < 10) colour = c->second.first;
+        float rgb[3];
+        bool hasColour = ParseHexColour(colour, rgb) && b.switches && on;
+
+        float w = ImGui::CalcTextSize(it.title.c_str()).x + 2 * padX + (hasColour ? 2 * dot + padX / 2 : 0);
+        if (x > start.x && x + w > right) {
+            x = start.x;
+            y += h + gap;
+        }
+        ImGui::SetCursorScreenPos(ImVec2(x, y));
+        if (ImGui::InvisibleButton("##light", ImVec2(w, h))) ImGui::OpenPopup("##controls");
+        bool hovered = ImGui::IsItemHovered();
+        if (hovered) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            localHovered_ = true;  // a click here isn't for the panel
+        }
+        ImVec2 a(x, y), z(x + w, y + h);
+        dl->AddRectFilled(a, z, u32(hovered ? p.hover : p.frame), std::round(3 * scale_));
+        float tx = x + padX;
+        if (hasColour) {
+            dl->AddCircleFilled(ImVec2(tx + dot, std::round(y + h / 2)), dot, u32(ImVec4(rgb[0], rgb[1], rgb[2], 1)));
+            tx += 2 * dot + padX / 2;
+        }
+        ImVec4 text = !on ? p.muted : it.tone == Tone::None ? p.text : ToneColour(it.tone);
+        dl->AddText(ImVec2(tx, std::round(y + (h - ImGui::GetTextLineHeight()) / 2)), u32(text), it.title.c_str());
+
+        // The controls, in the body's font, sized to fit the title.
+        ImGui::PushFont(fonts_.body);
+        ImGui::SetNextWindowSize(ImVec2(std::round(300 * scale_), 0));
+        ImGui::SetNextWindowPos(ImVec2(x, y + h + gap), ImGuiCond_Appearing);  // under its button
+        if (ImGui::BeginPopup("##controls")) {
+            float avail = ImGui::GetContentRegionAvail().x;
+            float titleW = std::min(ImGui::CalcTextSize(it.title.c_str()).x, avail * 0.45f);
+            if (b.switches) switchTile(monitor, key, it, done, avail, titleW);
+            else if (ImGui::Checkbox(it.title.c_str(), &done)) {
+                ticked_[key] = {done, now};
+                client_->Act(monitor, nlohmann::json{{"type", "toggle"}, {"id", it.id}}.dump());
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopFont();
+        x += w + gap;
+        ImGui::PopID();
+    }
+    ImGui::PopFont();
+    ImGui::SetCursorScreenPos(ImVec2(start.x, y + h));
+    ImGui::Dummy(ImVec2(0, 0));
 }
 
 // switchTile draws an item of a switches block (a light) as a slim row w

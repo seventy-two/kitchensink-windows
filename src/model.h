@@ -125,6 +125,9 @@ struct Block {
     std::string upHint, downHint;
     // A checklist drawn as on/off switches: on while an item isn't done.
     bool switches = false;
+    // A checklist drawn as small buttons in a row, each opening its
+    // controls in a popup (a summary block).
+    bool buttons = false;
     bool isPrivate = false;  // personal figures, hidden on request
     Media media;
     std::vector<Stat> stats;

@@ -114,6 +114,7 @@ Block parseBlock(const json& j) {
     b.upHint = str(j, "upHint");
     b.downHint = str(j, "downHint");
     b.switches = flag(j, "switch");
+    b.buttons = flag(j, "buttons");
     b.isPrivate = flag(j, "private");
     return b;
 }
