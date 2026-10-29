@@ -113,6 +113,7 @@ Block parseBlock(const json& j) {
     b.movable = j.value("movable", false);
     b.upHint = str(j, "upHint");
     b.downHint = str(j, "downHint");
+    b.switches = flag(j, "switch");
     b.isPrivate = flag(j, "private");
     return b;
 }

@@ -1744,8 +1744,12 @@ void App::checklist(const std::string& monitor, const Block& b) {
 
         ImVec2 rowMin = ImGui::GetCursorScreenPos();
         bool toggle = false;
-        bool v = done;
-        if (ImGui::Checkbox("##done", &v)) toggle = true;
+        if (b.switches) {
+            if (onOffSwitch(!done)) toggle = true;
+        } else {
+            bool v = done;
+            if (ImGui::Checkbox("##done", &v)) toggle = true;
+        }
         ImGui::SameLine();
         ImVec4 titleColour = done ? p.muted : it.tone == Tone::None ? p.text : ToneColour(it.tone);
         if (controls) {
@@ -1763,7 +1767,7 @@ void App::checklist(const std::string& monitor, const Block& b) {
         ImVec2 textMin = ImGui::GetItemRectMin(), textMax = ImGui::GetItemRectMax();
         if (ImGui::IsItemHovered()) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         if (ImGui::IsItemClicked()) toggle = true;
-        if (done && textMax.y - textMin.y < ImGui::GetTextLineHeight() * 1.5f) {
+        if (done && !b.switches && textMax.y - textMin.y < ImGui::GetTextLineHeight() * 1.5f) {
             float y = std::round((textMin.y + textMax.y) / 2);
             ImGui::GetWindowDrawList()->AddLine(ImVec2(textMin.x, y), ImVec2(textMax.x, y), u32(p.muted));
         }
@@ -1822,6 +1826,27 @@ void App::checklist(const std::string& monitor, const Block& b) {
             ImGui::SetKeyboardFocusHere(-1);  // stay in the box for the next one
         }
     }
+}
+
+// onOffSwitch draws a small switch, the height of a checkbox, and returns
+// true when it's clicked.
+bool App::onOffSwitch(bool on) {
+    const Palette& p = Colours();
+    float h = ImGui::GetFrameHeight(), w = std::round(h * 1.8f);
+    ImVec2 pos = ImGui::GetCursorScreenPos();
+    bool clicked = ImGui::InvisibleButton("##switch", ImVec2(w, h));
+    bool hovered = ImGui::IsItemHovered();
+    if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float th = std::round(h * 0.7f), y0 = std::round(pos.y + (h - th) / 2);
+    ImVec4 track = on ? p.accent : p.frame;
+    if (hovered) track = on ? ImVec4(track.x * 0.85f, track.y * 0.85f, track.z * 0.85f, 1) : p.hover;
+    dl->AddRectFilled(ImVec2(pos.x, y0), ImVec2(pos.x + w, y0 + th), u32(track), th / 2);
+    if (!on) dl->AddRect(ImVec2(pos.x, y0), ImVec2(pos.x + w, y0 + th), u32(p.muted), th / 2, 0, std::max(1.0f, scale_));
+    float r = th / 2 - std::max(2.0f, std::round(2 * scale_));
+    float cx = on ? pos.x + w - th / 2 : pos.x + th / 2;
+    dl->AddCircleFilled(ImVec2(cx, y0 + th / 2), r, u32(on ? p.card : p.muted));
+    return clicked;
 }
 
 // itemControls draws a checklist item's slider and colour swatch in w x h

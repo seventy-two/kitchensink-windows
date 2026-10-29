@@ -123,6 +123,8 @@ struct Block {
     // and what they do when it isn't moving the item in the list.
     bool movable = false;
     std::string upHint, downHint;
+    // A checklist drawn as on/off switches: on while an item isn't done.
+    bool switches = false;
     bool isPrivate = false;  // personal figures, hidden on request
     Media media;
     std::vector<Stat> stats;

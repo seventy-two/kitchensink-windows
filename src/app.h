@@ -119,6 +119,7 @@ private:
     void table(const std::string& monitor, const Block& b);
     void list(const Block& b);
     void checklist(const std::string& monitor, const Block& b);
+    bool onOffSwitch(bool on);
     void itemControls(const std::string& monitor, const std::string& key, const Item& it, bool done, ImVec2 pos,
                       float w, float h);
     void mediaBlock(const Block& b);

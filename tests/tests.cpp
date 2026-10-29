@@ -71,7 +71,7 @@ static void testParseSnapshot() {
              "rows": [[{"text": "Today", "url": "https://example.com", "detail": "dry"}, {"text": "15°", "tone": "bad"}]]},
             {"type": "list", "items": [{"title": "Car", "image": "https://example.com/a.jpg", "tone": "warn"}]},
             {"type": "text", "text": "hello", "unknown": {"nested": true}},
-            {"type": "checklist", "addHint": "Add a task…", "deleteHint": "Put off a day", "noDelete": true, "movable": true, "downHint": "Later", "items": [{"id": "a1", "title": "Bins", "done": true}, {"id": "b2", "title": "Post", "slider": {"value": 140, "action": "brightness", "hint": "Brightness"}, "colour": {"value": "#ff8000", "action": "colour", "wheel": true, "presets": [{"label": "Warm white", "value": "2700K", "show": "#ffa757"}]}}]}
+            {"type": "checklist", "addHint": "Add a task…", "deleteHint": "Put off a day", "noDelete": true, "movable": true, "switch": true, "downHint": "Later", "items": [{"id": "a1", "title": "Bins", "done": true}, {"id": "b2", "title": "Post", "slider": {"value": 140, "action": "brightness", "hint": "Brightness"}, "colour": {"value": "#ff8000", "action": "colour", "wheel": true, "presets": [{"label": "Warm white", "value": "2700K", "show": "#ffa757"}]}}]}
         ],
         "summary": [{"label": "Now", "value": "13°C", "tone": "good", "series": [1, 2]}, {"label": "Rain"}],
         "summaryStyle": "chips",
@@ -94,7 +94,7 @@ static void testParseSnapshot() {
     CHECK_EQ(s.blocks.size(), size_t(5));
     CHECK_EQ(s.blocks[4].addHint, std::string("Add a task…"));
     CHECK_EQ(s.blocks[4].deleteHint, std::string("Put off a day"));
-    CHECK(s.blocks[4].noDelete && s.blocks[4].movable);
+    CHECK(s.blocks[4].noDelete && s.blocks[4].movable && s.blocks[4].switches);
     CHECK(!s.blocks[4].items[0].slider.present && !s.blocks[4].items[0].colour.present);
     CHECK(s.blocks[4].items[1].slider.present && s.blocks[4].items[1].slider.value == 100);
     CHECK(s.blocks[4].items[1].slider.action == "brightness" && s.blocks[4].items[1].slider.hint == "Brightness");
