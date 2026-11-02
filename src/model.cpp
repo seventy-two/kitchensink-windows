@@ -71,6 +71,7 @@ Block parseBlock(const json& j) {
         std::vector<Cell> row;
         for (const auto& c : r) {
             Cell cell{str(c, "text"), str(c, "url"), tone(c), str(c, "detail")};
+            cell.open = str(c, "open");
             auto local = c.find("local");
             if (local != c.end() && local->is_object()) {
                 cell.localApp = str(*local, "app");
@@ -90,6 +91,7 @@ Block parseBlock(const json& j) {
         auto done = i.find("done");
         Item item{str(i, "title"), str(i, "subtitle"), str(i, "detail"), str(i, "url"), str(i, "image"),
                   tone(i), str(i, "id"), done != i.end() && done->is_boolean() && done->get<bool>()};
+        item.open = str(i, "open");
         if (auto sl = i.find("slider"); sl != i.end() && sl->is_object()) {
             item.slider.present = true;
             auto v = sl->find("value");
@@ -430,6 +432,13 @@ void Model::SetCleared(Cleared c) {
     events_.erase(std::remove_if(events_.begin(), events_.end(),
                                  [&](const Event& e) { return e.id <= cleared_.through || cleared_.ids.count(e.id); }),
                   events_.end());
+}
+
+bool IsAppName(const std::string& s) {
+    if (s.empty() || s.size() > 32) return false;
+    for (char c : s)
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) return false;
+    return true;
 }
 
 bool ParseHexColour(const std::string& s, float rgb[3]) {

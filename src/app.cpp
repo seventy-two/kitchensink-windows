@@ -68,13 +68,13 @@ void textAligned(const std::string& s, Align align, const ImVec4& colour) {
 bool linkHovered = false;
 
 // linkBehaviour makes the last item open url when clicked.
-void linkBehaviour(const std::string& url) {
+void linkBehaviour(const std::string& url, const std::string& app = "") {
     if (url.empty() || !ImGui::IsItemHovered()) return;
     linkHovered = true;
     ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
     ImGui::GetWindowDrawList()->AddLine(ImVec2(min.x, max.y), max, u32(Colours().muted));
-    if (ImGui::IsItemClicked()) OpenURL(url);
+    if (ImGui::IsItemClicked()) OpenURL(url, app);
 }
 
 void mutedText(const std::string& s) { ImGui::TextColored(Colours().muted, "%s", s.c_str()); }
@@ -174,8 +174,22 @@ void weatherIcon(const std::string& name, ImVec2 at, float size) {
 
 }  // namespace
 
-void OpenURL(const std::string& url) {
+void OpenURL(const std::string& url, const std::string& app) {
     if (url.rfind("https://", 0) != 0 && url.rfind("http://", 0) != 0) return;
+    if (IsAppName(app)) {
+        const wchar_t* local = _wgetenv(L"LOCALAPPDATA");
+        std::wstring name = Widen(app);
+        std::wstring exe = std::wstring(local ? local : L"") + L"\\Programs\\" + name + L"\\" + name + L".exe";
+        if (GetFileAttributesW(exe.c_str()) != INVALID_FILE_ATTRIBUTES) {
+            // Quoted: the app gets the URL as one argument. URLs have no
+            // quotes of their own (they'd be %22).
+            if (url.find('"') == std::string::npos) {
+                std::wstring arg = L"\"" + Widen(url) + L"\"";
+                ShellExecuteW(nullptr, L"open", exe.c_str(), arg.c_str(), nullptr, SW_SHOWNORMAL);
+                return;
+            }
+        }
+    }
     ShellExecuteW(nullptr, L"open", Widen(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
 
@@ -2268,7 +2282,7 @@ void App::table(const std::string& monitor, const Block& b) {
                 continue;
             }
             textAligned(cell.text, b.columns[c].align, ToneColour(cell.tone));
-            linkBehaviour(cell.url);
+            linkBehaviour(cell.url, cell.open);
             if (!cell.detail.empty()) {
                 ImGui::PushFont(fonts_.caption);
                 if (b.columns[c].align == Align::Left) wrapped(cell.detail, Colours().muted);
@@ -2335,7 +2349,7 @@ void App::list(const Block& b) {
             dl->AddRectFilled(start, end, u32(p.hover));
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         }
-        if (ImGui::IsItemClicked()) OpenURL(it.url);
+        if (ImGui::IsItemClicked()) OpenURL(it.url, it.open);
         dl->ChannelsMerge();
         ImGui::PopID();
     }

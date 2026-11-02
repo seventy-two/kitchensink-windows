@@ -55,6 +55,9 @@ struct Cell {
     std::string text, url;
     Tone tone = Tone::None;
     std::string detail;  // a smaller, muted line under the text
+    // An app on this PC to open url with (a Reddit reader), where it's
+    // installed; the browser otherwise.
+    std::string open;
     // A button for an app on this PC (watchgrab), run with localArg; drawn
     // only where the app is installed.
     std::string localApp, localArg;
@@ -95,7 +98,13 @@ struct Item {
     bool done = false;
     Slider slider;
     Colour colour;
+    std::string open;  // as for a Cell
 };
+
+// IsAppName reports whether s can name an app the server asks a client to
+// run (Cell::open): 1-32 lower-case letters, digits and hyphens, so it can't
+// reach outside its own folder.
+bool IsAppName(const std::string& s);
 
 // ParseHexColour reads "#rrggbb" into rgb (0-1); false if it isn't one.
 bool ParseHexColour(const std::string& s, float rgb[3]);

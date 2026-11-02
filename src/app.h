@@ -235,6 +235,8 @@ private:
 
 // OpenURL opens an http or https URL in the default browser. Other schemes
 // are ignored, since URLs come from the server.
-void OpenURL(const std::string& url);
+// If app names an app installed under %LOCALAPPDATA%\Programs (app\app.exe),
+// it's run with the URL instead.
+void OpenURL(const std::string& url, const std::string& app = "");
 
 }  // namespace ks

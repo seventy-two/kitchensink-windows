@@ -105,6 +105,8 @@ static void testParseSnapshot() {
         float rgb[3];
         CHECK(ParseHexColour("#ff8000", rgb) && rgb[0] == 1.0f && rgb[2] == 0.0f);
         CHECK(HexColour(rgb) == "#ff8000");
+        CHECK(IsAppName("lurk") && IsAppName("kitchen-sink2"));
+        CHECK(!IsAppName("") && !IsAppName("..") && !IsAppName("a\\b") && !IsAppName("Lurk") && !IsAppName(std::string(33, 'a')));
         CHECK(!ParseHexColour("ff8000", rgb) && !ParseHexColour("#ff80zz", rgb) && !ParseHexColour("", rgb));
     }
     CHECK_EQ(s.blocks[4].downHint, std::string("Later"));

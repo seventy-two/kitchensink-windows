@@ -46,6 +46,12 @@ result is a single `kitchensink.exe` with nothing to install.
   film stands from watchgrab's `state.json`: added (green tick), already
   had (grey tick), no release yet (amber, click to look again) or a failure
   (red, click to retry), with the detail on hover.
+- **Links that open in an app**: a link (table cell or list item) can name
+  an app to open it with (`open`). If `%LOCALAPPDATA%\Programs\<app>\<app>.exe`
+  exists, clicking runs it with the URL; otherwise the browser opens the
+  link as usual. The Reddit panel uses this for lurk, a Reddit reader. The
+  name must be lower-case letters, digits and hyphens, so a server can't
+  point it anywhere else.
 - **Files for monitors**: a monitor can ask for a file on this PC
   (`upload`): every 5 seconds the client looks at its last-write time and,
   when the wanted lines have changed (and once each start), sends them.
