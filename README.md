@@ -21,6 +21,9 @@ result is a single `kitchensink.exe` with nothing to install.
   open or close it yourself. Panels have no titles: an open one keeps its controls
   in a slim strip down its right edge. The layout follows the window live
   as it's resized.
+- In the wide layout, where every panel fits open, a panel's chevron (top
+  right, on hover) folds it to its summary row; click the row to open it
+  again. The choice is remembered and carries over to the compact layout.
 - Adds a panel about the PC it runs on, **This PC**: CPU, memory, GPU and
   video memory, each with a minute's history, and each fixed drive's use.
   It reads Windows' own counters once a second, only while the window is

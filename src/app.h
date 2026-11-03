@@ -95,7 +95,8 @@ private:
     // cards draws the main column's panels; compactCards the same in the
     // compact layout.
     void cards(float width, const std::vector<Snapshot>& snaps);
-    void card(const Snapshot& s, float width);
+    bool card(const Snapshot& s, float width);
+    bool collapseButton(bool show);
     void compactCards(float width, const std::vector<Snapshot>& snaps);
     float compactCard(const Snapshot& s, float width, Show show, float body, bool* clicked);
     void summary(const std::vector<Stat>& stats, float width);

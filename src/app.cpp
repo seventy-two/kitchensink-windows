@@ -742,15 +742,49 @@ void App::cards(float width, const std::vector<Snapshot>& snaps) {
         if (c > 0) ImGui::SameLine(0, gap);
         ImGui::BeginGroup();
         for (size_t i : columns[c]) {
-            card(snaps[i], colW);
+            // A panel can be folded to its summary row even when there's
+            // room for it, kept in the same list as the compact layout's.
+            const std::string& id = snaps[i].monitor;
+            bool collapsed = config_.collapsed.count(id) > 0, toggle = false;
+            if (collapsed) {
+                ImGui::PushID("row");
+                heights_[id] = compactCard(snaps[i], colW, Show::Row, 0, &toggle);
+                ImGui::PopID();
+            } else {
+                toggle = card(snaps[i], colW);
+            }
             ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y * 2));
+            if (!toggle) continue;
+            config_.expanded.erase(id);
+            if (collapsed) config_.collapsed.erase(id);
+            else config_.collapsed.insert(id);
+            SaveConfig(config_);
         }
         ImGui::EndGroup();
     }
     dragDrop();
 }
 
-void App::card(const Snapshot& s, float width) {
+// collapseButton is an open wide-layout panel's chevron, folding it to its
+// summary row. When not shown its space is kept. It reports a click.
+bool App::collapseButton(bool show) {
+    ImGuiStyle& st = ImGui::GetStyle();
+    float bw = ImGui::CalcTextSize(icon::ChevronUp).x + st.FramePadding.x * 2;
+    if (!show) {
+        ImGui::Dummy(ImVec2(bw, ImGui::GetFrameHeight()));
+        return false;
+    }
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text, Colours().muted);
+    bool clicked = ImGui::Button(icon::ChevronUp);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Collapse");
+    ImGui::PopStyleColor(2);
+    return clicked;
+}
+
+// card draws an open panel in the wide layout. It reports whether its
+// collapse chevron was clicked.
+bool App::card(const Snapshot& s, float width) {
     const Palette& p = Colours();
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * scale_, 14 * scale_));
@@ -767,10 +801,25 @@ void App::card(const Snapshot& s, float width) {
     // updated and refresh on the right. Local panels need neither, and
     // the age only shows on hover, for monitors where it matters now.
     bool local = IsLocal(s);
-    if (!local || !s.subtitle.empty()) {
+    bool collapse = false;
+    ImGui::PushID(s.monitor.c_str());
+    ImGui::PushID("collapse");
+    if (local && s.subtitle.empty()) {
+        // No top line to put it on: it floats in the corner on hover.
         ImGui::PushFont(fonts_.caption);
+        ImVec2 saved = ImGui::GetCursorScreenPos();
+        float bw = ImGui::CalcTextSize(icon::ChevronUp).x + ImGui::GetStyle().FramePadding.x * 2;
+        ImGui::SetCursorScreenPos(ImVec2(saved.x + ImGui::GetContentRegionAvail().x - bw, saved.y));
+        if (show) collapse = collapseButton(true);
+        ImGui::SetCursorScreenPos(saved);
+        ImGui::PopFont();
+    } else {
+        ImGui::PushFont(fonts_.caption);
+        ImGuiStyle& st = ImGui::GetStyle();
+        float cw = ImGui::CalcTextSize(icon::ChevronUp).x + st.FramePadding.x * 2 + st.ItemSpacing.x;
         ImGui::AlignTextToFramePadding();
         mutedText(s.subtitle);
+        if (local) ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - cw + st.ItemSpacing.x);
         if (!local) {
             bool pending = refreshing_.count(s.monitor) && ImGui::GetTime() - refreshing_[s.monitor] < 15;
             std::string when = pending                     ? "refreshing…"
@@ -780,7 +829,7 @@ void App::card(const Snapshot& s, float width) {
             float bw = ImGui::CalcTextSize(icon::Refresh).x + st.FramePadding.x * 2;
             float ww = ImGui::CalcTextSize(when.c_str()).x;
             float pw = s.paste.empty() ? 0 : ImGui::CalcTextSize(icon::Paste).x + st.FramePadding.x * 2 + st.ItemSpacing.x;
-            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - bw - pw - ww - st.ItemSpacing.x);
+            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - bw - pw - ww - cw - st.ItemSpacing.x);
             ImGui::AlignTextToFramePadding();
             mutedText(when);
             if (!s.paste.empty()) {
@@ -791,9 +840,13 @@ void App::card(const Snapshot& s, float width) {
             ImGui::SameLine();
             if (show) refreshButton(s);
             else ImGui::Dummy(ImVec2(bw, ImGui::GetFrameHeight()));
+            ImGui::SameLine();
         }
+        collapse = collapseButton(show);
         ImGui::PopFont();
     }
+    ImGui::PopID();
+    ImGui::PopID();
 
     if (!s.error.empty()) {
         ImGui::PushFont(fonts_.caption);
@@ -814,6 +867,7 @@ void App::card(const Snapshot& s, float width) {
     bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     heights_[s.monitor] = ImGui::GetItemRectSize().y;
     cardRects_.push_back({s.monitor, ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax())});
+    return collapse;
 }
 
 void App::refreshButton(const Snapshot& s) {
