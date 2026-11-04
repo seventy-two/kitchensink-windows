@@ -104,6 +104,10 @@ Config LoadConfig() {
     if (auto it = j.find("apps"); it != j.end() && it->is_array())
         for (const auto& a : *it)
             if (a.is_string()) c.apps.push_back(a.get<std::string>());
+    if (auto it = j.find("privateApps"); it != j.end() && it->is_array())
+        for (const auto& a : *it)
+            if (a.is_string()) c.privateApps.push_back(a.get<std::string>());
+    c.hideApps = j.value("hideApps", false);
     return c;
 }
 
@@ -123,6 +127,8 @@ bool SaveConfig(const Config& c) {
         {"collapsed", c.collapsed},
         {"order", c.order},
         {"apps", c.apps},
+        {"privateApps", c.privateApps},
+        {"hideApps", c.hideApps},
     };
     std::wstring path = configPath(true);
     std::wstring tmp = path + L".tmp";

@@ -45,6 +45,10 @@ struct Config {
     // The apps menu in the title bar: each a name, for
     // %LOCALAPPDATA%\Programs\<name>\<name>.exe, or a full path to an exe.
     std::vector<std::string> apps;
+    // Apps (named as in "apps") left out of the menu while hideApps is on,
+    // toggled from the eye's right-click menu.
+    std::vector<std::string> privateApps;
+    bool hideApps = false;
 };
 
 // LoadConfig reads the settings, leaving defaults for anything missing.

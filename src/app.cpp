@@ -586,9 +586,11 @@ void App::header() {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Settings");
 
     // Hide or show private figures, e.g. a portfolio, at a click: only
-    // there when a monitor sends some.
+    // there when a monitor sends some, or there are private apps to hide
+    // (from its right-click menu).
     const auto& snaps = model_.Snapshots();
-    if (std::any_of(snaps.begin(), snaps.end(), [](const Snapshot& s) { return HasPrivate(s); })) {
+    bool privateFigures = std::any_of(snaps.begin(), snaps.end(), [](const Snapshot& s) { return HasPrivate(s); });
+    if (privateFigures || !config_.privateApps.empty()) {
         float ew = ImGui::CalcTextSize(icon::View).x + ImGui::GetStyle().FramePadding.x * 2;
         ImGui::SameLine();
         ImGui::SetCursorPos(ImVec2(left - origin.x - 8 * scale_ - bw - 4 * scale_ - ew, mid - ImGui::GetFrameHeight() / 2));
@@ -606,15 +608,30 @@ void App::header() {
         }
         noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
         buttonsLeft = ImGui::GetItemRectMin().x;
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", config_.hidePrivate ? "Show private figures" : "Hide private figures");
+        if (ImGui::IsItemHovered() && !ImGui::IsPopupOpen("##eyeMenu"))
+            ImGui::SetTooltip("%s%s", config_.hidePrivate ? "Show private figures" : "Hide private figures",
+                              config_.privateApps.empty() ? "" : "\nRight-click for private apps");
         if (toggle) {
             config_.hidePrivate = !config_.hidePrivate;
             SaveConfig(config_);
         }
+        ImGui::OpenPopupOnItemClick("##eyeMenu", ImGuiPopupFlags_MouseButtonRight);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6 * scale_, 6 * scale_));
+        if (ImGui::BeginPopup("##eyeMenu")) {
+            if (privateFigures && ImGui::MenuItem("Hide private figures", nullptr, config_.hidePrivate)) {
+                config_.hidePrivate = !config_.hidePrivate;
+                SaveConfig(config_);
+            }
+            if (!config_.privateApps.empty() && ImGui::MenuItem("Hide private apps", nullptr, config_.hideApps)) {
+                config_.hideApps = !config_.hideApps;
+                SaveConfig(config_);
+            }
+            ImGui::EndPopup();
+        }
+        ImGui::PopStyleVar();
     }
     if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
-    if (!launcher_.Installed().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
+    if (!shownApps().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float x = buttonsLeft - 16 * scale_ - clockW;
@@ -2464,6 +2481,18 @@ float App::lickButton(float right, float mid) {
     return min.x;
 }
 
+// shownApps is the apps menu's apps: those installed, less the private ones
+// while they're hidden.
+std::vector<LaunchApp> App::shownApps() {
+    std::vector<LaunchApp> out;
+    for (const auto& a : launcher_.Installed()) {
+        bool hidden = config_.hideApps && std::find(config_.privateApps.begin(), config_.privateApps.end(), a.name) !=
+                                              config_.privateApps.end();
+        if (!hidden) out.push_back(a);
+    }
+    return out;
+}
+
 // appsButton draws Windows 95's flag in the title bar, ending at right, that opens a
 // menu of the user's own apps (config.json's "apps", in A-Z order): each with its icon,
 // and a dot while it's running. Picking one brings it to the front or
@@ -2533,13 +2562,14 @@ float App::appsButton(float right, float mid) {
     ImGui::SetNextWindowPos(ImVec2(max.x, max.y + 4 * scale_), ImGuiCond_Always, ImVec2(1, 0));
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6 * scale_, 6 * scale_));
     if (ImGui::BeginPopup("##apps")) {
+        std::vector<LaunchApp> apps = shownApps();
         float iconSize = std::round(20 * scale_), pad = 6 * scale_;
         float rowH = std::max(iconSize, ImGui::GetTextLineHeight()) + pad * 2;
         float rw = 0;
-        for (const auto& a : launcher_.Installed()) rw = std::max(rw, ImGui::CalcTextSize(a.name.c_str()).x);
+        for (const auto& a : apps) rw = std::max(rw, ImGui::CalcTextSize(a.name.c_str()).x);
         rw += iconSize + pad * 4 + 14 * scale_;
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        for (const auto& a : launcher_.Installed()) {
+        for (const auto& a : apps) {
             ImGui::PushID(a.name.c_str());
             ImVec2 at = ImGui::GetCursorScreenPos();
             if (ImGui::Selectable("##app", false, 0, ImVec2(rw, rowH - ImGui::GetStyle().ItemSpacing.y))) launcher_.Open(a);

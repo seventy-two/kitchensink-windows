@@ -102,6 +102,9 @@ result is a single `kitchensink.exe` with nothing to install.
   `config.json` as `"apps"`: a name for
   `%LOCALAPPDATA%\Programs\<name>\<name>.exe`, or a full path to an exe.
   Ones that aren't there are left out, and with none the flag doesn't show.
+  Apps named in `"privateApps"` can be hidden from the menu with **Hide
+  private apps** in the eye's right-click menu (the eye shows whenever
+  there are private apps), and it's remembered.
 - There are no scrollbars: the Recent column, the panels under it, the
   panels column and a panel cut short to fit scroll with the mouse wheel.
 - In the bottom-right corner, under Recent, a strip of countryside shows the sky as it is now: the
