@@ -162,6 +162,7 @@ private:
     bool stale(const Snapshot& s) const;
     bool newsDirty_ = false;
     double newsSaved_ = -1e9;
+    bool stackSwitches_ = false;  // drawing the side column's switches, one group a line
     bool sideShown_ = false;  // the side column (Recent) is up
     bool ultra_ = false;       // the ultra compact layout
     bool slimPanel_ = false;   // drawing a panel whose closed row is a slim line

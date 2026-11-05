@@ -279,7 +279,9 @@ void App::switchesBar(const Snapshot& s, float width) {
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar();
+    stackSwitches_ = true;
     checklistButtons(s.monitor, s.summaryBlock[0]);
+    stackSwitches_ = false;
     if (!s.error.empty()) {
         ImGui::PushFont(fonts_.caption);
         wrapped(std::string(icon::Warning) + "  " + s.error, Colours().warn);
@@ -2207,6 +2209,18 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
         labels[i] = joined[i] ? title.substr(group.size() + 1) : title;
         widths[i] = ImGui::CalcTextSize(labels[i].c_str()).x + 2 * padX + (b.switches ? bulbW + padX / 2 : 0);
     }
+    // Stacked (the side column's card): each group a line of its own, the
+    // full width, shared equally by its halves.
+    bool stack = stackSwitches_ && b.switches;
+    if (stack) {
+        for (size_t i = 0; i < n; i++) {
+            if (joined[i]) continue;
+            size_t k = 1;
+            while (i + k < n && joined[i + k]) k++;
+            float each = std::floor((right - start.x - seam * float(k - 1)) / float(k));
+            for (size_t j = i; j < i + k; j++) widths[j] = each;
+        }
+    }
     for (size_t i = 0; i < n; i++) {
         const Item& it = b.items[i];
         ImGui::PushID(it.id.c_str());
@@ -2224,6 +2238,8 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
         bool last = i + 1 == n || !joined[i + 1];
         if (joined[i]) {
             x += seam - gap;  // up against the one before
+        } else if (stack) {
+            if (i > 0) x = start.x, y += h + gap;
         } else {
             if (i > 0) x += groupGap - gap;
             // A group wraps whole.
