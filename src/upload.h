@@ -14,7 +14,8 @@ namespace ks {
 
 class Uploader {
 public:
-    // Check looks at each monitor's file every few seconds and, when its
+    // Check looks at each monitor's file every few seconds (or at most every
+    // uploadEvery seconds, when the monitor sets it) and, when its
     // wanted lines have changed since last sent (or haven't been sent
     // since the app started), sends them.
     void Check(const std::vector<Snapshot>& snapshots, Client& client);
@@ -24,6 +25,7 @@ private:
         std::string path;
         uint64_t written = 0;  // the file's last-write time
         std::string sent;      // the lines last sent
+        uint64_t looked = 0;   // when the file was last looked at (GetTickCount64)
     };
     std::map<std::string, Seen> seen_;  // by monitor
     uint64_t lastCheck_ = 0;

@@ -160,6 +160,8 @@ Snapshot ParseSnapshot(const json& j) {
     s.paste = str(j, "paste");
     if (j.contains("upload") && j["upload"].is_object()) {
         s.uploadPath = str(j["upload"], "path");
+        if (j["upload"].contains("every") && j["upload"]["every"].is_number_integer())
+            s.uploadEvery = j["upload"]["every"].get<int64_t>();
         for (const auto& p : array(j["upload"], "prefixes"))
             if (p.is_string()) s.uploadPrefixes.push_back(p.get<std::string>());
     }

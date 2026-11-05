@@ -45,13 +45,18 @@ void Uploader::Check(const std::vector<Snapshot>& snapshots, Client& client) {
         if (s.uploadPath.empty()) continue;
         Seen& seen = seen_[s.monitor];
         if (seen.path != s.uploadPath) seen = Seen{s.uploadPath};
+        if (s.uploadEvery > 0 && seen.looked != 0 && now - seen.looked < uint64_t(s.uploadEvery) * 1000) continue;
+        seen.looked = now;
         std::wstring path = expand(s.uploadPath);
         WIN32_FILE_ATTRIBUTE_DATA attrs;
         if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attrs)) continue;
         uint64_t written = (uint64_t(attrs.ftLastWriteTime.dwHighDateTime) << 32) | attrs.ftLastWriteTime.dwLowDateTime;
         if (written == seen.written) continue;
         std::string text;
-        if (!readFile(path, text)) continue;  // being written: try again next time
+        if (!readFile(path, text)) {  // being written: try again next time
+            seen.looked = 0;
+            continue;
+        }
         seen.written = written;
         std::string lines = KeepLines(text, s.uploadPrefixes);
         if (lines.empty() || lines == seen.sent) continue;

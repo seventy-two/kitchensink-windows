@@ -56,9 +56,11 @@ result is a single `kitchensink.exe` with nothing to install.
   name must be lower-case letters, digits and hyphens, so a server can't
   point it anywhere else.
 - **Files for monitors**: a monitor can ask for a file on this PC
-  (`upload`): every 5 seconds the client looks at its last-write time and,
-  when the wanted lines have changed (and once each start), sends them.
-  The farming monitor asks for RuneLite's Time Tracking data this way.
+  (`upload`): every 5 seconds (or every `every` seconds, if the monitor
+  says) the client looks at its last-write time and, when the wanted lines
+  have changed (and once each start), sends them. The farming monitor asks
+  for RuneLite's Time Tracking data this way, and the osrs monitor for the
+  Delve Calculator's counts once a day.
 - Checklists (the `todo` monitor) can be ticked, added to and deleted
   from; a tick shows at once, ahead of the server's update.
 - Checklist items with a `slider` or `colour` get a slider, sent when let

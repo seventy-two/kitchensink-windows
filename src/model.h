@@ -164,6 +164,9 @@ struct Snapshot {
     // action when they change. See Uploader.
     std::string uploadPath;
     std::vector<std::string> uploadPrefixes;
+    // uploadEvery, if set, is the fewest seconds between looks at the file
+    // (it's always looked at once when the app starts).
+    int64_t uploadEvery = 0;
     int64_t updated = 0;  // Unix seconds; 0 if never polled
     std::vector<Block> blocks;
     // The few things most worth seeing at a glance, shown in place of the
