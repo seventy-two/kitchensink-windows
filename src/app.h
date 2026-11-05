@@ -148,6 +148,7 @@ private:
     void cat(float width);
     float lickButton(float right, float mid);
     float dimButton(float right, float mid);
+    float displayOffButton(float right, float mid);
     float appsButton(float right, float mid);
     std::vector<LaunchApp> shownApps();
     void empty(const char* message, bool settingsButton);

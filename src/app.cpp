@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cmath>
 #include <ctime>
+#include <thread>
 #include <tuple>
 
 #include "imgui.h"
@@ -773,6 +774,7 @@ void App::header() {
         ImGui::PopStyleVar();
     }
     buttonsLeft = dimButton(buttonsLeft - 4 * scale_, mid);
+    buttonsLeft = displayOffButton(buttonsLeft, mid);
     if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
     if (!shownApps().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
@@ -2773,6 +2775,34 @@ float App::dimButton(float right, float mid) {
     if (clicked) {
         config_.forceDim = !config_.forceDim;
         SaveConfig(config_);
+    }
+    return ImGui::GetItemRectMin().x;
+}
+
+// displayOffButton is the monitor beside the moon: it puts every display
+// into standby (as Windows does after its idle timeout) without powering
+// the monitors off. A mouse move or key press wakes them. It returns where
+// it starts.
+float App::displayOffButton(float right, float mid) {
+    const Palette& p = Colours();
+    const ImGuiStyle& st = ImGui::GetStyle();
+    float w = ImGui::CalcTextSize(icon::Monitor).x + st.FramePadding.x * 2;
+    ImVec2 origin = ImGui::GetWindowPos();
+    ImGui::SetCursorPos(ImVec2(right - w - origin.x, mid - ImGui::GetFrameHeight() / 2));
+    ImVec2 at = ImGui::GetCursorScreenPos();
+    bool lit = ImGui::IsMouseHoveringRect(at, ImVec2(at.x + w, at.y + ImGui::GetFrameHeight()));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text, lit ? p.text : p.muted);
+    bool clicked = ImGui::Button(icon::Monitor);
+    ImGui::PopStyleColor(2);
+    noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Turn the displays off");
+    if (clicked) {
+        // Wait a moment first, or letting go of the mouse wakes them at once.
+        std::thread([] {
+            Sleep(800);
+            PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
+        }).detach();
     }
     return ImGui::GetItemRectMin().x;
 }

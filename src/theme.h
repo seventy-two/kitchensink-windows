@@ -54,6 +54,7 @@ inline constexpr const char* Download = "\xEE\xA2\x96";     // U+E896
 inline constexpr const char* CheckMark = "\xEE\x9C\xBE";    // U+E73E
 inline constexpr const char* Lightbulb = "\xEE\xAA\x80";   // U+EA80
 inline constexpr const char* Moon = "\xEE\x9C\x88";        // U+E708 QuietHours
+inline constexpr const char* Monitor = "\xEE\x9F\xB4";     // U+E7F4 TVMonitor
 inline constexpr const char* Dismiss = "\xEE\x9C\x91";      // U+E711 Cancel, a cross
 }  // namespace icon
 
