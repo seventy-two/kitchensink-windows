@@ -258,7 +258,7 @@ bool App::stale(const Snapshot& s) const {
 }
 
 // switchesPanel is the monitor whose short view is a row of switch
-// buttons (the lights), kept at the top of the side column rather than
+// buttons (the lights), kept in the side column, above Now playing, rather than
 // among the panels; null if there's none.
 const Snapshot* App::switchesPanel() const {
     for (const Snapshot& s : model_.Snapshots()) {
@@ -291,7 +291,6 @@ void App::switchesBar(const Snapshot& s, float width) {
     ImGui::PopStyleColor();
     bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
     ImGui::PopID();
-    ImGui::Dummy(ImVec2(0, 4 * scale_));
 }
 
 // slimRow says whether a panel's closed row is one slim line: its own
@@ -500,7 +499,6 @@ void App::Frame() {
         bool feedFirst = feedW > 0 && config_.oled.swap && OledSwapSides(t);
         auto drawFeed = [&] {
             ImGui::BeginGroup();
-            if (const Snapshot* sw = switchesPanel()) switchesBar(*sw, feedW);
             if (config_.cat) cat(feedW);
             ImGui::BeginChild("##temporary", ImVec2(feedW, 0), ImGuiChildFlags_AutoResizeY,
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
@@ -511,7 +509,10 @@ void App::Frame() {
             // same height so Recent doesn't move.
             float skyH = skyHeight(), barH = mediaBarHeight();
             float gap = 10 * scale_, tight = 4 * scale_;
-            float below = barH + gap + (skyH > 0 ? skyH + tight : 0);
+            // The lights' card sits above Now playing, at its height last frame.
+            const Snapshot* sw = switchesPanel();
+            float swH = sw ? switchesH_ : 0;
+            float below = barH + gap + (skyH > 0 ? skyH + tight : 0) + (sw ? swH + gap : 0);
             // Scrolled with the wheel; no scrollbar, which would take width
             // and get in the way.
             ImGui::BeginChild("##feed", ImVec2(feedW, -below), ImGuiChildFlags_None,
@@ -520,6 +521,11 @@ void App::Frame() {
             ImGui::EndChild();
             float spacing = ImGui::GetStyle().ItemSpacing.y;
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
+            if (sw) {
+                switchesBar(*sw, feedW);
+                switchesH_ = ImGui::GetItemRectSize().y;
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
+            }
             mediaBar(feedW);
             if (skyH > 0) {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);

@@ -78,7 +78,7 @@ result is a single `kitchensink.exe` with nothing to install.
   for RuneLite's Time Tracking data this way, and the osrs monitor for the
   Delve Calculator's counts once a day.
 - A monitor whose short view is a row of switch buttons (the lights)
-  lives at the top of the Recent column, above the cat, as a small card
+  lives in the Recent column, above Now playing and the landscape, as a small card
   that's always there, each button with a bulb lit in the light's colour
   (a warm white without one) while on. Switches named alike but for a
   number at the end (Hallway 1, Hallway 2) are one joined button, the rest
