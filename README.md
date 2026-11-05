@@ -77,6 +77,11 @@ result is a single `kitchensink.exe` with nothing to install.
   have changed (and once each start), sends them. The farming monitor asks
   for RuneLite's Time Tracking data this way, and the osrs monitor for the
   Delve Calculator's counts once a day.
+- A monitor whose short view is a row of switch buttons (the lights)
+  lives at the top of the Recent column, above the cat, as a small card
+  that's always there, each button with a bulb lit in the light's colour
+  (a warm white without one) while on. Without the Recent column it's a
+  panel like the rest.
 - Checklists (the `todo` monitor) can be ticked, added to and deleted
   from; a tick shows at once, ahead of the server's update.
 - Checklist items with a `slider` or `colour` get a slider, sent when let

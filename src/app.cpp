@@ -257,6 +257,41 @@ bool App::stale(const Snapshot& s) const {
     return config_.relevance && tierOf(s, now()) == Tier::Stale;
 }
 
+// switchesPanel is the monitor whose short view is a row of switch
+// buttons (the lights), kept at the top of the side column rather than
+// among the panels; null if there's none.
+const Snapshot* App::switchesPanel() const {
+    for (const Snapshot& s : model_.Snapshots()) {
+        if (s.background || s.summaryBlock.empty()) continue;
+        const Block& b = s.summaryBlock[0];
+        if (b.type == "checklist" && b.buttons && b.switches && !b.items.empty()) return &s;
+    }
+    return nullptr;
+}
+
+// switchesBar draws that monitor's buttons, each with a bulb, as a small
+// card of its own, there whatever else is going on.
+void App::switchesBar(const Snapshot& s, float width) {
+    ImGui::PushID("##switches");
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, Colours().card);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8 * scale_, 6 * scale_));
+    ImGui::BeginChild(s.monitor.c_str(), ImVec2(width, 0),
+                      ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding,
+                      ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    checklistButtons(s.monitor, s.summaryBlock[0]);
+    if (!s.error.empty()) {
+        ImGui::PushFont(fonts_.caption);
+        wrapped(std::string(icon::Warning) + "  " + s.error, Colours().warn);
+        ImGui::PopFont();
+    }
+    ImGui::EndChild();
+    ImGui::PopStyleColor();
+    bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    ImGui::PopID();
+    ImGui::Dummy(ImVec2(0, 4 * scale_));
+}
+
 // slimRow says whether a panel's closed row is one slim line: its own
 // choice (right-click its chevron), else the layout's.
 bool App::slimRow(const std::string& id) const {
@@ -456,12 +491,14 @@ void App::Frame() {
         empty(state == ConnState::Offline ? "Can't reach the server." : "Connecting…", state == ConnState::Offline);
     } else {
         mediaBarShown_ = feedW > 0;
+        sideShown_ = feedW > 0;
         std::vector<Snapshot> main = panels();
 
         // OLED care swaps the side column's side every other hour.
         bool feedFirst = feedW > 0 && config_.oled.swap && OledSwapSides(t);
         auto drawFeed = [&] {
             ImGui::BeginGroup();
+            if (const Snapshot* sw = switchesPanel()) switchesBar(*sw, feedW);
             if (config_.cat) cat(feedW);
             ImGui::BeginChild("##temporary", ImVec2(feedW, 0), ImGuiChildFlags_AutoResizeY,
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
@@ -538,8 +575,10 @@ std::vector<Snapshot> App::panels() const {
     std::vector<Snapshot> out;
     if (!localPanels_.empty()) out.push_back(localPanels_.front());
     if (!mediaBarShown_ && !mediaPanel_.blocks.empty()) out.push_back(mediaPanel_);
+    const Snapshot* sw = sideShown_ ? switchesPanel() : nullptr;
     for (const Snapshot& s : model_.Snapshots()) {
         if (s.background) continue;  // in the settings' diagnostics instead
+        if (sw && s.monitor == sw->monitor) continue;  // at the top of the side column instead
         out.push_back(config_.hidePrivate ? WithoutPrivate(s) : s);
     }
     std::vector<Snapshot> arranged;
@@ -2162,8 +2201,12 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
         if (auto c = colourSet_.find(key); c != colourSet_.end() && now - c->second.second < 10) colour = c->second.first;
         float rgb[3];
         bool hasColour = ParseHexColour(colour, rgb) && b.switches && on;
+        // Switches get a bulb: lit in the light's colour (or a warm white)
+        // while on, grey while off.
+        float bulbW = b.switches ? ImGui::CalcTextSize(icon::Lightbulb).x : 0;
 
-        float w = ImGui::CalcTextSize(it.title.c_str()).x + 2 * padX + (hasColour ? 2 * dot + padX / 2 : 0);
+        float w = ImGui::CalcTextSize(it.title.c_str()).x + 2 * padX +
+                  (b.switches ? bulbW + padX / 2 : hasColour ? 2 * dot + padX / 2 : 0);
         if (x > start.x && x + w > right) {
             x = start.x;
             y += h + gap;
@@ -2178,7 +2221,12 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
         ImVec2 a(x, y), z(x + w, y + h);
         dl->AddRectFilled(a, z, u32(hovered ? p.hover : p.frame), std::round(3 * scale_));
         float tx = x + padX;
-        if (hasColour) {
+        if (b.switches) {
+            ImVec4 lit = hasColour ? ImVec4(rgb[0], rgb[1], rgb[2], 1) : ImVec4(1.0f, 0.84f, 0.55f, 1);
+            dl->AddText(ImVec2(tx, std::round(y + (h - ImGui::GetTextLineHeight()) / 2)), u32(on ? lit : fade(p.muted, 0.6f)),
+                        icon::Lightbulb);
+            tx += bulbW + padX / 2;
+        } else if (hasColour) {
             dl->AddCircleFilled(ImVec2(tx + dot, std::round(y + h / 2)), dot, u32(ImVec4(rgb[0], rgb[1], rgb[2], 1)));
             tx += 2 * dot + padX / 2;
         }

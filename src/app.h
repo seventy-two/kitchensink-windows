@@ -98,6 +98,8 @@ private:
     bool card(const Snapshot& s, float width);
     bool collapseButton(bool show, const std::string& id);
     bool slimRow(const std::string& id) const;
+    const Snapshot* switchesPanel() const;
+    void switchesBar(const Snapshot& s, float width);
     void rowStyleMenu(const std::string& id);
     void compactCards(float width, const std::vector<Snapshot>& snaps);
     float compactCard(const Snapshot& s, float width, Show show, float body, bool* clicked);
@@ -160,6 +162,7 @@ private:
     bool stale(const Snapshot& s) const;
     bool newsDirty_ = false;
     double newsSaved_ = -1e9;
+    bool sideShown_ = false;  // the side column (Recent) is up
     bool ultra_ = false;       // the ultra compact layout
     bool slimPanel_ = false;   // drawing a panel whose closed row is a slim line
     bool slimBlock_ = false;   // drawing a short block on an ultra compact line
