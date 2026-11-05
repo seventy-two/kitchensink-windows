@@ -44,7 +44,8 @@ void Uploader::Check(const std::vector<Snapshot>& snapshots, Client& client) {
     for (const auto& s : snapshots) {
         if (s.uploadPath.empty()) continue;
         Seen& seen = seen_[s.monitor];
-        if (seen.path != s.uploadPath) seen = Seen{s.uploadPath};
+        // A new file or new lines wanted: look now, whatever the interval.
+        if (seen.path != s.uploadPath || seen.prefixes != s.uploadPrefixes) seen = Seen{s.uploadPath, s.uploadPrefixes};
         if (s.uploadEvery > 0 && seen.looked != 0 && now - seen.looked < uint64_t(s.uploadEvery) * 1000) continue;
         seen.looked = now;
         std::wstring path = expand(s.uploadPath);

@@ -23,6 +23,7 @@ public:
 private:
     struct Seen {
         std::string path;
+        std::vector<std::string> prefixes;
         uint64_t written = 0;  // the file's last-write time
         std::string sent;      // the lines last sent
         uint64_t looked = 0;   // when the file was last looked at (GetTickCount64)
