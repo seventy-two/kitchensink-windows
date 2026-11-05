@@ -26,6 +26,10 @@ result is a single `kitchensink.exe` with nothing to install.
   and value pairs (chips as small tinted blocks), what doesn't fit counted
   as "+n", no subtitles, a short table's first row only, without details,
   and smaller buttons. Tables leave out their headings, open panels too.
+  Right-click a panel's chevron to choose Compact or Ultra compact for
+  that panel alone (kept as `rowStyle`). A stat's `brief`, when the server
+  sends one, replaces its value on these lines (Food names the day only
+  up to tomorrow).
 - **Order by what's new** (Settings, on by default): a panel the server
   says matters now (a game on, an appointment soon) or that had an event
   in the last two hours rises to the top; one with neither an event nor a

@@ -43,6 +43,10 @@ struct Stat {
     // In chips: lead sets the chip apart from the ones after it, e.g. the
     // portfolio's day before the watchlist's moves.
     bool lead = false;
+    // brief, when hasBrief, replaces the value on one-line summaries (the
+    // ultra compact layout); empty leaves only the label.
+    std::string brief;
+    bool hasBrief = false;
 };
 
 struct Column {

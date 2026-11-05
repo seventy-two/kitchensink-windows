@@ -56,6 +56,9 @@ struct Config {
     // "" lays out by window size; "ultra" is the compact layout with every
     // closed panel cut to one slim line.
     std::string layout;
+    // Panels whose closed row differs from the layout's: "slim" (one slim
+    // line) or "normal", by monitor.
+    std::map<std::string, std::string> rowStyle;
     // Panels with something new rise to the top; ones with nothing new for
     // a long while sink, fade and don't open by themselves.
     bool relevance = true;

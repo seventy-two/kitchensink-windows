@@ -113,6 +113,9 @@ Config LoadConfig() {
     c.forceDim = j.value("forceDim", false);
     c.layout = j.value("layout", "");
     c.relevance = j.value("relevance", true);
+    if (auto it = j.find("rowStyle"); it != j.end() && it->is_object())
+        for (const auto& [id, v] : it->items())
+            if (v.is_string()) c.rowStyle[id] = v.get<std::string>();
     if (auto it = j.find("news"); it != j.end() && it->is_object())
         for (const auto& [id, n] : it->items()) {
             if (!n.is_object()) continue;
@@ -147,6 +150,7 @@ bool SaveConfig(const Config& c) {
         {"forceDim", c.forceDim},
         {"layout", c.layout},
         {"relevance", c.relevance},
+        {"rowStyle", c.rowStyle},
     };
     nlohmann::json news = nlohmann::json::object();
     for (const auto& [id, n] : c.news) {

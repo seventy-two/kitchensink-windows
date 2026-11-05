@@ -96,7 +96,9 @@ private:
     // compact layout.
     void cards(float width, const std::vector<Snapshot>& snaps);
     bool card(const Snapshot& s, float width);
-    bool collapseButton(bool show);
+    bool collapseButton(bool show, const std::string& id);
+    bool slimRow(const std::string& id) const;
+    void rowStyleMenu(const std::string& id);
     void compactCards(float width, const std::vector<Snapshot>& snaps);
     float compactCard(const Snapshot& s, float width, Show show, float body, bool* clicked);
     void summary(const std::vector<Stat>& stats, float width);
@@ -159,6 +161,7 @@ private:
     bool newsDirty_ = false;
     double newsSaved_ = -1e9;
     bool ultra_ = false;       // the ultra compact layout
+    bool slimPanel_ = false;   // drawing a panel whose closed row is a slim line
     bool slimBlock_ = false;   // drawing a short block on an ultra compact line
     HWND hwnd_;
     float captionH_ = 0;

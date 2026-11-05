@@ -158,6 +158,15 @@ static void testUseCompact() {
     CHECK(!UseCompact(true, 1600, 1150, 1));
 }
 
+static void testBrief() {
+    Snapshot s = ParseSnapshot(nlohmann::json::parse(
+        R"({"monitor":"food","summary":[{"label":"Avocado","value":"Saturday","brief":""},{"label":"Basil","value":"Tomorrow"}]})"));
+    CHECK(s.summary.size() == 2);
+    CHECK(s.summary[0].hasBrief);
+    CHECK_EQ(s.summary[0].brief, std::string(""));
+    CHECK(!s.summary[1].hasBrief);
+}
+
 static void testRelevance() {
     Snapshot s;
     s.monitor = "m";
@@ -951,6 +960,7 @@ int main() {
     testUseCompact();
     testFitPanels();
     testRelevance();
+    testBrief();
     testGpuUtilisation();
     testLocalPanels();
     testMedia();

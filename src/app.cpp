@@ -257,6 +257,33 @@ bool App::stale(const Snapshot& s) const {
     return config_.relevance && tierOf(s, now()) == Tier::Stale;
 }
 
+// slimRow says whether a panel's closed row is one slim line: its own
+// choice (right-click its chevron), else the layout's.
+bool App::slimRow(const std::string& id) const {
+    if (auto it = config_.rowStyle.find(id); it != config_.rowStyle.end()) return it->second == "slim";
+    return ultra_;
+}
+
+// rowStyleMenu is the chevron's right-click menu: compact or ultra
+// compact, for this panel. A choice that matches the layout's is
+// forgotten, so the panel follows the layout again.
+void App::rowStyleMenu(const std::string& id) {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6 * scale_, 6 * scale_));
+    if (ImGui::BeginPopup("##rowStyle")) {
+        bool slim = slimRow(id);
+        int pick = -1;
+        if (ImGui::MenuItem("Compact", nullptr, !slim)) pick = 0;
+        if (ImGui::MenuItem("Ultra compact", nullptr, slim)) pick = 1;
+        if (pick >= 0) {
+            if ((pick == 1) == ultra_) config_.rowStyle.erase(id);
+            else config_.rowStyle[id] = pick == 1 ? "slim" : "normal";
+            SaveConfig(config_);
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
+}
+
 bool App::mouseOverWindow() const {
     POINT p;
     if (!GetCursorPos(&p)) return false;
@@ -856,9 +883,10 @@ void App::cards(float width, const std::vector<Snapshot>& snaps) {
 
 // collapseButton is an open wide-layout panel's chevron, folding it to its
 // summary row. When not shown its space is kept. It reports a click.
-bool App::collapseButton(bool show) {
+bool App::collapseButton(bool show, const std::string& id) {
     ImGuiStyle& st = ImGui::GetStyle();
     float bw = ImGui::CalcTextSize(icon::ChevronUp).x + st.FramePadding.x * 2;
+    rowStyleMenu(id);  // every frame, so it stays open once the mouse is in it
     if (!show) {
         ImGui::Dummy(ImVec2(bw, ImGui::GetFrameHeight()));
         return false;
@@ -866,7 +894,9 @@ bool App::collapseButton(bool show) {
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Text, Colours().muted);
     bool clicked = ImGui::Button(icon::ChevronUp);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Collapse");
+    if (ImGui::IsItemHovered() && !ImGui::IsPopupOpen("##rowStyle"))
+        ImGui::SetTooltip("Collapse\nRight-click: compact or ultra compact");
+    ImGui::OpenPopupOnItemClick("##rowStyle", ImGuiPopupFlags_MouseButtonRight);
     ImGui::PopStyleColor(2);
     return clicked;
 }
@@ -899,7 +929,7 @@ bool App::card(const Snapshot& s, float width) {
         ImVec2 saved = ImGui::GetCursorScreenPos();
         float bw = ImGui::CalcTextSize(icon::ChevronUp).x + ImGui::GetStyle().FramePadding.x * 2;
         ImGui::SetCursorScreenPos(ImVec2(saved.x + ImGui::GetContentRegionAvail().x - bw, saved.y));
-        if (show) collapse = collapseButton(true);
+        if (show) collapse = collapseButton(true, s.monitor);
         ImGui::SetCursorScreenPos(saved);
         ImGui::PopFont();
     } else {
@@ -931,7 +961,7 @@ bool App::card(const Snapshot& s, float width) {
             else ImGui::Dummy(ImVec2(bw, ImGui::GetFrameHeight()));
             ImGui::SameLine();
         }
-        collapse = collapseButton(show);
+        collapse = collapseButton(show, s.monitor);
         ImGui::PopFont();
     }
     ImGui::PopID();
@@ -1138,7 +1168,8 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
     // Wide enough at the sides for the grip in the left margin.
     // Ultra compact: a closed panel is one slim line.
-    bool slim = ultra_ && !open;
+    bool slim = slimRow(s.monitor) && !open;
+    slimPanel_ = slimRow(s.monitor);
     float padY = (slim ? 3 : 8) * scale_;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * scale_, padY));
     ImGui::BeginChild(s.monitor.c_str(), ImVec2(width, 0),
@@ -1176,6 +1207,17 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         if (shown) {
             ImGui::SetCursorScreenPos(ImVec2(chevronX + (slot - cw) / 2, top.y + st.FramePadding.y));
             ImGui::TextColored(lit ? p.text : p.muted, "%s", open ? icon::ChevronUp : icon::ChevronDown);
+            // Right-click it to choose this panel's closed look.
+            if (ImGui::IsMouseHoveringRect(ImVec2(chevronX, top.y), ImVec2(chevronX + slot, top.y + lineH))) {
+                // A left click still opens or closes the panel, as anywhere on the row.
+                if (!ImGui::IsPopupOpen("##rowStyle")) ImGui::SetTooltip("Right-click: compact or ultra compact");
+                if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) ImGui::OpenPopup("##rowStyle");
+            }
+        }
+        if (clicked) {
+            ImGui::PopFont();
+            rowStyleMenu(s.monitor);
+            ImGui::PushFont(fonts_.caption);
         }
         if (!local) {
             ImGui::SetCursorScreenPos(ImVec2(refreshX, top.y));
@@ -1345,6 +1387,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         ImGui::SetCursorScreenPos(ImVec2(top.x, bottom));
         ImGui::Dummy(ImVec2(avail, 0));
     }
+    slimPanel_ = false;
     ImGui::EndChild();
     ImGui::PopStyleColor();
     bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
@@ -1738,7 +1781,7 @@ bool App::slimStats(const std::vector<Stat>& stats, float width, bool asChips, b
         float labelW = st.label.empty() ? 0 : ImGui::CalcTextSize(st.label.c_str()).x;
         ImGui::PopFont();
         ImGui::PushFont(fonts_.body);
-        std::string value = st.value;
+        std::string value = st.hasBrief ? st.brief : st.value;
         float valueW = value.empty() ? 0 : ImGui::CalcTextSize(value.c_str()).x;
         float between = labelW > 0 && (valueW > 0 || icon) ? inner : 0;
         float iconW = icon ? lineH + inner : 0;
@@ -2507,8 +2550,8 @@ void App::table(const std::string& monitor, const Block& b) {
         ImGui::TableSetupColumn(b.columns[c].title.c_str(), ImGuiTableColumnFlags_WidthFixed, std::ceil(w));
     }
 
-    // Ultra compact leaves headings out everywhere, open panels too.
-    bool headers = !slimBlock_ && !ultra_ &&
+    // An ultra compact panel leaves headings out, open too.
+    bool headers = !slimBlock_ && !slimPanel_ &&
                    std::any_of(b.columns.begin(), b.columns.end(), [](const Column& c) { return !c.title.empty(); });
     if (headers) {
         ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
