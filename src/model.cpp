@@ -186,13 +186,13 @@ Fit FitPanels(const std::vector<Panel>& panels, float height, float gap, float m
     }
     for (size_t i = 0; i < panels.size(); i++) {
         const Panel& p = panels[i];
-        if (p.pin != Pin::Auto || p.full <= 0 || total - p.row + p.full > height) continue;
+        if (p.pin != Pin::Auto || p.stale || p.full <= 0 || total - p.row + p.full > height) continue;
         fit.show[i] = Show::Full;
         total += p.full - p.row;
     }
     for (size_t i = 0; i < panels.size(); i++) {
         const Panel& p = panels[i];
-        if (p.pin != Pin::Auto || fit.show[i] != Show::Row || p.full <= 0) continue;
+        if (p.pin != Pin::Auto || p.stale || fit.show[i] != Show::Row || p.full <= 0) continue;
         float body = height - total - p.overhead;
         if (body >= minBody) {
             fit.show[i] = Show::Clipped;
@@ -201,6 +201,52 @@ Fit FitPanels(const std::vector<Panel>& panels, float height, float gap, float m
         break;
     }
     return fit;
+}
+
+namespace {
+// FNV-1a: the same on every build, as fingerprints are kept in the config.
+void mix(uint64_t& h, const std::string& s) {
+    for (unsigned char c : s) h = (h ^ c) * 1099511628211ull;
+    h = (h ^ 0x1f) * 1099511628211ull;  // a separator, so "ab","c" isn't "a","bc"
+}
+}  // namespace
+
+uint64_t SummaryFingerprint(const Snapshot& s) {
+    if (s.summary.empty() && s.summaryBlock.empty()) return 0;
+    uint64_t h = 1469598103934665603ull;
+    for (const Stat& st : s.summary) {
+        mix(h, st.label);
+        mix(h, st.value);
+        mix(h, st.detail);
+    }
+    for (const Block& b : s.summaryBlock) {
+        std::vector<std::string> rows;
+        for (const auto& r : b.rows) {
+            std::string line;
+            for (const Cell& c : r) line += c.text + '\x1f' + c.detail + '\x1e';
+            rows.push_back(line);
+        }
+        for (const Item& it : b.items) rows.push_back(it.title + '\x1f' + (it.done ? "1" : "0") + it.colour.value);
+        for (const Stat& st : b.stats) rows.push_back(st.label + '\x1f' + st.value);
+        std::sort(rows.begin(), rows.end());
+        for (const auto& r : rows) mix(h, r);
+    }
+    return h ? h : 1;
+}
+
+Tier PanelTier(const Snapshot& s, const News& n, int64_t now) {
+    if (Relevant(s, now)) return Tier::Top;
+    if (n.event > 0 && now - n.event < kTopFor) return Tier::Top;
+    int64_t last = std::max(n.event, n.changed);
+    if (last > 0 && now - last >= kStaleAfter) return Tier::Stale;
+    return Tier::Middle;
+}
+
+std::vector<size_t> ByTier(const std::vector<Tier>& tiers) {
+    std::vector<size_t> out(tiers.size());
+    for (size_t i = 0; i < out.size(); i++) out[i] = i;
+    std::stable_sort(out.begin(), out.end(), [&](size_t a, size_t b) { return tiers[a] < tiers[b]; });
+    return out;
 }
 
 std::vector<std::string> Arrange(const std::vector<std::string>& defaults, const std::vector<std::string>& saved) {

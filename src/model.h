@@ -261,6 +261,9 @@ struct Panel {
     // What clipping adds to the row besides the scrolling area itself.
     float overhead = 0;
     Pin pin = Pin::Auto;
+    // Nothing new for a long while (see PanelTier): it never opens by
+    // itself, only by hand.
+    bool stale = false;
 };
 
 struct Fit {
@@ -271,8 +274,36 @@ struct Fit {
 // FitPanels fills a column of height with panels, gap apart. Pinned ones
 // are open or closed as chosen; the rest open in order while they fit
 // whole. If space is left, the first that didn't fit takes it, scrolling,
-// as long as that gives it at least minBody.
+// as long as that gives it at least minBody. Stale panels are passed over:
+// they open only when pinned.
 Fit FitPanels(const std::vector<Panel>& panels, float height, float gap, float minBody);
+
+// News is when a monitor last had something new, for ordering panels by
+// relevance through the day: its last event (not a quiet one) and the last
+// time its summary changed, with the summary's fingerprint to spot that.
+struct News {
+    uint64_t fingerprint = 0;
+    int64_t changed = 0;  // Unix seconds
+    int64_t event = 0;    // Unix seconds
+};
+
+// SummaryFingerprint sums up what a panel's summary row shows, so a change
+// can be spotted. A short table's rows count as a set, so hot posts trading
+// places isn't news but a new one is. 0 means nothing to go on.
+uint64_t SummaryFingerprint(const Snapshot& s);
+
+// Tier is how relevant a panel is now. Top: the server says it matters now
+// (a game on, an appointment soon) or it had an event in the last
+// kTopFor. Stale: neither an event nor a change to its summary for
+// kStaleAfter. The rest are Middle.
+enum class Tier { Top, Middle, Stale };
+constexpr int64_t kTopFor = 2 * 3600;
+constexpr int64_t kStaleAfter = 12 * 3600;
+Tier PanelTier(const Snapshot& s, const News& n, int64_t now);
+
+// ByTier orders panels (given by their tiers) top first, stale last,
+// keeping their order within each tier. It returns indices.
+std::vector<size_t> ByTier(const std::vector<Tier>& tiers);
 
 // Model is the dashboard's state, built from the stream.
 class Model {

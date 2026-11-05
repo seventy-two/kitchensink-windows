@@ -100,6 +100,7 @@ private:
     void compactCards(float width, const std::vector<Snapshot>& snaps);
     float compactCard(const Snapshot& s, float width, Show show, float body, bool* clicked);
     void summary(const std::vector<Stat>& stats, float width);
+    bool slimStats(const std::vector<Stat>& stats, float width, bool asChips, bool live);
     // chips draws a summary as chips. With live, chips with a URL open it
     // when clicked; it returns whether the mouse is over one.
     bool chips(const std::vector<Stat>& stats, float width, bool live = false);
@@ -142,6 +143,7 @@ private:
     void temporaries();
     void cat(float width);
     float lickButton(float right, float mid);
+    float dimButton(float right, float mid);
     float appsButton(float right, float mid);
     std::vector<LaunchApp> shownApps();
     void empty(const char* message, bool settingsButton);
@@ -150,6 +152,14 @@ private:
     void openSettings();
 
     bool mouseOverWindow() const;
+    // Ordering panels by what's new: see PanelTier.
+    void noteSummary(const Snapshot& s);
+    Tier tierOf(const Snapshot& s, int64_t t) const;
+    bool stale(const Snapshot& s) const;
+    bool newsDirty_ = false;
+    double newsSaved_ = -1e9;
+    bool ultra_ = false;       // the ultra compact layout
+    bool slimBlock_ = false;   // drawing a short block on an ultra compact line
     HWND hwnd_;
     float captionH_ = 0;
     std::vector<ImRect> noDrag_;  // title bar buttons, from the last frame
@@ -228,6 +238,8 @@ private:
     bool catChoice_ = false;
     char placeBuf_[64] = {};
     int themeChoice_ = 0;  // 0 as Windows, 1 retro
+    int layoutChoice_ = 0;  // 0 by window size, 1 ultra compact
+    bool relevanceChoice_ = true;
 
     // OLED care: when the mouse was last over the window, and until when
     // something new keeps it bright (Unix seconds).

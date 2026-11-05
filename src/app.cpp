@@ -27,6 +27,9 @@ namespace {
 
 ImU32 u32(const ImVec4& c) { return ImGui::ColorConvertFloat4ToU32(c); }
 
+// How much a stale panel's text fades.
+constexpr float kStaleAlpha = 0.5f;
+
 ImVec4 fade(ImVec4 c, float a) {
     c.w = a;
     return c;
@@ -213,6 +216,7 @@ App::App(HWND hwnd, ID3D11Device* device, std::function<void()> wake,
 }
 
 App::~App() {
+    if (newsDirty_) SaveConfig(config_);
     media_.reset();  // before images_, which it feeds
     local_.reset();
     client_.reset();
@@ -227,6 +231,32 @@ Theme App::theme() const {
 
 // mouseOverWindow says whether the cursor is over this window itself, not
 // just somewhere on screen or over a window in front of it.
+// noteSummary keeps when a monitor's summary last changed, for ordering
+// panels by relevance.
+void App::noteSummary(const Snapshot& s) {
+    if (s.updated == 0) return;
+    uint64_t fp = SummaryFingerprint(s);
+    if (fp == 0) return;
+    News& n = config_.news[s.monitor];
+    if (n.fingerprint == fp) return;
+    // Seen for the first time: count it as new now, rather than stale.
+    n.fingerprint = fp;
+    n.changed = now();
+    newsDirty_ = true;
+}
+
+// tierOf is how relevant a panel is now; This PC and Now playing are always
+// middling.
+Tier App::tierOf(const Snapshot& s, int64_t t) const {
+    if (IsLocal(s) || s.monitor == mediaPanel_.monitor) return Tier::Middle;
+    auto it = config_.news.find(s.monitor);
+    return PanelTier(s, it != config_.news.end() ? it->second : News{}, t);
+}
+
+bool App::stale(const Snapshot& s) const {
+    return config_.relevance && tierOf(s, now()) == Tier::Stale;
+}
+
 bool App::mouseOverWindow() const {
     POINT p;
     if (!GetCursorPos(&p)) return false;
@@ -281,11 +311,17 @@ void App::Pump() {
             std::string prefix = m.snapshot.monitor + "/";
             for (auto it = ticked_.begin(); it != ticked_.end();)
                 it = it->first.rfind(prefix, 0) == 0 ? ticked_.erase(it) : std::next(it);
+            noteSummary(m.snapshot);
             model_.ApplySnapshot(std::move(m.snapshot));
             break;
         }
         case Inbound::Type::Event: {
             Event e = m.event;
+            // News for ordering panels, cleared or not, history or not.
+            if (!e.quiet && !e.monitor.empty() && e.time > 0) {
+                News& n = config_.news[e.monitor];
+                if (e.time > n.event) n.event = e.time, newsDirty_ = true;
+            }
             if (!model_.AddEvent(std::move(m.event))) break;
             if (e.until > 0 && e.until <= now()) break;  // missed while offline and no longer relevant
             // History from before the app started has already been seen
@@ -346,7 +382,8 @@ void App::Frame() {
     if (ImGui::GetKeyOwner(ImGuiKey_MouseWheelY) == ChipsWheel && wheelHeld_ < ImGui::GetFrameCount() - 1)
         ImGui::SetKeyOwner(ImGuiKey_MouseWheelY, ImGuiKeyOwner_NoOwner);
     ImGuiIO& io = ImGui::GetIO();
-    if (bool c = UseCompact(compact_, io.DisplaySize.x, io.DisplaySize.y, scale_); c != compact_) {
+    ultra_ = config_.layout == "ultra";
+    if (bool c = ultra_ || UseCompact(compact_, io.DisplaySize.x, io.DisplaySize.y, scale_); c != compact_) {
         compact_ = c;
         ApplyTheme(theme(), scale_, compact_);
     }
@@ -450,7 +487,7 @@ void App::Frame() {
     // Windows whether the cursor is over this window (and not something on
     // top of it).
     if (mouseOverWindow() || settingsOpen_) lastActivity_ = t;
-    bool dimmed = config_.oled.dim && OledDim(t, lastActivity_, wakeUntil_);
+    bool dimmed = config_.forceDim || (config_.oled.dim && OledDim(t, lastActivity_, wakeUntil_));
     if (dimmed) ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, 153));
     // The cat isn't drawn while the window's dimmed.
     frameInterval_ = dimmed ? 0 : catInterval_;
@@ -460,6 +497,13 @@ void App::Frame() {
     // draw again to show which.
     if (ImGui::GetTime() - lickClicked_ < 1) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 100ul) : 100;
     busy_ = ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || settingsOpen_;
+    // What's new is saved now and then, not on every change (the
+    // watchlist's figures change every minute).
+    if (newsDirty_ && ImGui::GetTime() - newsSaved_ > 300) {
+        SaveConfig(config_);
+        newsDirty_ = false;
+        newsSaved_ = ImGui::GetTime();
+    }
     ImGui::End();
 }
 
@@ -471,13 +515,24 @@ std::vector<Snapshot> App::panels() const {
         if (s.background) continue;  // in the settings' diagnostics instead
         out.push_back(config_.hidePrivate ? WithoutPrivate(s) : s);
     }
-    if (config_.order.empty()) return out;
-    std::vector<std::string> ids;
-    for (const auto& p : out) ids.push_back(p.monitor);
     std::vector<Snapshot> arranged;
-    for (const auto& id : Arrange(ids, config_.order))
-        arranged.push_back(*std::find_if(out.begin(), out.end(), [&](const Snapshot& p) { return p.monitor == id; }));
-    return arranged;
+    if (config_.order.empty()) {
+        arranged = std::move(out);
+    } else {
+        std::vector<std::string> ids;
+        for (const auto& p : out) ids.push_back(p.monitor);
+        for (const auto& id : Arrange(ids, config_.order))
+            arranged.push_back(*std::find_if(out.begin(), out.end(), [&](const Snapshot& p) { return p.monitor == id; }));
+    }
+    if (!config_.relevance) return arranged;
+    // What's new rises and what's had nothing new for a long while sinks,
+    // each keeping the dragged order among its own.
+    int64_t t = now();
+    std::vector<Tier> tiers;
+    for (const auto& s : arranged) tiers.push_back(tierOf(s, t));
+    std::vector<Snapshot> sorted;
+    for (size_t i : ByTier(tiers)) sorted.push_back(std::move(arranged[i]));
+    return sorted;
 }
 
 // hoveringCard reports whether the mouse is over the card being drawn,
@@ -643,6 +698,7 @@ void App::header() {
         }
         ImGui::PopStyleVar();
     }
+    buttonsLeft = dimButton(buttonsLeft - 4 * scale_, mid);
     if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
     if (!shownApps().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
@@ -776,6 +832,8 @@ void App::cards(float width, const std::vector<Snapshot>& snaps) {
             // room for it, kept in the same list as the compact layout's.
             const std::string& id = snaps[i].monitor;
             bool collapsed = config_.collapsed.count(id) > 0, toggle = false;
+            bool faded = stale(snaps[i]);
+            if (faded) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * kStaleAlpha);
             if (collapsed) {
                 ImGui::PushID("row");
                 heights_[id] = compactCard(snaps[i], colW, Show::Row, 0, &toggle);
@@ -783,6 +841,7 @@ void App::cards(float width, const std::vector<Snapshot>& snaps) {
             } else {
                 toggle = card(snaps[i], colW);
             }
+            if (faded) ImGui::PopStyleVar();
             ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y * 2));
             if (!toggle) continue;
             config_.expanded.erase(id);
@@ -1000,7 +1059,7 @@ void App::pasteButton(const Snapshot& s) {
 // compactCards fills the space with one row per monitor, full width so the
 // summaries line up, opening as many full panels as fit (see FitPanels).
 void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
-    float gap = 8 * scale_;
+    float gap = (ultra_ ? 3 : 8) * scale_;
     float height = ImGui::GetContentRegionAvail().y;
 
     // Measure every monitor each way at this width, in a window kept behind
@@ -1034,6 +1093,7 @@ void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
         ImGui::PopID();
         ImGui::PopID();
         p.pin = config_.expanded.count(s.monitor) ? Pin::Open : config_.collapsed.count(s.monitor) ? Pin::Closed : Pin::Auto;
+        p.stale = stale(s);
         panels.push_back(p);
     }
     ImGui::End();
@@ -1045,7 +1105,11 @@ void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
     Fit fit = FitPanels(panels, height, gap, minBody);
     for (size_t i = 0; i < snaps.size(); i++) {
         bool clicked = false;
+        // A stale panel fades, unless it's open.
+        bool faded = panels[i].stale && fit.show[i] == Show::Row;
+        if (faded) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * kStaleAlpha);
         compactCard(snaps[i], width, fit.show[i], fit.body, &clicked);
+        if (faded) ImGui::PopStyleVar();
         ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y * 2));
         if (!clicked) continue;
         // Open or close it, keeping that choice only while it differs from
@@ -1073,7 +1137,10 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
     bool open = show != Show::Row;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
     // Wide enough at the sides for the grip in the left margin.
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * scale_, 8 * scale_));
+    // Ultra compact: a closed panel is one slim line.
+    bool slim = ultra_ && !open;
+    float padY = (slim ? 3 : 8) * scale_;
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * scale_, padY));
     ImGui::BeginChild(s.monitor.c_str(), ImVec2(width, 0),
                       ImGuiChildFlags_Borders | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysUseWindowPadding,
                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -1175,7 +1242,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         // summary, which shares the controls' line when there's no
         // subtitle above it.
         float y = top.y;
-        if (!s.subtitle.empty() && !asPanel) {
+        if (!s.subtitle.empty() && !asPanel && !slim) {
             ImGui::SetCursorScreenPos(ImVec2(top.x, top.y + st.FramePadding.y));
             ImGui::PushFont(fonts_.caption);
             mutedText(fit(s.subtitle, avail - rightW));
@@ -1193,16 +1260,30 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
                               ImGuiChildFlags_AutoResizeY,
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
                                   ImGuiWindowFlags_NoScrollWithMouse);
-            panelHead(s);
             localHovered_ = linkHovered = false;
             measure_ = fullTable(s, s.summaryBlock[0]);
-            block(s.monitor, s.summaryBlock[0]);
+            if (slim) {
+                // Only its first row, without the headings; buttons smaller.
+                Block b = s.summaryBlock[0];
+                if (b.type == "table" && b.rows.size() > 1) b.rows.resize(1);
+                b.title.clear();
+                slimBlock_ = true;
+                block(s.monitor, b);
+                slimBlock_ = false;
+            } else {
+                panelHead(s);
+                block(s.monitor, s.summaryBlock[0]);
+            }
             measure_ = nullptr;
             // A click on a link or local button is for it, not the row.
             onButton = onButton || localHovered_ || (clicked && linkHovered);
             ImGui::EndChild();
         } else if (!s.summary.empty()) {
-            if (s.summaryStyle == "chips") {
+            if (slim) {
+                float w = !failed ? chipsW : avail - rightW;
+                onButton = slimStats(s.summary, w, s.summaryStyle == "chips", clicked && dragging_.empty()) || onButton;
+                drawWhen(ImGui::GetItemRectMax().x);
+            } else if (s.summaryStyle == "chips") {
                 float w = y == top.y && !failed ? chipsW : avail - (y == top.y ? rightW : 0);
                 onButton = chips(s.summary, w, clicked && dragging_.empty()) || onButton;
                 drawWhen(y == top.y ? ImGui::GetItemRectMax().x : 0);
@@ -1220,7 +1301,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         bottom = std::max(bottom, ImGui::GetItemRectMax().y);
 
         // Clicking anywhere on the row, bar the buttons, links and grip, opens it.
-        ImVec2 hitMin = winMin, hitMax(winRight, bottom + 8 * scale_);
+        ImVec2 hitMin = winMin, hitMax(winRight, bottom + padY);
         dl->ChannelsSetCurrent(0);
         bool hovered = clicked && dragging_.empty() && ImGui::IsWindowHovered(ImGuiHoveredFlags_ChildWindows) &&
                        ImGui::IsMouseHoveringRect(hitMin, hitMax) && !onButton;
@@ -1632,6 +1713,92 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
     return onLink;
 }
 
+// slimStats is a summary on one slim line, for the ultra compact layout:
+// each stat's label then its value, without details, as small blocks
+// tinted by tone when chips, plain otherwise. What doesn't fit is cut
+// short, then left out with a count. With live, ones with a URL open it
+// when clicked; it returns whether the mouse is over one.
+bool App::slimStats(const std::vector<Stat>& stats, float width, bool asChips, bool live) {
+    const Palette& p = Colours();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    ImVec2 origin = ImGui::GetCursorScreenPos();
+    float padX = (asChips ? 5 : 0) * scale_, padY = 2 * scale_;
+    float gap = (asChips ? 3 : 16) * scale_, inner = 4 * scale_;
+    ImGui::PushFont(fonts_.body);
+    float lineH = ImGui::GetTextLineHeight();
+    ImGui::PopFont();
+    float h = std::round(lineH + padY * 2);
+    float x = 0;
+    bool onLink = false;
+    ImGui::BeginGroup();
+    for (size_t i = 0; i < stats.size(); i++) {
+        const Stat& st = stats[i];
+        bool icon = IsWeatherIcon(st.icon);
+        ImGui::PushFont(fonts_.caption);
+        float labelW = st.label.empty() ? 0 : ImGui::CalcTextSize(st.label.c_str()).x;
+        ImGui::PopFont();
+        ImGui::PushFont(fonts_.body);
+        std::string value = st.value;
+        float valueW = value.empty() ? 0 : ImGui::CalcTextSize(value.c_str()).x;
+        float between = labelW > 0 && (valueW > 0 || icon) ? inner : 0;
+        float iconW = icon ? lineH + inner : 0;
+        float w = padX * 2 + labelW + between + valueW + iconW;
+        float room = width - x;
+        if (w > room) {
+            // Cut the value short if that leaves something to read; else
+            // say how many more there are and stop.
+            float valueRoom = room - (padX * 2 + labelW + between + iconW);
+            if (valueW > 0 && valueRoom >= 40 * scale_) {
+                value = fit(value, valueRoom);
+                valueW = ImGui::CalcTextSize(value.c_str()).x;
+                w = padX * 2 + labelW + between + valueW + iconW;
+            } else {
+                ImGui::PopFont();
+                ImGui::PushFont(fonts_.caption);
+                std::string more = "+" + std::to_string(stats.size() - i);
+                ImGui::SetCursorScreenPos(ImVec2(origin.x + x, origin.y + std::round((h - ImGui::GetTextLineHeight()) / 2)));
+                mutedText(more);
+                ImGui::PopFont();
+                break;
+            }
+        }
+        ImGui::PopFont();
+        ImVec2 a(origin.x + x, origin.y), z(a.x + w, a.y + h);
+        ImVec4 tone = ToneColour(st.tone);
+        bool coloured = st.tone == Tone::Good || st.tone == Tone::Bad || st.tone == Tone::Warn || st.tone == Tone::Accent;
+        if (asChips && !st.lead) dl->AddRectFilled(a, z, u32(coloured ? fade(tone, 0.2f) : p.frame));
+        if (live && !st.url.empty() && ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(a, z)) {
+            dl->AddRectFilled(a, z, u32(fade(p.text, 0.12f)));
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) OpenURL(st.url);
+            onLink = true;
+        }
+        float tx = a.x + padX;
+        if (labelW > 0) {
+            ImGui::PushFont(fonts_.caption);
+            float y = a.y + std::round((h - ImGui::GetTextLineHeight()) / 2);
+            ImGui::SetCursorScreenPos(ImVec2(tx, y));
+            // Chips' labels are what they're about (a ticker), so not muted.
+            ImGui::TextColored(asChips && st.tone != Tone::Muted ? p.text : p.muted, "%s", st.label.c_str());
+            ImGui::PopFont();
+            tx += labelW + between;
+        }
+        if (valueW > 0) {
+            ImGui::PushFont(fonts_.body);
+            ImGui::SetCursorScreenPos(ImVec2(tx, a.y + padY));
+            ImGui::TextColored(coloured || !asChips ? tone : st.tone == Tone::Muted ? p.muted : p.text, "%s", value.c_str());
+            ImGui::PopFont();
+            tx += valueW + inner;
+        }
+        if (icon) weatherIcon(st.icon, ImVec2(tx, a.y + padY), lineH);
+        ImGui::SetCursorScreenPos(a);
+        ImGui::Dummy(ImVec2(w, h));
+        x += w + gap;
+    }
+    ImGui::EndGroup();
+    return onLink;
+}
+
 void App::summary(const std::vector<Stat>& stats, float width) {
     const Palette& p = Colours();
     bool details = std::any_of(stats.begin(), stats.end(), [](const Stat& s) { return !s.detail.empty(); });
@@ -1940,7 +2107,7 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
     float right = start.x + ImGui::GetContentRegionAvail().x;
     float gap = std::round(4 * scale_), padX = std::round(7 * scale_), dot = std::round(3 * scale_);
     ImGui::PushFont(fonts_.caption);
-    float h = std::round(ImGui::GetTextLineHeight() + 6 * scale_);
+    float h = std::round(ImGui::GetTextLineHeight() + (slimBlock_ ? 2 : 6) * scale_);
     float x = start.x, y = start.y;
     for (const Item& it : b.items) {
         ImGui::PushID(it.id.c_str());
@@ -2340,7 +2507,9 @@ void App::table(const std::string& monitor, const Block& b) {
         ImGui::TableSetupColumn(b.columns[c].title.c_str(), ImGuiTableColumnFlags_WidthFixed, std::ceil(w));
     }
 
-    bool headers = std::any_of(b.columns.begin(), b.columns.end(), [](const Column& c) { return !c.title.empty(); });
+    // Ultra compact leaves headings out everywhere, open panels too.
+    bool headers = !slimBlock_ && !ultra_ &&
+                   std::any_of(b.columns.begin(), b.columns.end(), [](const Column& c) { return !c.title.empty(); });
     if (headers) {
         ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
         ImGui::PushFont(fonts_.caption);
@@ -2367,7 +2536,7 @@ void App::table(const std::string& monitor, const Block& b) {
             }
             textAligned(cell.text, b.columns[c].align, ToneColour(cell.tone));
             linkBehaviour(cell.url, cell.open);
-            if (!cell.detail.empty()) {
+            if (!cell.detail.empty() && !slimBlock_) {  // a slim line has no room for it
                 ImGui::PushFont(fonts_.caption);
                 if (b.columns[c].align == Align::Left) wrapped(cell.detail, Colours().muted);
                 else textAligned(cell.detail, b.columns[c].align, Colours().muted);
@@ -2443,6 +2612,30 @@ void App::list(const Block& b) {
 // title bar, ending at right, that hides and shows Lick of the Day: in the
 // text colour while it's showing, muted while hidden. It returns its left
 // edge.
+// dimButton is the moon in the title bar, ending at right: it dims the
+// window until clicked again, whatever the mouse does. It returns where it
+// starts.
+float App::dimButton(float right, float mid) {
+    const Palette& p = Colours();
+    const ImGuiStyle& st = ImGui::GetStyle();
+    float w = ImGui::CalcTextSize(icon::Moon).x + st.FramePadding.x * 2;
+    ImVec2 origin = ImGui::GetWindowPos();
+    ImGui::SetCursorPos(ImVec2(right - w - origin.x, mid - ImGui::GetFrameHeight() / 2));
+    ImVec2 at = ImGui::GetCursorScreenPos();
+    bool lit = config_.forceDim || ImGui::IsMouseHoveringRect(at, ImVec2(at.x + w, at.y + ImGui::GetFrameHeight()));
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text, lit ? p.text : p.muted);
+    bool clicked = ImGui::Button(icon::Moon);
+    ImGui::PopStyleColor(2);
+    noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", config_.forceDim ? "Dimmed: click to brighten" : "Dim now");
+    if (clicked) {
+        config_.forceDim = !config_.forceDim;
+        SaveConfig(config_);
+    }
+    return ImGui::GetItemRectMin().x;
+}
+
 float App::lickButton(float right, float mid) {
     const Palette& p = Colours();
     float size = ImGui::GetFrameHeight();
@@ -3034,6 +3227,8 @@ void App::openSettings() {
     catChoice_ = config_.cat;
     snprintf(placeBuf_, sizeof(placeBuf_), "%s", config_.place.c_str());
     themeChoice_ = config_.theme == "retro" ? 1 : 0;
+    layoutChoice_ = config_.layout == "ultra" ? 1 : 0;
+    relevanceChoice_ = config_.relevance;
     settingsOpen_ = true;
 }
 
@@ -3111,6 +3306,17 @@ void App::settings() {
     care("Dim when idle", &oledChoice_.dim, "after ten minutes without the mouse over the window");
     care("Swap sides", &oledChoice_.swap, "moves the Recent column across every other hour");
     ImGui::Dummy(ImVec2(0, 4 * scale_));
+    mutedText("Layout");
+    static const char* kLayouts[] = {"By window size", "Ultra compact (a closed panel is one slim line)"};
+    ImGui::SetNextItemWidth(w);
+    ImGui::Combo("##layout", &layoutChoice_, kLayouts, IM_ARRAYSIZE(kLayouts));
+    ImGui::Checkbox("Order by what's new", &relevanceChoice_);
+    ImGui::SameLine();
+    ImGui::PushFont(fonts_.caption);
+    ImGui::AlignTextToFramePadding();
+    mutedText("news rises; nothing new for 12 hours sinks and fades");
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, 4 * scale_));
     ImGui::Checkbox("Cat", &catChoice_);
     ImGui::SameLine();
     ImGui::PushFont(fonts_.caption);
@@ -3153,6 +3359,8 @@ void App::settings() {
         c.cat = catChoice_;
         if (placeOK) c.place = placeBuf_;
         c.theme = themeChoice_ == 1 ? "retro" : "";
+        c.layout = layoutChoice_ == 1 ? "ultra" : "";
+        c.relevance = relevanceChoice_;
         c.minPriority = kPriorities[std::clamp(priorityChoice_, 0, 2)];
         bool reconnect = c.url != config_.url || c.token != config_.token;
         config_ = c;

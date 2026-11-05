@@ -21,6 +21,18 @@ result is a single `kitchensink.exe` with nothing to install.
   open or close it yourself. Panels have no titles: an open one keeps its controls
   in a slim strip down its right edge. The layout follows the window live
   as it's resized.
+- **Ultra compact** (Settings → Layout): the compact layout at any window
+  size, with every closed panel cut to one slim line: summaries as label
+  and value pairs (chips as small tinted blocks), what doesn't fit counted
+  as "+n", no subtitles, a short table's first row only, without details,
+  and smaller buttons. Tables leave out their headings, open panels too.
+- **Order by what's new** (Settings, on by default): a panel the server
+  says matters now (a game on, an appointment soon) or that had an event
+  in the last two hours rises to the top; one with neither an event nor a
+  change to its summary for 12 hours sinks to the bottom, fades and doesn't
+  open by itself (click it to). Each keeps the dragged order among its
+  own. When each monitor last had something new is kept in `config.json`
+  as `news`.
 - In the wide layout, where every panel fits open, a panel's chevron (top
   right, on hover) folds it to its summary row; click the row to open it
   again. The choice is remembered and carries over to the compact layout.
@@ -128,6 +140,8 @@ result is a single `kitchensink.exe` with nothing to install.
   without the mouse over the window (until hovered, or for two minutes
   after something new), and **Swap sides** moves the Recent column across
   every other hour.
+- The moon in the title bar dims the window at once, whatever the mouse
+  does, until it's clicked again (remembered as `forceDim`).
 - Follows the Windows light or dark app theme (set `KITCHENSINK_THEME` to
   `light` or `dark` to override) and per-monitor DPI.
 - **Retro** (in settings): a theme after the Weather Channel's 90s

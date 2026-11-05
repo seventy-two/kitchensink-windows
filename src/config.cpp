@@ -5,6 +5,8 @@
 #include <shlobj.h>
 #include <wincrypt.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 
@@ -108,6 +110,19 @@ Config LoadConfig() {
         for (const auto& a : *it)
             if (a.is_string()) c.privateApps.push_back(a.get<std::string>());
     c.hideApps = j.value("hideApps", false);
+    c.forceDim = j.value("forceDim", false);
+    c.layout = j.value("layout", "");
+    c.relevance = j.value("relevance", true);
+    if (auto it = j.find("news"); it != j.end() && it->is_object())
+        for (const auto& [id, n] : it->items()) {
+            if (!n.is_object()) continue;
+            News v;
+            // Kept as a string: JSON numbers can't hold all 64 bits.
+            v.fingerprint = std::strtoull(n.value("fingerprint", "0").c_str(), nullptr, 16);
+            v.changed = n.value("changed", int64_t(0));
+            v.event = n.value("event", int64_t(0));
+            c.news[id] = v;
+        }
     return c;
 }
 
@@ -129,7 +144,17 @@ bool SaveConfig(const Config& c) {
         {"apps", c.apps},
         {"privateApps", c.privateApps},
         {"hideApps", c.hideApps},
+        {"forceDim", c.forceDim},
+        {"layout", c.layout},
+        {"relevance", c.relevance},
     };
+    nlohmann::json news = nlohmann::json::object();
+    for (const auto& [id, n] : c.news) {
+        char fp[17];
+        std::snprintf(fp, sizeof(fp), "%016llx", (unsigned long long)n.fingerprint);
+        news[id] = {{"fingerprint", fp}, {"changed", n.changed}, {"event", n.event}};
+    }
+    j["news"] = news;
     std::wstring path = configPath(true);
     std::wstring tmp = path + L".tmp";
     {

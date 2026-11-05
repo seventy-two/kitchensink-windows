@@ -158,6 +158,47 @@ static void testUseCompact() {
     CHECK(!UseCompact(true, 1600, 1150, 1));
 }
 
+static void testRelevance() {
+    Snapshot s;
+    s.monitor = "m";
+    CHECK_EQ(SummaryFingerprint(s), uint64_t(0));
+    s.summary = {Stat{"NVDA", "-3.17%"}};
+    uint64_t a = SummaryFingerprint(s);
+    CHECK(a != 0);
+    s.summary[0].value = "-3.20%";
+    CHECK(SummaryFingerprint(s) != a);
+    // A short table's rows trading places isn't a change; a new row is.
+    Snapshot t;
+    Block b;
+    b.type = "table";
+    b.rows = {{Cell{"one"}}, {Cell{"two"}}};
+    t.summaryBlock = {b};
+    uint64_t f = SummaryFingerprint(t);
+    std::swap(t.summaryBlock[0].rows[0], t.summaryBlock[0].rows[1]);
+    CHECK_EQ(SummaryFingerprint(t), f);
+    t.summaryBlock[0].rows[0] = {Cell{"three"}};
+    CHECK(SummaryFingerprint(t) != f);
+
+    int64_t now = 100000;
+    News n;
+    CHECK(PanelTier(s, n, now) == Tier::Middle);  // nothing known yet
+    n.changed = now - 3600;
+    CHECK(PanelTier(s, n, now) == Tier::Middle);
+    n.changed = now - kStaleAfter;
+    CHECK(PanelTier(s, n, now) == Tier::Stale);
+    n.event = now - 600;  // an event: top for a while
+    CHECK(PanelTier(s, n, now) == Tier::Top);
+    n.event = now - kTopFor;
+    CHECK(PanelTier(s, n, now) == Tier::Middle);
+    // The server saying it matters now beats being stale.
+    n.event = 0;
+    s.relevantUntil = now + 60;
+    CHECK(PanelTier(s, n, now) == Tier::Top);
+
+    std::vector<size_t> order = ByTier({Tier::Stale, Tier::Middle, Tier::Top, Tier::Middle, Tier::Top});
+    CHECK(order == (std::vector<size_t>{2, 4, 1, 3, 0}));
+}
+
 static void testFitPanels() {
     // Rows of 50, gaps of 10: 300 high holds all four rows (240) with 60 over.
     std::vector<Panel> p = {{50, 150, 6}, {50, 600, 6}, {50, 80, 6}, {50, 100, 6}};
@@ -182,6 +223,17 @@ static void testFitPanels() {
     p[0].pin = Pin::Closed;
     p[1].pin = Pin::Open;
     CHECK_EQ(shows(FitPanels(p, 500, 10, 40)), std::string("rFrr"));
+    // Stale panels don't open by themselves, nor take the space left, but
+    // a pin still opens one.
+    {
+        std::vector<Panel> q = {{50, 150, 6}, {50, 100, 6}, {50, 80, 6}};
+        q[0].stale = true;
+        CHECK_EQ(shows(FitPanels(q, 2000, 10, 40)), std::string("rFF"));
+        q[2].stale = true;
+        CHECK_EQ(shows(FitPanels(q, 250, 10, 40)), std::string("rFr"));
+        q[0].pin = Pin::Open;
+        CHECK_EQ(shows(FitPanels(q, 2000, 10, 40)), std::string("FFr"));
+    }
     // Unmeasured panels stay as rows.
     CHECK_EQ(shows(FitPanels({{50, 0, 6}, {50, 100, 6}}, 2000, 10, 40)), std::string("rF"));
 }
@@ -898,6 +950,7 @@ int main() {
     testParseSnapshot();
     testUseCompact();
     testFitPanels();
+    testRelevance();
     testGpuUtilisation();
     testLocalPanels();
     testMedia();

@@ -2,6 +2,7 @@
 // token is encrypted with DPAPI, so only this Windows user can read it.
 #pragma once
 
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -49,6 +50,17 @@ struct Config {
     // toggled from the eye's right-click menu.
     std::vector<std::string> privateApps;
     bool hideApps = false;
+    // Dims the window whatever the mouse does, until switched off (the
+    // moon in the title bar).
+    bool forceDim = false;
+    // "" lays out by window size; "ultra" is the compact layout with every
+    // closed panel cut to one slim line.
+    std::string layout;
+    // Panels with something new rise to the top; ones with nothing new for
+    // a long while sink, fade and don't open by themselves.
+    bool relevance = true;
+    // When each monitor last had something new, for the above.
+    std::map<std::string, News> news;
 };
 
 // LoadConfig reads the settings, leaving defaults for anything missing.
