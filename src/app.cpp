@@ -225,6 +225,15 @@ Theme App::theme() const {
     return dark_ ? Theme::Dark : Theme::Light;
 }
 
+// mouseOverWindow says whether the cursor is over this window itself, not
+// just somewhere on screen or over a window in front of it.
+bool App::mouseOverWindow() const {
+    POINT p;
+    if (!GetCursorPos(&p)) return false;
+    HWND under = WindowFromPoint(p);
+    return under && GetAncestor(under, GA_ROOT) == hwnd_;
+}
+
 void App::SetScale(float scale) {
     scale_ = scale;
     ApplyTheme(theme(), scale_, compact_);
@@ -436,7 +445,11 @@ void App::Frame() {
 
     // OLED care dims everything when the mouse hasn't been over the window
     // for a while; it's back as soon as it is.
-    if (ImGui::IsMousePosValid() || settingsOpen_) lastActivity_ = t;
+    // ImGui's mouse position isn't enough: while the window has focus, the
+    // Win32 backend reports the cursor wherever it is on screen. So ask
+    // Windows whether the cursor is over this window (and not something on
+    // top of it).
+    if (mouseOverWindow() || settingsOpen_) lastActivity_ = t;
     bool dimmed = config_.oled.dim && OledDim(t, lastActivity_, wakeUntil_);
     if (dimmed) ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, 153));
     // The cat isn't drawn while the window's dimmed.

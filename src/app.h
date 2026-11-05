@@ -149,6 +149,7 @@ private:
     void diagnostics();
     void openSettings();
 
+    bool mouseOverWindow() const;
     HWND hwnd_;
     float captionH_ = 0;
     std::vector<ImRect> noDrag_;  // title bar buttons, from the last frame
