@@ -158,6 +158,14 @@ static void testUseCompact() {
     CHECK(!UseCompact(true, 1600, 1150, 1));
 }
 
+static void testSwitchGroup() {
+    CHECK_EQ(SwitchGroup("Hallway 2"), std::string("Hallway"));
+    CHECK_EQ(SwitchGroup("Living room 12"), std::string("Living room"));
+    CHECK_EQ(SwitchGroup("Study"), std::string(""));
+    CHECK_EQ(SwitchGroup("R2D2"), std::string(""));
+    CHECK_EQ(SwitchGroup("12"), std::string(""));
+}
+
 static void testBrief() {
     Snapshot s = ParseSnapshot(nlohmann::json::parse(
         R"({"monitor":"food","summary":[{"label":"Avocado","value":"Saturday","brief":""},{"label":"Basil","value":"Tomorrow"}]})"));
@@ -961,6 +969,7 @@ int main() {
     testFitPanels();
     testRelevance();
     testBrief();
+    testSwitchGroup();
     testGpuUtilisation();
     testLocalPanels();
     testMedia();

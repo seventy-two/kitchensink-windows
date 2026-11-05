@@ -80,7 +80,9 @@ result is a single `kitchensink.exe` with nothing to install.
 - A monitor whose short view is a row of switch buttons (the lights)
   lives at the top of the Recent column, above the cat, as a small card
   that's always there, each button with a bulb lit in the light's colour
-  (a warm white without one) while on. Without the Recent column it's a
+  (a warm white without one) while on. Switches named alike but for a
+  number at the end (Hallway 1, Hallway 2) are one joined button, the rest
+  of the group named only by number. Without the Recent column it's a
   panel like the rest.
 - Checklists (the `todo` monitor) can be ticked, added to and deleted
   from; a tick shows at once, ahead of the server's update.

@@ -110,6 +110,10 @@ struct Item {
 // reach outside its own folder.
 bool IsAppName(const std::string& s);
 
+// SwitchGroup is what a switch's name is a numbered one of: "Hallway" for
+// "Hallway 2"; empty when it doesn't end in a number.
+std::string SwitchGroup(const std::string& title);
+
 // ParseHexColour reads "#rrggbb" into rgb (0-1); false if it isn't one.
 bool ParseHexColour(const std::string& s, float rgb[3]);
 // HexColour writes rgb (0-1) as "#rrggbb".

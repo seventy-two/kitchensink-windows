@@ -215,6 +215,13 @@ void mix(uint64_t& h, const std::string& s) {
 }
 }  // namespace
 
+std::string SwitchGroup(const std::string& title) {
+    size_t i = title.size();
+    while (i > 0 && std::isdigit((unsigned char)title[i - 1])) i--;
+    if (i == title.size() || i < 2 || title[i - 1] != ' ') return "";
+    return title.substr(0, i - 1);
+}
+
 uint64_t SummaryFingerprint(const Snapshot& s) {
     if (s.summary.empty() && s.summaryBlock.empty()) return 0;
     uint64_t h = 1469598103934665603ull;

@@ -2191,7 +2191,24 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
     ImGui::PushFont(fonts_.caption);
     float h = std::round(ImGui::GetTextLineHeight() + (slimBlock_ ? 2 : 6) * scale_);
     float x = start.x, y = start.y;
-    for (const Item& it : b.items) {
+    // Switches whose names differ only by a number at the end (Hallway 1,
+    // Hallway 2) are one joined button, the first half named in full, the
+    // rest only by number; a little more room between groups.
+    const size_t n = b.items.size();
+    std::vector<bool> joined(n, false);
+    std::vector<std::string> labels(n);
+    std::vector<float> widths(n);
+    float bulbW = b.switches ? ImGui::CalcTextSize(icon::Lightbulb).x : 0;
+    float seam = std::max(1.0f, std::round(scale_)), groupGap = b.switches ? std::round(8 * scale_) : gap;
+    for (size_t i = 0; i < n; i++) {
+        const std::string& title = b.items[i].title;
+        std::string group = b.switches ? SwitchGroup(title) : "";
+        joined[i] = i > 0 && !group.empty() && group == SwitchGroup(b.items[i - 1].title);
+        labels[i] = joined[i] ? title.substr(group.size() + 1) : title;
+        widths[i] = ImGui::CalcTextSize(labels[i].c_str()).x + 2 * padX + (b.switches ? bulbW + padX / 2 : 0);
+    }
+    for (size_t i = 0; i < n; i++) {
+        const Item& it = b.items[i];
         ImGui::PushID(it.id.c_str());
         std::string key = monitor + "/" + it.id;
         bool done = it.done;
@@ -2203,13 +2220,19 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
         bool hasColour = ParseHexColour(colour, rgb) && b.switches && on;
         // Switches get a bulb: lit in the light's colour (or a warm white)
         // while on, grey while off.
-        float bulbW = b.switches ? ImGui::CalcTextSize(icon::Lightbulb).x : 0;
-
-        float w = ImGui::CalcTextSize(it.title.c_str()).x + 2 * padX +
-                  (b.switches ? bulbW + padX / 2 : hasColour ? 2 * dot + padX / 2 : 0);
-        if (x > start.x && x + w > right) {
-            x = start.x;
-            y += h + gap;
+        float w = widths[i] + (!b.switches && hasColour ? 2 * dot + padX / 2 : 0);
+        bool last = i + 1 == n || !joined[i + 1];
+        if (joined[i]) {
+            x += seam - gap;  // up against the one before
+        } else {
+            if (i > 0) x += groupGap - gap;
+            // A group wraps whole.
+            float groupW = w;
+            for (size_t j = i + 1; j < n && joined[j]; j++) groupW += seam + widths[j];
+            if (x > start.x && x + groupW > right) {
+                x = start.x;
+                y += h + gap;
+            }
         }
         ImGui::SetCursorScreenPos(ImVec2(x, y));
         if (ImGui::InvisibleButton("##light", ImVec2(w, h))) ImGui::OpenPopup("##controls");
@@ -2219,7 +2242,11 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
             localHovered_ = true;  // a click here isn't for the panel
         }
         ImVec2 a(x, y), z(x + w, y + h);
-        dl->AddRectFilled(a, z, u32(hovered ? p.hover : p.frame), std::round(3 * scale_));
+        ImDrawFlags corners = joined[i] && !last ? ImDrawFlags_RoundCornersNone
+                              : joined[i]        ? ImDrawFlags_RoundCornersRight
+                              : !last            ? ImDrawFlags_RoundCornersLeft
+                                                 : ImDrawFlags_RoundCornersAll;
+        dl->AddRectFilled(a, z, u32(hovered ? p.hover : p.frame), std::round(3 * scale_), corners);
         float tx = x + padX;
         if (b.switches) {
             ImVec4 lit = hasColour ? ImVec4(rgb[0], rgb[1], rgb[2], 1) : ImVec4(1.0f, 0.84f, 0.55f, 1);
@@ -2231,7 +2258,8 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
             tx += 2 * dot + padX / 2;
         }
         ImVec4 text = !on ? p.muted : it.tone == Tone::None ? p.text : ToneColour(it.tone);
-        dl->AddText(ImVec2(tx, std::round(y + (h - ImGui::GetTextLineHeight()) / 2)), u32(text), it.title.c_str());
+        dl->AddText(ImVec2(tx, std::round(y + (h - ImGui::GetTextLineHeight()) / 2)), u32(text), labels[i].c_str());
+        if (hovered && joined[i]) ImGui::SetTooltip("%s", it.title.c_str());
 
         // The controls, in the body's font, sized to fit the title.
         ImGui::PushFont(fonts_.body);
