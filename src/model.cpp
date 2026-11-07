@@ -521,4 +521,38 @@ std::string Model::TitleOf(const std::string& monitor) const {
     return monitor;
 }
 
+namespace {
+
+std::string lowerAscii(std::string_view s) {
+    std::string out(s);
+    for (char& c : out)
+        if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
+    return out;
+}
+
+}  // namespace
+
+bool UploadAllowed(std::string_view fullPath, std::string_view root, const std::vector<std::string>& prefixes) {
+    if (prefixes.empty() || root.empty()) return false;
+    for (const auto& p : prefixes)
+        if (p.empty()) return false;
+    std::string path = lowerAscii(fullPath), base = lowerAscii(root);
+    while (!base.empty() && (base.back() == '\\' || base.back() == '/')) base.pop_back();
+    base += '\\';
+    if (path.size() <= base.size() || path.compare(0, base.size(), base) != 0) return false;
+    std::string rest = path.substr(base.size());
+    // No climbing out, other separators, streams (file:stream) or devices.
+    if (rest.find('/') != std::string::npos || rest.find(':') != std::string::npos) return false;
+    size_t start = 0;
+    while (start <= rest.size()) {
+        size_t end = rest.find('\\', start);
+        if (end == std::string::npos) end = rest.size();
+        std::string part = rest.substr(start, end - start);
+        if (part.empty() || part == "." || part == "..") return false;
+        start = end + 1;
+    }
+    static const std::string ext = ".properties";
+    return rest.size() > ext.size() && rest.compare(rest.size() - ext.size(), ext.size(), ext) == 0;
+}
+
 }  // namespace ks

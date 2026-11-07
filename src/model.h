@@ -225,6 +225,14 @@ std::string Ago(int64_t then, int64_t now);
 // line if there are none), joined with \n, without their \r.
 std::string KeepLines(std::string_view text, const std::vector<std::string>& prefixes);
 
+// UploadAllowed reports whether a monitor may have the file at fullPath (an
+// absolute Windows path, already expanded and made full) uploaded. The
+// server says which file it wants, so this keeps a compromised or misset
+// server from asking for anything else: only RuneLite .properties files
+// under root (the user's .runelite folder), and only chosen lines of them
+// (prefixes must be given). Case doesn't matter, as on Windows.
+bool UploadAllowed(std::string_view fullPath, std::string_view root, const std::vector<std::string>& prefixes);
+
 // Arrange orders panel IDs by a saved order. Panels in saved come in that
 // order; ones it doesn't mention (e.g. added since) keep their place after
 // the panel they follow by default. IDs in saved that no longer exist are

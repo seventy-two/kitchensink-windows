@@ -834,6 +834,23 @@ static void testUpload() {
     CHECK_EQ(KeepLines("x\r\ny", {}), std::string("x\ny"));
 }
 
+static void testUploadAllowed() {
+    const std::string root = "C:\\Users\\seven\\.runelite";
+    const std::vector<std::string> pre = {"timetracking."};
+    CHECK(UploadAllowed("C:\\Users\\seven\\.runelite\\profiles2\\main-1.properties", root, pre));
+    CHECK(UploadAllowed("c:\\users\\SEVEN\\.RuneLite\\settings.PROPERTIES", root + "\\", pre));
+    CHECK(!UploadAllowed("C:\\Users\\seven\\.runelite\\profiles2\\main-1.properties", root, {}));
+    CHECK(!UploadAllowed("C:\\Users\\seven\\.runelite\\profiles2\\main-1.properties", root, {""}));
+    CHECK(!UploadAllowed("C:\\Users\\seven\\.ssh\\id_ed25519", root, pre));
+    CHECK(!UploadAllowed("C:\\Users\\seven\\.runelite\\..\\.ssh\\x.properties", root, pre));
+    CHECK(!UploadAllowed("C:\\Users\\seven\\.runelite-evil\\x.properties", root, pre));
+    CHECK(!UploadAllowed("C:\\Users\\seven\\.runelite\\logs\\client.log", root, pre));
+    CHECK(!UploadAllowed("C:\\Users\\seven\\.runelite\\x.properties:secret", root, pre));
+    CHECK(!UploadAllowed("C:\\Users\\seven\\.runelite\\a/../x.properties", root, pre));
+    CHECK(!UploadAllowed("\\\\wsl.localhost\\Ubuntu\\root\\.ssh\\id.properties", root, pre));
+    CHECK(!UploadAllowed("C:\\Users\\seven\\.runelite\\.properties", root, pre));
+}
+
 static void testStaleEvents() {
     Model m;
     Event kept = ParseEvent(nlohmann::json::parse(R"({"id": 1, "title": "Pet", "time": "2026-10-14T10:00:00Z"})"));
@@ -978,6 +995,7 @@ int main() {
     testParseEvent();
     testModel();
     testSse();
+    testUploadAllowed();
     if (failures) {
         std::printf("%d failures\n", failures);
         return 1;

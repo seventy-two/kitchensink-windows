@@ -19,6 +19,17 @@ std::wstring expand(const std::string& path) {
     return out;
 }
 
+// fullPath resolves . and .. so the path can be checked; empty on failure.
+std::wstring fullPath(const std::wstring& path) {
+    DWORD n = GetFullPathNameW(path.c_str(), 0, nullptr, nullptr);
+    if (n == 0) return L"";
+    std::wstring out(n, L'\0');
+    n = GetFullPathNameW(path.c_str(), n, out.data(), nullptr);
+    if (n == 0 || n >= out.size()) return L"";
+    out.resize(n);
+    return out;
+}
+
 // readFile reads a whole file, sharing it with the app that writes it.
 bool readFile(const std::wstring& path, std::string& out) {
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
@@ -48,7 +59,10 @@ void Uploader::Check(const std::vector<Snapshot>& snapshots, Client& client) {
         if (seen.path != s.uploadPath || seen.prefixes != s.uploadPrefixes) seen = Seen{s.uploadPath, s.uploadPrefixes};
         if (s.uploadEvery > 0 && seen.looked != 0 && now - seen.looked < uint64_t(s.uploadEvery) * 1000) continue;
         seen.looked = now;
-        std::wstring path = expand(s.uploadPath);
+        std::wstring path = fullPath(expand(s.uploadPath));
+        if (path.empty() || !UploadAllowed(Narrow(path), Narrow(expand("%USERPROFILE%\\.runelite")), s.uploadPrefixes)) {
+            continue;  // not a file monitors may have (see UploadAllowed)
+        }
         WIN32_FILE_ATTRIBUTE_DATA attrs;
         if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &attrs)) continue;
         uint64_t written = (uint64_t(attrs.ftLastWriteTime.dwHighDateTime) << 32) | attrs.ftLastWriteTime.dwLowDateTime;
