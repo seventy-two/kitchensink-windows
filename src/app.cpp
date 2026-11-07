@@ -2203,7 +2203,9 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
     float x = start.x, y = start.y;
     // Switches whose names differ only by a number at the end (Hallway 1,
     // Hallway 2) are one joined button, the first half named in full, the
-    // rest only by number; a little more room between groups.
+    // rest only by number; a little more room between groups. A switch
+    // named just "Hallway" right before them (the server's row for the
+    // whole room) heads the group.
     const size_t n = b.items.size();
     std::vector<bool> joined(n, false);
     std::vector<std::string> labels(n);
@@ -2213,7 +2215,8 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
     for (size_t i = 0; i < n; i++) {
         const std::string& title = b.items[i].title;
         std::string group = b.switches ? SwitchGroup(title) : "";
-        joined[i] = i > 0 && !group.empty() && group == SwitchGroup(b.items[i - 1].title);
+        joined[i] = i > 0 && !group.empty() &&
+                    (group == SwitchGroup(b.items[i - 1].title) || group == b.items[i - 1].title);
         labels[i] = joined[i] ? title.substr(group.size() + 1) : title;
         widths[i] = ImGui::CalcTextSize(labels[i].c_str()).x + 2 * padX + (b.switches ? bulbW + padX / 2 : 0);
     }

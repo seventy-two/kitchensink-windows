@@ -82,7 +82,8 @@ result is a single `kitchensink.exe` with nothing to install.
   that's always there, each button with a bulb lit in the light's colour
   (a warm white without one) while on. Switches named alike but for a
   number at the end (Hallway 1, Hallway 2) are one joined button, the rest
-  of the group named only by number. In the card each group has a line
+  of the group named only by number; the server's row for the whole room
+  ("Hallway", switching them together) heads it: Hallway | 1 | 2. In the card each group has a line
   of its own, the card's full width. Without the Recent column it's a
   panel like the rest.
 - Checklists (the `todo` monitor) can be ticked, added to and deleted
