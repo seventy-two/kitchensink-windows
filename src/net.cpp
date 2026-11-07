@@ -6,6 +6,8 @@
 
 namespace ks {
 
+#ifdef _WIN32
+
 std::wstring Widen(std::string_view s) {
     if (s.empty()) return {};
     int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), int(s.size()), nullptr, 0);
@@ -168,8 +170,8 @@ HttpResult Http::Request(const std::string& method, const std::string& url, cons
     return r;
 }
 
-std::string Http::Stream(const std::string& url, const std::string& token, DWORD receiveTimeoutMs,
-                         const std::function<bool(std::string_view)>& onData, DWORD* status) {
+std::string Http::Stream(const std::string& url, const std::string& token, unsigned long receiveTimeoutMs,
+                         const std::function<bool(std::string_view)>& onData, unsigned long* status) {
     std::string error;
     *status = 0;
     HINTERNET req = open("GET", url, token, error);
@@ -219,6 +221,8 @@ void Http::Cancel() {
         streaming_ = nullptr;
     }
 }
+
+#endif  // _WIN32
 
 Client::Client(std::function<void()> wake) : wake_(std::move(wake)) {}
 
@@ -365,7 +369,7 @@ void Client::run(std::string base, std::string token) {
             }
             return !stop_.load();
         };
-        DWORD status = 0;
+        unsigned long status = 0;
         // The server sends a heartbeat every 30 seconds, so 75 seconds of
         // silence means the connection has gone.
         std::string err = http_.Stream(base + "/api/stream?heartbeat=30&since=" + std::to_string(since), token,

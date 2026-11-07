@@ -1,9 +1,6 @@
 // The dashboard: state from the stream, drawn with ImGui.
 #pragma once
 
-#include <windows.h>
-#include <d3d11.h>
-
 #include <array>
 #include <functional>
 #include <memory>
@@ -21,6 +18,7 @@
 #include "model.h"
 #include "net.h"
 #include "media.h"
+#include "platform.h"
 #include "sky.h"
 #include "sysinfo.h"
 #include "theme.h"
@@ -31,9 +29,9 @@ namespace ks {
 class App {
 public:
     // wake is called from background threads when there's something new.
-    // notify shows a Windows notification. The header doubles as hwnd's
-    // title bar, with its own window buttons.
-    App(HWND hwnd, ID3D11Device* device, std::function<void()> wake,
+    // notify shows a desktop notification. The header doubles as the
+    // window's title bar, with its own window buttons.
+    App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
         std::function<void(const std::string& title, const std::string& body)> notify);
     ~App();
 
@@ -169,7 +167,7 @@ private:
     bool ultra_ = false;       // the ultra compact layout
     bool slimPanel_ = false;   // drawing a panel whose closed row is a slim line
     bool slimBlock_ = false;   // drawing a short block on an ultra compact line
-    HWND hwnd_;
+    NativeWindow hwnd_;
     float captionH_ = 0;
     std::vector<ImRect> noDrag_;  // title bar buttons, from the last frame
     int hoverButton_ = -1;        // window button under the mouse, for its tooltip

@@ -1,9 +1,17 @@
 #include "config.h"
 
+#ifdef _WIN32
 #include <windows.h>
 #include <dpapi.h>
 #include <shlobj.h>
 #include <wincrypt.h>
+#else
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <climits>
+#endif
 
 #include <cstdio>
 #include <cstdlib>
@@ -16,6 +24,7 @@ namespace ks {
 
 namespace {
 
+#ifdef _WIN32
 const wchar_t* kRunKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 const wchar_t* kRunValue = L"kitchensink";
 
@@ -53,6 +62,34 @@ std::string unprotect(const std::string& b64) {
     LocalFree(out.pbData);
     return plain;
 }
+
+#else
+
+// On Linux the settings are in $XDG_CONFIG_HOME/kitchensink (usually
+// ~/.config/kitchensink), readable by this user only. There's no DPAPI, so
+// the token is kept as it is, protected by the file's permissions.
+std::string configDir() {
+    const char* xdg = std::getenv("XDG_CONFIG_HOME");
+    if (xdg && *xdg) return std::string(xdg);
+    const char* home = std::getenv("HOME");
+    return std::string(home ? home : ".") + "/.config";
+}
+
+std::string configPath(bool create) {
+    std::string dir = configDir() + "/kitchensink";
+    if (create) {
+        mkdir(configDir().c_str(), 0700);
+        mkdir(dir.c_str(), 0700);
+    }
+    return dir + "/config.json";
+}
+
+std::string protect(const std::string& plain) { return plain; }
+std::string unprotect(const std::string& stored) { return stored; }
+
+std::string autostartPath() { return configDir() + "/autostart/kitchensink.desktop"; }
+
+#endif
 
 const char* priorityName(Priority p) {
     switch (p) {
@@ -159,6 +196,7 @@ bool SaveConfig(const Config& c) {
         news[id] = {{"fingerprint", fp}, {"changed", n.changed}, {"event", n.event}};
     }
     j["news"] = news;
+#ifdef _WIN32
     std::wstring path = configPath(true);
     std::wstring tmp = path + L".tmp";
     {
@@ -168,7 +206,21 @@ bool SaveConfig(const Config& c) {
         if (!f) return false;
     }
     return MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+    std::string path = configPath(true);
+    std::string tmp = path + ".tmp";
+    // Created readable by this user only, as it holds the token.
+    int fd = open(tmp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd < 0) return false;
+    std::string text = j.dump(2);
+    bool ok = write(fd, text.data(), text.size()) == ssize_t(text.size());
+    ok = fsync(fd) == 0 && ok;
+    close(fd);
+    return ok && rename(tmp.c_str(), path.c_str()) == 0;
+#endif
 }
+
+#ifdef _WIN32
 
 bool StartsWithWindows() {
     HKEY key;
@@ -191,5 +243,28 @@ void SetStartWithWindows(bool on) {
     }
     RegCloseKey(key);
 }
+
+#else
+
+bool StartsWithWindows() { return access(autostartPath().c_str(), F_OK) == 0; }
+
+void SetStartWithWindows(bool on) {
+    std::string path = autostartPath();
+    if (!on) {
+        unlink(path.c_str());
+        return;
+    }
+    char exe[PATH_MAX];
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    if (n <= 0) return;
+    exe[n] = 0;
+    mkdir(configDir().c_str(), 0700);
+    mkdir((configDir() + "/autostart").c_str(), 0755);
+    std::ofstream f(path, std::ios::trunc);
+    f << "[Desktop Entry]\nType=Application\nName=kitchensink\nExec=\"" << exe
+      << "\" --minimised\nIcon=kitchensink\nX-GNOME-Autostart-enabled=true\n";
+}
+
+#endif
 
 }  // namespace ks

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=kitchensink
+Comment=Dashboard for the kitchensink monitors
+Exec=kitchensink
+Icon=kitchensink
+Terminal=false
+Categories=Utility;
+StartupWMClass=kitchensink

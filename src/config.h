@@ -70,7 +70,8 @@ struct Config {
 Config LoadConfig();
 bool SaveConfig(const Config& c);
 
-// Start with Windows, via the current user's Run key.
+// Start with Windows, via the current user's Run key (on Linux, start at
+// login via an XDG autostart entry).
 bool StartsWithWindows();
 void SetStartWithWindows(bool on);
 

@@ -1,8 +1,11 @@
-// HTTP over WinHTTP, and the client that keeps the event stream open.
+// HTTP (WinHTTP on Windows, libcurl on Linux, in linux/http_curl.cpp), and
+// the client that keeps the event stream open.
 #pragma once
 
+#ifdef _WIN32
 #include <windows.h>
 #include <winhttp.h>
+#endif
 
 #include <atomic>
 #include <condition_variable>
@@ -17,17 +20,19 @@
 
 namespace ks {
 
+#ifdef _WIN32
 std::wstring Widen(std::string_view s);
 std::string Narrow(std::wstring_view s);
+#endif
 
 struct HttpResult {
-    DWORD status = 0;  // 0 if the request failed before a response
+    unsigned long status = 0;  // 0 if the request failed before a response
     std::string body;
     std::string error;
     bool ok() const { return status >= 200 && status < 300; }
 };
 
-// Http is a WinHTTP session. Requests are synchronous and safe to make from
+// Http is an HTTP session. Requests are synchronous and safe to make from
 // several threads at once.
 class Http {
 public:
@@ -45,19 +50,23 @@ public:
     // it returns false, the connection ends, or Cancel is called. It
     // returns why the stream ended. A read that waits longer than
     // receiveTimeoutMs fails, so a dead connection is noticed.
-    std::string Stream(const std::string& url, const std::string& token, DWORD receiveTimeoutMs,
-                       const std::function<bool(std::string_view)>& onData, DWORD* status);
+    std::string Stream(const std::string& url, const std::string& token, unsigned long receiveTimeoutMs,
+                       const std::function<bool(std::string_view)>& onData, unsigned long* status);
 
     // Cancel ends a Stream in progress on another thread.
     void Cancel();
 
 private:
+#ifdef _WIN32
     HINTERNET open(const std::string& method, const std::string& url, const std::string& token,
                    std::string& error, const std::string& body = {});
 
     HINTERNET session_ = nullptr;
     std::mutex mu_;
     HINTERNET streaming_ = nullptr;
+#else
+    std::atomic<bool> cancel_{false};
+#endif
 };
 
 // Inbound is something the stream client received, for the UI thread.

@@ -2,7 +2,7 @@
 // turned into textures on the UI thread.
 #pragma once
 
-#include <d3d11.h>
+#include "platform.h"
 
 #include <condition_variable>
 #include <deque>
@@ -16,14 +16,18 @@
 namespace ks {
 
 struct Texture {
+#ifdef _WIN32
     ID3D11ShaderResourceView* srv = nullptr;
+#else
+    uintptr_t srv = 0;  // an OpenGL texture name; 0 for none
+#endif
     int width = 0, height = 0;
 };
 
 class ImageCache {
 public:
     // wake is called from the background thread when an image is ready.
-    ImageCache(ID3D11Device* device, std::function<void()> wake);
+    ImageCache(GpuDevice device, std::function<void()> wake);
     ~ImageCache();
 
     // Get returns the image's texture, or nullptr while it loads or if it
@@ -56,7 +60,7 @@ private:
     void run();
     void evict();
 
-    ID3D11Device* device_;
+    GpuDevice device_;
     std::function<void()> wake_;
     std::unordered_map<std::string, Entry> entries_;
     unsigned tick_ = 0;

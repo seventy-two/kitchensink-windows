@@ -181,11 +181,39 @@ g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/mo
     src/cat.cpp src/weather_icon.cpp src/retro.cpp src/sky.cpp third_party/imgui/imgui*.cpp && ./a.out
 ```
 
+## Linux
+
+The same dashboard also builds for Linux (tested on Bazzite, KDE on
+Wayland): an SDL3 window drawn with OpenGL instead of Win32 and Direct3D,
+libcurl instead of WinHTTP, stb_image instead of WIC. Only the dashboard
+itself: the PC-specific parts (This PC and Drives, Now playing, the apps
+menu, Lick of the Day, watchgrab's buttons, RuneLite uploads, turning the
+displays off) are stubbed out in `linux/stubs.cpp`. There's no tray, so
+closing the window quits. Notifications go through `notify-send`.
+
+- Fonts come from fontconfig: Noto Sans (Liberation Sans Bold for the retro
+  theme), and the icons from Symbols Nerd Font (Codicons and Font Awesome
+  standing in for Segoe's). Light or dark follows the desktop.
+- Settings are in `~/.config/kitchensink/config.json`, readable by the user
+  only; the token is kept there as it is (no DPAPI). "Start when I log in"
+  writes `~/.config/autostart/kitchensink.desktop`.
+- Build (needs g++, pkg-config, SDL3 and libcurl development files):
+
+```sh
+make -f linux/Makefile -j4        # build/kitchensink, then the tests
+```
+
+- Install: `build/kitchensink` to `~/.local/bin`, `linux/kitchensink.desktop`
+  to `~/.local/share/applications` and `linux/kitchensink.png` to
+  `~/.local/share/icons/hicolor/256x256/apps`.
+
 ## Layout
 
 | File | What it does |
 | --- | --- |
 | `src/main.cpp` | window, Direct3D, the tray icon, notifications and the message loop |
+| `src/platform.h` | the window and clock calls the UI needs (`platform_win.cpp`, `linux/platform_linux.cpp`) |
+| `linux/` | the Linux entry point, libcurl HTTP, stubs and Makefile |
 | `src/app.cpp` | the UI: header, panels, block drawing, event feed, settings |
 | `src/model.cpp` | snapshots and events parsed from JSON, and the dashboard's state |
 | `src/sse.cpp` | server-sent events parser |

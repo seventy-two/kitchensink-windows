@@ -1,6 +1,16 @@
 #include "theme.h"
 
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <SDL3/SDL.h>
+#include <unistd.h>
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <map>
+#endif
 
 #include <string>
 
@@ -59,6 +69,7 @@ Palette retro() {
 
 Palette current = extras(kDark);
 
+#ifdef _WIN32
 std::string fontPath(const char* file) {
     char dir[MAX_PATH];
     GetWindowsDirectoryA(dir, MAX_PATH);
@@ -66,9 +77,55 @@ std::string fontPath(const char* file) {
 }
 
 bool exists(const std::string& path) { return GetFileAttributesA(path.c_str()) != INVALID_FILE_ATTRIBUTES; }
+#else
+// fcMatch asks fontconfig for the file of the best match for a pattern.
+std::string fcMatch(const char* pattern) {
+    std::string cmd = std::string("fc-match -f '%{file}' '") + pattern + "' 2>/dev/null";
+    FILE* p = popen(cmd.c_str(), "r");
+    if (!p) return {};
+    std::string out;
+    char buf[512];
+    while (size_t n = fread(buf, 1, sizeof(buf), p)) out.append(buf, n);
+    pclose(p);
+    return out;
+}
+
+// fontPath finds a Linux stand-in for each Windows font the dashboard asks
+// for. Static font files only: ImGui can't pick a weight from a variable
+// font. A missing font is "", which LoadFonts treats as not there.
+std::string fontPath(const char* file) {
+    static std::map<std::string, std::string> found;
+    auto it = found.find(file);
+    if (it != found.end()) return it->second;
+    struct Want {
+        const char* windows;
+        const char* pattern;
+        const char* mustContain;  // in the file's path, so a fallback isn't taken
+        bool text;                // any sans will do in its place
+    };
+    static const Want wants[] = {
+        {"segoeui.ttf", "Noto Sans:style=Regular", "NotoSans-Regular", true},
+        {"seguisb.ttf", "Noto Sans:style=SemiBold", "NotoSans-SemiBold", true},
+        {"arialbd.ttf", "Liberation Sans:style=Bold", "LiberationSans-Bold", true},
+        {"SegoeIcons.ttf", "Symbols Nerd Font Mono", "SymbolsNerdFont", false},
+        {"segmdl2.ttf", "Symbols Nerd Font", "SymbolsNerdFont", false},
+    };
+    std::string path;
+    for (const Want& w : wants)
+        if (std::strcmp(w.windows, file) == 0) {
+            path = fcMatch(w.pattern);
+            // Only the real icon font has the icons.
+            if (path.find(w.mustContain) == std::string::npos) path = w.text ? fcMatch("sans-serif:style=Regular") : "";
+        }
+    return found[file] = path;
+}
+
+bool exists(const std::string& path) { return !path.empty() && access(path.c_str(), R_OK) == 0; }
+#endif
 
 }  // namespace
 
+#ifdef _WIN32
 bool SystemUsesDarkTheme() {
     // KITCHENSINK_THEME=light or dark overrides the Windows setting.
     wchar_t forced[16];
@@ -78,6 +135,14 @@ bool SystemUsesDarkTheme() {
                  L"AppsUseLightTheme", RRF_RT_REG_DWORD, nullptr, &light, &size);
     return light == 0;
 }
+#else
+bool SystemUsesDarkTheme() {
+    // KITCHENSINK_THEME=light or dark overrides the desktop's setting.
+    if (const char* forced = std::getenv("KITCHENSINK_THEME")) return std::strcmp(forced, "light") != 0;
+    // Unknown (no preference) is dark, as the dashboard has always been.
+    return SDL_GetSystemTheme() != SDL_SYSTEM_THEME_LIGHT;
+}
+#endif
 
 const Palette& Colours() { return current; }
 

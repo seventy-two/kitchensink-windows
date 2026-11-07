@@ -1,7 +1,13 @@
 #include "app.h"
 
+#ifdef _WIN32
 #include <windows.h>
 #include <shellapi.h>
+#else
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <cfloat>
@@ -19,7 +25,22 @@
 #include "retro.h"
 #include "sky.h"
 
+#ifndef _WIN32
+// localtime_s as Windows has it (arguments the other way round to C11's).
+static inline int localtime_s(std::tm* out, const std::time_t* t) { return localtime_r(t, out) ? 0 : 1; }
+#endif
+
 namespace ks {
+
+#ifdef _WIN32
+constexpr const char* kNotifyLabel = "Show Windows notifications";
+constexpr const char* kStartLabel = "Start with Windows";
+constexpr const char* kSystemThemeLabel = "As Windows (light or dark)";
+#else
+constexpr const char* kNotifyLabel = "Show desktop notifications";
+constexpr const char* kStartLabel = "Start when I log in";
+constexpr const char* kSystemThemeLabel = "As the system (light or dark)";
+#endif
 
 // ChipsWheel owns the mouse wheel while chips that scroll are hovered.
 const ImGuiID ChipsWheel = ImHashStr("kitchensink chips wheel");
@@ -178,6 +199,7 @@ void weatherIcon(const std::string& name, ImVec2 at, float size) {
 
 }  // namespace
 
+#ifdef _WIN32
 void OpenURL(const std::string& url, const std::string& app) {
     if (url.rfind("https://", 0) != 0 && url.rfind("http://", 0) != 0) return;
     if (IsAppName(app)) {
@@ -196,8 +218,25 @@ void OpenURL(const std::string& url, const std::string& app) {
     }
     ShellExecuteW(nullptr, L"open", Widen(url).c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 }
+#else
+void OpenURL(const std::string& url, const std::string& app) {
+    if (url.rfind("https://", 0) != 0 && url.rfind("http://", 0) != 0) return;
+    (void)app;  // the user's own apps are Windows programs
+    // xdg-open, double-forked so it's never left a zombie.
+    pid_t pid = fork();
+    if (pid == 0) {
+        if (fork() == 0) {
+            execlp("xdg-open", "xdg-open", url.c_str(), (char*)nullptr);
+            _exit(127);
+        }
+        _exit(0);
+    }
+    if (pid > 0) waitpid(pid, nullptr, 0);
+}
 
-App::App(HWND hwnd, ID3D11Device* device, std::function<void()> wake,
+#endif
+
+App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
          std::function<void(const std::string&, const std::string&)> notify)
     : hwnd_(hwnd),
       config_(LoadConfig()),
@@ -321,12 +360,7 @@ void App::rowStyleMenu(const std::string& id) {
     ImGui::PopStyleVar();
 }
 
-bool App::mouseOverWindow() const {
-    POINT p;
-    if (!GetCursorPos(&p)) return false;
-    HWND under = WindowFromPoint(p);
-    return under && GetAncestor(under, GA_ROOT) == hwnd_;
-}
+bool App::mouseOverWindow() const { return MouseOverWindow(hwnd_); }
 
 void App::SetScale(float scale) {
     scale_ = scale;
@@ -404,7 +438,7 @@ void App::Pump() {
     media_->Take(mediaPanel_);
 
     if (pending_.empty()) return;
-    if (pendingSince_ == 0) pendingSince_ = GetTickCount64();
+    if (pendingSince_ == 0) pendingSince_ = TickMs();
     if (FlushIn() > 0) return;
 
     if (pending_.size() == 1) {
@@ -429,7 +463,7 @@ void App::Pump() {
 unsigned long App::FlushIn() const {
     constexpr unsigned long long kHoldMs = 1500;
     if (pendingSince_ == 0) return INFINITE;
-    unsigned long long waited = GetTickCount64() - pendingSince_;
+    unsigned long long waited = TickMs() - pendingSince_;
     return waited >= kHoldMs ? 0 : (unsigned long)(kHoldMs - waited);
 }
 
@@ -513,7 +547,7 @@ void App::Frame() {
             // The lights' card sits above Now playing, at its height last frame.
             const Snapshot* sw = switchesPanel();
             float swH = sw ? switchesH_ : 0;
-            float below = barH + gap + (skyH > 0 ? skyH + tight : 0) + (sw ? swH + gap : 0);
+            float below = (barH > 0 ? barH + gap : 0) + (skyH > 0 ? skyH + tight : 0) + (sw ? swH + gap : 0);
             // Scrolled with the wheel; no scrollbar, which would take width
             // and get in the way.
             ImGui::BeginChild("##feed", ImVec2(feedW, -below), ImGuiChildFlags_None,
@@ -641,7 +675,7 @@ void App::header() {
     // standard title bar, so draw one to match the sides.
     // It belongs at the window's real edge, wherever OLED care has moved
     // the contents.
-    if (!IsZoomed(hwnd_))
+    if (!WindowMaximised(hwnd_))
         ImGui::GetBackgroundDrawList()->AddLine(ImVec2(0, 0.5f), ImVec2(ImGui::GetIO().DisplaySize.x, 0.5f), u32(p.border));
 
     // The retro theme's title band, with an amber rule beneath, behind the
@@ -774,7 +808,7 @@ void App::header() {
         ImGui::PopStyleVar();
     }
     buttonsLeft = dimButton(buttonsLeft - 4 * scale_, mid);
-    buttonsLeft = displayOffButton(buttonsLeft, mid);
+    if (CanTurnDisplaysOff()) buttonsLeft = displayOffButton(buttonsLeft, mid);
     if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
     if (!shownApps().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
@@ -803,14 +837,19 @@ float App::windowButtons() {
     ImVec2 origin = ImGui::GetWindowPos();
     float w = std::round(46 * scale_), h = captionH_;
     float x = origin.x + ImGui::GetWindowWidth();
-    bool active = GetForegroundWindow() == hwnd_;
-    bool zoomed = IsZoomed(hwnd_);
+    bool active = WindowActive(hwnd_);
+    bool zoomed = WindowMaximised(hwnd_);
 
     ImGui::PushClipRect(origin, ImVec2(x, origin.y + h), false);
     ImGui::PushFont(fonts_.chrome);
     enum { Minimise, Maximise, Close };
     const char* glyphs[] = {icon::Minimise, zoomed ? icon::Restore : icon::Maximise, icon::Close};
-    const char* tips[] = {"Minimise", zoomed ? "Restore down" : "Maximise", "Close (keeps running in the tray)"};
+#ifdef _WIN32
+    const char* closeTip = "Close (keeps running in the tray)";
+#else
+    const char* closeTip = "Close";
+#endif
+    const char* tips[] = {"Minimise", zoomed ? "Restore down" : "Maximise", closeTip};
     x -= 3 * w;
     float left = x;
     bool anyHovered = false;
@@ -843,9 +882,9 @@ float App::windowButtons() {
             anyHovered = true;
         }
         if (clicked) {
-            if (i == Minimise) ShowWindow(hwnd_, SW_MINIMIZE);
-            if (i == Maximise) ShowWindow(hwnd_, zoomed ? SW_RESTORE : SW_MAXIMIZE);
-            if (i == Close) PostMessageW(hwnd_, WM_CLOSE, 0, 0);
+            if (i == Minimise) MinimiseWindow(hwnd_);
+            if (i == Maximise) ToggleMaximise(hwnd_);
+            if (i == Close) CloseMainWindow(hwnd_);
         }
     }
     if (!anyHovered) hoverButton_ = -1;
@@ -2800,13 +2839,7 @@ float App::displayOffButton(float right, float mid) {
     ImGui::PopStyleColor(2);
     noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Turn the displays off");
-    if (clicked) {
-        // Wait a moment first, or letting go of the mouse wakes them at once.
-        std::thread([] {
-            Sleep(800);
-            PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2);
-        }).detach();
-    }
+    if (clicked) DisplaysOff();
     return ImGui::GetItemRectMin().x;
 }
 
@@ -2998,6 +3031,9 @@ float App::skyHeight() const {
 }
 
 float App::mediaBarHeight() const {
+#ifndef _WIN32
+    return 0;  // no Now playing on Linux
+#endif
     return std::round(fonts_.caption->FontSize + (compact_ ? 8 : 10) * scale_);
 }
 
@@ -3005,6 +3041,9 @@ float App::mediaBarHeight() const {
 // previous, play/pause and next, and its progress as a thin line along the
 // bottom. With nothing playing it says so and stays put.
 void App::mediaBar(float width) {
+#ifndef _WIN32
+    return;  // no Now playing on Linux
+#endif
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     float s = scale_, h = mediaBarHeight();
@@ -3451,16 +3490,16 @@ void App::settings() {
     ImGui::InputText("##token", tokenBuf_, sizeof(tokenBuf_), ImGuiInputTextFlags_Password);
     ImGui::Dummy(ImVec2(0, 4 * scale_));
 
-    ImGui::Checkbox("Show Windows notifications", &notifyChoice_);
+    ImGui::Checkbox(kNotifyLabel, &notifyChoice_);
     ImGui::BeginDisabled(!notifyChoice_);
     mutedText("Notify me about");
     ImGui::SetNextItemWidth(w);
     ImGui::Combo("##priority", &priorityChoice_, kPriorityNames, IM_ARRAYSIZE(kPriorityNames));
     ImGui::EndDisabled();
-    ImGui::Checkbox("Start with Windows", &startChoice_);
+    ImGui::Checkbox(kStartLabel, &startChoice_);
     ImGui::Dummy(ImVec2(0, 4 * scale_));
     mutedText("Theme");
-    static const char* kThemes[] = {"As Windows (light or dark)", "Retro (the 90s Weather Channel)"};
+    static const char* kThemes[] = {kSystemThemeLabel, "Retro (the 90s Weather Channel)"};
     ImGui::SetNextItemWidth(w);
     ImGui::Combo("##theme", &themeChoice_, kThemes, IM_ARRAYSIZE(kThemes));
     ImGui::Dummy(ImVec2(0, 4 * scale_));
