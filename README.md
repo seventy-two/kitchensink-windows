@@ -25,7 +25,8 @@ result is a single `kitchensink.exe` with nothing to install.
   size, with every closed panel cut to one slim line: summaries as label
   and value pairs (chips as small tinted blocks), what doesn't fit counted
   as "+n", no subtitles, a short table's first row only, without details,
-  and smaller buttons. Tables leave out their headings, open panels too.
+  and smaller buttons. Closed rows leave out table headings; an open panel is always
+  the full one, headings and all.
   Right-click a panel's chevron to choose Compact or Ultra compact for
   that panel alone (kept as `rowStyle`). A stat's `brief`, when the server
   sends one, replaces its value on these lines (Food names the day only

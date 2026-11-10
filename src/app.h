@@ -165,7 +165,6 @@ private:
     bool sideShown_ = false;
     float switchesH_ = 0;  // the side column's lights card, last frame  // the side column (Recent) is up
     bool ultra_ = false;       // the ultra compact layout
-    bool slimPanel_ = false;   // drawing a panel whose closed row is a slim line
     bool slimBlock_ = false;   // drawing a short block on an ultra compact line
     NativeWindow hwnd_;
     float captionH_ = 0;

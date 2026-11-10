@@ -1256,8 +1256,8 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
     // Wide enough at the sides for the grip in the left margin.
     // Ultra compact: a closed panel is one slim line.
+    // Open, it's the full panel whatever the layout.
     bool slim = slimRow(s.monitor) && !open;
-    slimPanel_ = slimRow(s.monitor);
     float padY = (slim ? 3 : 8) * scale_;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(18 * scale_, padY));
     ImGui::BeginChild(s.monitor.c_str(), ImVec2(width, 0),
@@ -1475,7 +1475,6 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         ImGui::SetCursorScreenPos(ImVec2(top.x, bottom));
         ImGui::Dummy(ImVec2(avail, 0));
     }
-    slimPanel_ = false;
     ImGui::EndChild();
     ImGui::PopStyleColor();
     bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
@@ -2692,8 +2691,8 @@ void App::table(const std::string& monitor, const Block& b) {
         ImGui::TableSetupColumn(b.columns[c].title.c_str(), ImGuiTableColumnFlags_WidthFixed, std::ceil(w));
     }
 
-    // An ultra compact panel leaves headings out, open too.
-    bool headers = !slimBlock_ && !slimPanel_ &&
+    // A slim line leaves headings out; an open panel always has them.
+    bool headers = !slimBlock_ &&
                    std::any_of(b.columns.begin(), b.columns.end(), [](const Column& c) { return !c.title.empty(); });
     if (headers) {
         ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
