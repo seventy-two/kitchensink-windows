@@ -245,6 +245,7 @@ App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
       local_(std::make_unique<LocalStats>(wake)),
       media_(std::make_unique<MediaWatcher>(wake, images_.get())),
       grabber_(std::make_unique<Grabber>(wake)),
+      battery_(std::make_unique<BatteryWatcher>(wake)),
       notify_(std::move(notify)) {
     // Idle dimming counts from launch, not from 1970.
     lastActivity_ = now();
@@ -258,6 +259,7 @@ App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
 App::~App() {
     if (newsDirty_) SaveConfig(config_);
     media_.reset();  // before images_, which it feeds
+    battery_.reset();
     local_.reset();
     client_.reset();
     images_.reset();
@@ -433,6 +435,7 @@ void App::Pump() {
     }
     model_.DropExpired(now());
     if (client_->State() == ConnState::Connected) uploader_.Check(model_.Snapshots(), *client_);
+    batteries();
     images_->Upload();
     local_->Take(localPanels_);
     media_->Take(mediaPanel_);
@@ -458,6 +461,19 @@ void App::Pump() {
     }
     pending_.clear();
     pendingSince_ = 0;
+}
+
+void App::batteries() {
+    const Snapshot* monitor = nullptr;
+    for (const auto& s : model_.Snapshots())
+        if (s.kind == kBatteryKind) monitor = &s;
+    bool connected = client_->State() == ConnState::Connected;
+    battery_->Want(monitor && connected);
+    std::string text;
+    if (!battery_->Take(text) || !monitor || !connected) return;
+    auto data = nlohmann::json::parse(text, nullptr, false);
+    if (data.is_discarded() || !data.is_object()) return;
+    client_->Act(monitor->monitor, nlohmann::json{{"type", "battery"}, {"data", data}}.dump());
 }
 
 unsigned long App::FlushIn() const {

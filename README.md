@@ -83,6 +83,12 @@ result is a single `kitchensink.exe` with nothing to install.
   have changed (and once each start), sends them. The farming monitor asks
   for RuneLite's Time Tracking data this way, and the osrs monitor for the
   Delve Calculator's counts once a day.
+- **Batteries**: when the server has a `battery` monitor and Squeak is
+  installed (`%LOCALAPPDATA%\Programs\squeak\squeak.exe`), every two
+  minutes the client runs `squeak -battery <file>` (hidden, below normal
+  priority) and sends the devices' battery and charging state as a
+  `battery` action, so the server can say when a mouse has finished
+  charging.
 - A monitor whose short view is a row of switch buttons (the lights)
   lives in the Recent column, above Now playing and the landscape, as a small card
   that's always there, each button with a bulb lit in the light's colour
@@ -193,7 +199,7 @@ The same dashboard also builds for Linux (tested on Bazzite, KDE on
 Wayland): an SDL3 window drawn with OpenGL instead of Win32 and Direct3D,
 libcurl instead of WinHTTP, stb_image instead of WIC. Only the dashboard
 itself: the PC-specific parts (This PC and Drives, Now playing, the apps
-menu, Lick of the Day, watchgrab's buttons, RuneLite uploads, turning the
+menu, Lick of the Day, watchgrab's buttons, RuneLite uploads, Squeak's battery readings, turning the
 displays off) are stubbed out in `linux/stubs.cpp`. There's no tray, so
 closing the window quits. Notifications go through `notify-send`.
 
@@ -230,6 +236,7 @@ make -f linux/Makefile -j4        # build/kitchensink, then the tests
 | `src/grab.cpp` | watchgrab's state and results, and how each film's button looks |
 | `src/grabber.cpp` | runs watchgrab for the download buttons and follows its state file |
 | `src/upload.cpp` | sends monitors the local files they ask for |
+| `src/battery.cpp` | runs Squeak for the battery monitor's readings |
 | `src/lick.cpp` | starts Lick of the Day with the dashboard, and hides and shows it |
 | `src/launcher.cpp` | the apps menu: finding, starting and bringing up the apps, and their icons |
 | `src/images.cpp` | thumbnail download, WIC decoding and textures |

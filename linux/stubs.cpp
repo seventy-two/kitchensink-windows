@@ -1,7 +1,9 @@
 // The Windows client's PC-specific parts, left out on Linux: the "This PC"
 // and "Now playing" panels, the apps menu, Lick of the Day, watchgrab's
-// download buttons and uploading RuneLite's files. Each is here as the
+// download buttons, uploading RuneLite's files and Squeak's battery
+// readings. Each is here as the
 // do-nothing version the dashboard treats as absent.
+#include "battery.h"
 #include "grabber.h"
 #include "launcher.h"
 #include "lick.h"
@@ -29,6 +31,12 @@ const std::vector<LaunchApp>& Launcher::Installed() { return installed_; }
 std::string Launcher::Icon(const LaunchApp&, ImageCache&, int) { return {}; }
 bool Launcher::Running(const LaunchApp&) { return false; }
 void Launcher::Open(const LaunchApp&) const {}
+
+BatteryWatcher::BatteryWatcher(std::function<void()>) {}
+BatteryWatcher::~BatteryWatcher() = default;
+void BatteryWatcher::Want(bool) {}
+bool BatteryWatcher::Take(std::string&) { return false; }
+void BatteryWatcher::run() {}
 
 bool LickOfTheDay::Installed() { return false; }
 bool LickOfTheDay::Running() const { return false; }

@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "battery.h"
 #include "config.h"
 #include "grabber.h"
 #include "images.h"
@@ -154,6 +155,9 @@ private:
     void diagnostics();
     void openSettings();
 
+    // batteries sends Squeak's readings to the server's battery monitor,
+    // if it has one.
+    void batteries();
     bool mouseOverWindow() const;
     // Ordering panels by what's new: see PanelTier.
     void noteSummary(const Snapshot& s);
@@ -190,6 +194,7 @@ private:
     std::unique_ptr<MediaWatcher> media_;
     std::unique_ptr<Grabber> grabber_;  // the watchlist's download buttons
     Uploader uploader_;                 // local files monitors ask for
+    std::unique_ptr<BatteryWatcher> battery_;  // Squeak's readings, for the battery monitor
     LickOfTheDay lick_;                 // hidden and shown by the button in the corner
     double lickClicked_ = -1;           // when its button was last clicked
     Launcher launcher_;                 // the apps menu's apps
