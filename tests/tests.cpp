@@ -304,32 +304,28 @@ static void testLocalPanels() {
 
     CHECK(pc.summary[0].detail.empty());  // no temperatures read: no extras
 
-    // Temperatures and the GPU fan: tiles in the panel, details in the summary.
+    // Temperatures and the GPU fan: details of the CPU and GPU tiles.
     PcHistory t;
     PcSample hot{50, 20, 8 * GB, 32 * GB, 4 * GB, 16 * GB, "RTX"};
     hot.cpuTemp = 59.6f, hot.gpuTemp = 88, hot.gpuFan = 52;
     t.Add(hot);
     Snapshot tp = t.Build(1000);
     const auto& ts = tp.blocks[0].stats;
-    CHECK_EQ(ts.size(), size_t(7));
-    CHECK_EQ(ts[4].label, std::string("CPU temperature"));
-    CHECK_EQ(ts[4].value, std::string("60°C"));
-    CHECK(ts[4].tone == Tone::None);
-    CHECK_EQ(ts[5].value, std::string("88°C"));
-    CHECK(ts[5].tone == Tone::Bad);
-    CHECK_EQ(ts[6].value, std::string("52%"));
+    CHECK_EQ(ts.size(), size_t(4));
+    CHECK_EQ(ts[0].detail, std::string("60°C"));
+    CHECK_EQ(ts[0].widestDetail, std::string("100°C"));
+    CHECK(ts[0].tone == Tone::None);
+    CHECK_EQ(ts[2].detail, std::string("88°C · fan 52%"));  // in place of the name
+    CHECK_EQ(ts[2].widestDetail, std::string("100°C · fan 100%"));
+    CHECK(ts[2].tone == Tone::Bad);  // hot, though only 20% busy
     CHECK_EQ(tp.summary.size(), size_t(4));
-    CHECK_EQ(tp.summary[0].detail, std::string("60°C"));
     CHECK_EQ(tp.summary[2].detail, std::string("88°C · fan 52%"));
-    CHECK_EQ(tp.summary[2].widestDetail, std::string("100°C · fan 100%"));
-    CHECK(tp.summary[2].tone == Tone::Bad);  // hot, though only 20% busy
     // A reading that drops out (Afterburner closed) shows as "–".
     PcSample gone = hot;
     gone.cpuTemp = -1;
     t.Add(gone);
     tp = t.Build(1001);
-    CHECK_EQ(tp.blocks[0].stats[4].value, std::string("–"));
-    CHECK_EQ(tp.summary[0].detail, std::string("–"));
+    CHECK_EQ(tp.blocks[0].stats[0].detail, std::string("–"));
     CHECK(CpuTempTone(80) == Tone::Warn);
     CHECK(GpuTempTone(79) == Tone::None);
 

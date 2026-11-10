@@ -34,15 +34,6 @@ std::string degrees(float c) {
     return buf;
 }
 
-// reading makes a tile for a temperature or fan speed (unit "°C" or "%"),
-// with its history on a 0–100 scale. Unread values in the history are 0.
-Stat reading(const std::string& label, float v, bool temp, Tone tone, std::vector<float> series) {
-    Stat s = v < 0 ? Stat{label, "–", "", Tone::Muted, {}}
-                   : Stat{label, temp ? degrees(v) : percent(v), "", tone, std::move(series), 100};
-    s.widestValue = temp ? "100°C" : "100%";
-    return s;
-}
-
 std::string driveName(const std::string& root) {
     std::string name = root;
     while (!name.empty() && (name.back() == '\\' || name.back() == '/')) name.pop_back();
@@ -179,53 +170,54 @@ Snapshot PcHistory::Build(int64_t now) const {
     snap.updated = now;
     if (samples_.empty()) return snap;
 
-    std::vector<float> cpu, ram, gpu, vram, cpuTemp, gpuTemp, gpuFan;
+    std::vector<float> cpu, ram, gpu, vram;
     bool anyCpuTemp = false, anyGpuTemp = false, anyFan = false;
     for (const auto& s : samples_) {
         cpu.push_back(std::max(s.cpu, 0.0f));
         ram.push_back(std::max(share(s.ramUsed, s.ramTotal), 0.0f));
         gpu.push_back(std::max(s.gpu, 0.0f));
         vram.push_back(std::max(share(s.vramUsed, s.vramTotal), 0.0f));
-        cpuTemp.push_back(std::max(s.cpuTemp, 0.0f));
-        gpuTemp.push_back(std::max(s.gpuTemp, 0.0f));
-        gpuFan.push_back(std::max(s.gpuFan, 0.0f));
         anyCpuTemp |= s.cpuTemp >= 0, anyGpuTemp |= s.gpuTemp >= 0, anyFan |= s.gpuFan >= 0;
     }
     const PcSample& s = samples_.back();
     auto of = [](uint64_t used, uint64_t total) {
         return total ? FormatBytes(used) + " / " + FormatBytes(total) : std::string();
     };
+    // The temperatures and fan are the CPU's and GPU's details (the CPU's
+    // needs MSI Afterburner running; a reading that drops out shows "–").
+    // They take the place of the GPU's name, on PCs that can read them.
+    std::string cpuDetail, cpuWidest, gpuDetail = s.gpuName, gpuWidest;
+    if (anyCpuTemp) cpuDetail = s.cpuTemp < 0 ? "–" : degrees(s.cpuTemp), cpuWidest = "100°C";
+    if (anyGpuTemp || anyFan) {
+        gpuDetail.clear();
+        if (anyGpuTemp) gpuDetail = s.gpuTemp < 0 ? "–" : degrees(s.gpuTemp), gpuWidest = "100°C";
+        if (anyFan) {
+            const char* sep = anyGpuTemp ? " · " : "";
+            gpuDetail += sep + std::string("fan ") + (s.gpuFan < 0 ? "–" : percent(s.gpuFan));
+            gpuWidest += sep + std::string("fan 100%");
+        }
+    }
     // Used never passes the total, so the total on both sides is as wide as
     // the detail gets (digits are all one width).
     Block b;
     b.type = "stats";
     b.stats = {
-        stat("CPU", s.cpu, "", cpu),
+        stat("CPU", s.cpu, cpuDetail, cpu, cpuWidest),
         stat("Memory", share(s.ramUsed, s.ramTotal), of(s.ramUsed, s.ramTotal), ram, of(s.ramTotal, s.ramTotal)),
-        stat("GPU", s.gpu, s.gpuName, gpu),
+        stat("GPU", s.gpu, gpuDetail, gpu, gpuWidest),
         stat("Video memory", share(s.vramUsed, s.vramTotal), of(s.vramUsed, s.vramTotal), vram, of(s.vramTotal, s.vramTotal)),
     };
-    // Temperatures and the fan only on PCs that can read them (the CPU's
-    // needs MSI Afterburner running); a dropped reading shows as "–".
-    if (anyCpuTemp) b.stats.push_back(reading("CPU temperature", s.cpuTemp, true, CpuTempTone(s.cpuTemp), cpuTemp));
-    if (anyGpuTemp) b.stats.push_back(reading("GPU temperature", s.gpuTemp, true, GpuTempTone(s.gpuTemp), gpuTemp));
-    if (anyFan) b.stats.push_back(reading("GPU fan", s.gpuFan, false, Tone::None, gpuFan));
-    snap.blocks.push_back(b);
-    // The summary is the four load tiles, with the temperatures and fan as
-    // their details rather than tiles of their own, so the drives keep
-    // their room; it doesn't draw sparklines, and leaves out the GPU's name.
-    snap.summary.assign(b.stats.begin(), b.stats.begin() + 4);
-    auto detail = [](Stat& t, const std::string& text, const std::string& widest, Tone tone) {
-        t.detail = text, t.widestDetail = widest;
-        // A hot part makes its tile warn even when it isn't busy.
+    // A hot part makes its tile warn even when it isn't busy.
+    auto heat = [](Stat& t, Tone tone) {
         if (tone == Tone::Bad || (tone == Tone::Warn && t.tone != Tone::Bad)) t.tone = tone;
     };
-    if (anyCpuTemp) detail(snap.summary[0], s.cpuTemp < 0 ? "–" : degrees(s.cpuTemp), "100°C", CpuTempTone(s.cpuTemp));
-    std::string g;
-    if (anyGpuTemp) g = s.gpuTemp < 0 ? "–" : degrees(s.gpuTemp);
-    if (anyFan) g += (g.empty() ? "" : " · ") + std::string("fan ") + (s.gpuFan < 0 ? "–" : percent(s.gpuFan));
-    detail(snap.summary[2], g, g.empty() ? "" : std::string(anyGpuTemp ? "100°C" : "") + (anyGpuTemp && anyFan ? " · " : "") + (anyFan ? "fan 100%" : ""),
-           GpuTempTone(s.gpuTemp));
+    if (s.cpuTemp >= 0) heat(b.stats[0], CpuTempTone(s.cpuTemp));
+    if (s.gpuTemp >= 0) heat(b.stats[2], GpuTempTone(s.gpuTemp));
+    snap.blocks.push_back(b);
+    // The summary is the same tiles; it doesn't draw sparklines, and leaves
+    // out the GPU's name, which would take the room of a drive's tile.
+    snap.summary = b.stats;
+    if (!anyGpuTemp && !anyFan) snap.summary[2].detail.clear();
     return snap;
 }
 

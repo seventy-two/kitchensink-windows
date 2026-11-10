@@ -47,9 +47,9 @@ result is a single `kitchensink.exe` with nothing to install.
   showing, and works with the server offline. The GPU's temperature comes
   from NVIDIA's driver (NVML); the CPU's temperature and the GPU's fan
   speed come from MSI Afterburner's monitoring while it runs (Windows has
-  no CPU temperature of its own on most desktops). Each has a tile in the
-  panel and shows beside the CPU and GPU tiles in the summary; a part
-  that runs hot turns its tile amber or red.
+  no CPU temperature of its own on most desktops). They show under the
+  CPU and GPU use (in place of the GPU's name); a part that runs hot turns
+  its tile amber or red.
 - Panels show their controls (grip, refresh, open/close) only while the
   mouse is over them. Drag a panel by the dots in its left margin to
   reorder; the order also decides which open first in the compact layout.
