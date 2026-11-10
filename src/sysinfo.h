@@ -1,5 +1,5 @@
-// Reads this PC's CPU, memory, GPU and drive use on a background thread,
-// for the local panels (see local.h).
+// Reads this PC's CPU, memory, GPU and drive use, plus temperatures and
+// the GPU fan, on a background thread, for the local panels (see local.h).
 #pragma once
 
 #include <atomic>

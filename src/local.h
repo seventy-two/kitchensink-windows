@@ -18,13 +18,15 @@ inline constexpr const char* kLocalKind = "local";
 
 inline bool IsLocal(const Snapshot& s) { return s.kind == kLocalKind; }
 
-// PcSample is one reading. Negative percentages and zero totals mean the
-// value couldn't be read.
+// PcSample is one reading. Negative percentages, temperatures and fan
+// speeds, and zero totals, mean the value couldn't be read.
 struct PcSample {
     float cpu = -1, gpu = -1;
     uint64_t ramUsed = 0, ramTotal = 0;
     uint64_t vramUsed = 0, vramTotal = 0;
     std::string gpuName;
+    float cpuTemp = -1, gpuTemp = -1;  // °C
+    float gpuFan = -1;                 // % of the fans' top speed
 };
 
 struct DriveInfo {
@@ -88,5 +90,10 @@ std::string FormatBytes(uint64_t bytes);
 
 // LoadTone is how worrying a percentage is: warn from 85, bad from 95.
 Tone LoadTone(float pct);
+
+// CpuTempTone and GpuTempTone are how worrying a temperature is. A Ryzen
+// runs up to 90°C and throttles at 95; a GeForce slows from about 87.
+Tone CpuTempTone(float c);
+Tone GpuTempTone(float c);
 
 }  // namespace ks

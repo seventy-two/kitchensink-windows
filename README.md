@@ -44,7 +44,12 @@ result is a single `kitchensink.exe` with nothing to install.
 - Adds a panel about the PC it runs on, **This PC**: CPU, memory, GPU and
   video memory, each with a minute's history, and each fixed drive's use.
   It reads Windows' own counters once a second, only while the window is
-  showing, and works with the server offline.
+  showing, and works with the server offline. The GPU's temperature comes
+  from NVIDIA's driver (NVML); the CPU's temperature and the GPU's fan
+  speed come from MSI Afterburner's monitoring while it runs (Windows has
+  no CPU temperature of its own on most desktops). Each has a tile in the
+  panel and shows beside the CPU and GPU tiles in the summary; a part
+  that runs hot turns its tile amber or red.
 - Panels show their controls (grip, refresh, open/close) only while the
   mouse is over them. Drag a panel by the dots in its left margin to
   reorder; the order also decides which open first in the compact layout.
@@ -220,7 +225,7 @@ make -f linux/Makefile -j4        # build/kitchensink, then the tests
 | `src/sse.cpp` | server-sent events parser |
 | `src/net.cpp` | WinHTTP requests and the stream client |
 | `src/media.cpp` | reads and controls Windows' media sessions (C++/WinRT) |
-| `src/sysinfo.cpp` | reads CPU, memory, GPU and drive use (performance counters, DXGI) |
+| `src/sysinfo.cpp` | reads CPU, memory, GPU and drive use (performance counters, DXGI), temperatures and fan (NVML, Afterburner's shared memory) |
 | `src/local.cpp` | turns those readings into the This PC panel |
 | `src/grab.cpp` | watchgrab's state and results, and how each film's button looks |
 | `src/grabber.cpp` | runs watchgrab for the download buttons and follows its state file |

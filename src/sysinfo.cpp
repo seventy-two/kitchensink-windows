@@ -6,6 +6,7 @@
 #include <pdhmsg.h>
 
 #include <algorithm>
+#include <cstring>
 #include <ctime>
 #include <string>
 
@@ -64,6 +65,84 @@ Gpu findGpu() {
     }
     factory->Release();
     return best;
+}
+
+// gpuTemperature reads the first NVIDIA GPU's temperature from the
+// driver's NVML, loaded at run time; -1 without one. (NVML's fan speed
+// isn't used: on the RTX 5070 Ti it flips between 0 and 100% while the
+// fans hold 50%.)
+float gpuTemperature() {
+    static HMODULE nvml = LoadLibraryExW(L"nvml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!nvml) return -1;
+    using InitFn = int (*)();
+    using HandleFn = int (*)(unsigned, void**);
+    using TempFn = int (*)(void*, int, unsigned*);
+    static auto init = reinterpret_cast<InitFn>(GetProcAddress(nvml, "nvmlInit_v2"));
+    static auto handle = reinterpret_cast<HandleFn>(GetProcAddress(nvml, "nvmlDeviceGetHandleByIndex_v2"));
+    static auto temp = reinterpret_cast<TempFn>(GetProcAddress(nvml, "nvmlDeviceGetTemperature"));
+    if (!init || !handle || !temp) return -1;
+    static bool ok = init() == 0;
+    static void* dev = nullptr;
+    if (!ok || (!dev && handle(0, &dev) != 0)) return -1;
+    unsigned c = 0;
+    if (temp(dev, 0 /* NVML_TEMPERATURE_GPU */, &c) != 0) return -1;
+    return float(c);
+}
+
+// Afterburner is what MSI Afterburner's monitoring shares while it runs:
+// Windows has no CPU temperature of its own on this board (no thermal
+// zones), and Afterburner's fan figure is the true one.
+struct Afterburner {
+    float cpuTemp = -1, gpuTemp = -1, gpuFan = -1;
+};
+
+// readAfterburner reads its "MAHMSharedMemory" (RivaTuner's shared memory
+// format, v2: a header then fixed-size entries, each a source's name,
+// units, value and IDs).
+Afterburner readAfterburner() {
+    Afterburner out;
+    HANDLE map = OpenFileMappingW(FILE_MAP_READ, FALSE, L"MAHMSharedMemory");
+    if (!map) return out;
+    const auto* base = static_cast<const unsigned char*>(MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0));
+    if (!base) {
+        CloseHandle(map);
+        return out;
+    }
+    MEMORY_BASIC_INFORMATION info{};
+    VirtualQuery(base, &info, sizeof(info));
+    auto u32 = [&](size_t at) {
+        uint32_t v;
+        std::memcpy(&v, base + at, 4);
+        return v;
+    };
+    constexpr size_t kName = 260, kData = 5 * kName, kGpu = kData + 16, kSrc = kGpu + 4;
+    // 'MAHM'; 0xDEAD once Afterburner has closed.
+    if (info.RegionSize >= 32 && u32(0) == 0x4D41484D && u32(4) >= 0x20000) {
+        size_t header = u32(8), count = u32(12), size = u32(16);
+        bool cpuWhole = false;
+        for (size_t i = 0; size >= kSrc + 4 && i < count && header + (i + 1) * size <= info.RegionSize; i++) {
+            const unsigned char* e = base + header + i * size;
+            float v;
+            uint32_t gpu, src;
+            std::memcpy(&v, e + kData, 4);
+            std::memcpy(&gpu, e + kGpu, 4);
+            std::memcpy(&src, e + kSrc, 4);
+            if (!(v >= 0 && v < 1000)) continue;  // FLT_MAX: no reading
+            if (src == 0x80) {
+                // The CPU's own (gpu = ~0) beats per-core readings.
+                if (gpu == 0xFFFFFFFF) out.cpuTemp = v, cpuWhole = true;
+                else if (!cpuWhole) out.cpuTemp = std::max(out.cpuTemp, v);
+            } else if (gpu == 0 && src == 0x00) {
+                out.gpuTemp = v;
+            } else if (gpu == 0 && (src == 0x10 || src == 0x12 || src == 0x14) && v <= 100) {
+                // Fan speed, fan 2, fan 3: the fastest.
+                out.gpuFan = std::max(out.gpuFan, v);
+            }
+        }
+    }
+    UnmapViewOfFile(base);
+    CloseHandle(map);
+    return out;
 }
 
 std::vector<DriveInfo> readDrives() {
@@ -171,6 +250,11 @@ void LocalStats::run() {
                 s.vramUsed = uint64_t(used > 0 ? used : any);
             }
         }
+        Afterburner ab = readAfterburner();
+        s.cpuTemp = ab.cpuTemp;
+        s.gpuTemp = gpuTemperature();
+        if (s.gpuTemp < 0) s.gpuTemp = ab.gpuTemp;
+        s.gpuFan = ab.gpuFan;
         MEMORYSTATUSEX mem{sizeof(mem)};
         if (GlobalMemoryStatusEx(&mem)) {
             s.ramTotal = mem.ullTotalPhys;
