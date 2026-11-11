@@ -2913,7 +2913,7 @@ float App::lickButton(float right, float mid) {
 // mangoButton hides or shows Mango, the Spotify player (starting it if it
 // isn't running). Drawn as the low-poly mango of Mango's icon: a mesh
 // traced from the user's picture, its colours blended across each facet.
-// Faint while Mango is hidden, full colour while it shows or is hovered.
+// Grey like its neighbours (fainter while hidden); in colour when hovered.
 float App::mangoButton(float right, float mid) {
     float size = ImGui::GetFrameHeight();
     ImVec2 origin = ImGui::GetWindowPos();
@@ -2948,12 +2948,24 @@ float App::mangoButton(float right, float mid) {
         {{-0.020f, 0.928f, 0x78090D}, {-0.124f, 0.907f, 0x850F0F}, {-0.228f, 0.886f, 0xA41611}, {-0.332f, 0.865f, 0xA6160F}, {-0.424f, 0.846f, 0xAD1D10}, {-0.482f, 0.834f, 0xB32914}},
         {{-0.151f, 0.997f, 0x74060B}, {-0.198f, 0.988f, 0x7A080C}, {-0.244f, 0.978f, 0x920F10}, {-0.291f, 0.969f, 0x940F0F}, {-0.332f, 0.961f, 0x96100E}, {-0.358f, 0.955f, 0x960F10}},
     };
-    const float alpha = hovered ? 1.0f : shown ? 0.9f : 0.5f;
+    // Grey like the icons beside it (fainter while Mango is hidden), its
+    // facets kept as a little light and shade; in colour only when hovered.
+    const Palette& p = Colours();
+    const ImVec4 grey = shown ? p.muted : mix(p.muted, p.bg, 0.45f);
     const float r = size * 0.42f;
     const ImVec2 c(min.x + size / 2, min.y + size / 2);
     const ImVec2 uv = ImGui::GetFontTexUvWhitePixel();
     auto vtx = [&](const V& v) {
-        ImU32 colour = IM_COL32((v.rgb >> 16) & 0xFF, (v.rgb >> 8) & 0xFF, v.rgb & 0xFF, int(alpha * 255));
+        int R = (v.rgb >> 16) & 0xFF, G = (v.rgb >> 8) & 0xFF, B = v.rgb & 0xFF;
+        ImU32 colour;
+        if (hovered) {
+            colour = IM_COL32(R, G, B, 255);
+        } else {
+            float lum = (0.3f * R + 0.59f * G + 0.11f * B) / 255.0f;  // about 0.3-0.6 on this mango
+            float shade = std::clamp(0.75f + (lum - 0.45f) * 1.2f, 0.55f, 1.15f);
+            colour = ImGui::ColorConvertFloat4ToU32(
+                ImVec4(std::min(1.0f, grey.x * shade), std::min(1.0f, grey.y * shade), std::min(1.0f, grey.z * shade), grey.w));
+        }
         dl->PrimWriteVtx(ImVec2(c.x + v.x * r, c.y + v.y * r), uv, colour);
     };
     dl->PrimReserve(9 * 5 * 6, 9 * 5 * 6);
