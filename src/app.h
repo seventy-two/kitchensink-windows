@@ -198,7 +198,7 @@ private:
     std::unique_ptr<BatteryWatcher> battery_;  // Squeak's readings, for the battery monitor
     HiddenApp lick_{L"dailylick"};      // Lick of the Day, hidden and shown by the guitar
     double lickClicked_ = -1;           // when its button was last clicked
-    HiddenApp mango_{L"mango"};         // Mango (Spotify), hidden and shown by the mango
+    HiddenApp mango_{L"mango", L"-docked"};  // Mango (Spotify), docked to the right, shown by the mango
     double mangoClicked_ = -1;
     Launcher launcher_;                 // the apps menu's apps
     const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths

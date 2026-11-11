@@ -9,7 +9,9 @@ namespace ks {
 
 class HiddenApp {
 public:
-    explicit HiddenApp(const wchar_t* name) : name_(name) {}
+    // args go to the app when the button starts it (Mango takes -docked:
+    // no taskbar button, and it sits against the dashboard's right edge).
+    explicit HiddenApp(const wchar_t* name, const wchar_t* args = nullptr) : name_(name), args_(args) {}
 
     // Installed reports whether dailylick.exe is in its usual place
     // (looked for again every few seconds).
@@ -25,6 +27,7 @@ public:
 
 private:
     const wchar_t* name_;
+    const wchar_t* args_;
     double checked_ = -1e9;
     bool installed_ = false;
 };

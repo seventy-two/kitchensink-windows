@@ -54,7 +54,7 @@ void HiddenApp::Start() {
 void HiddenApp::Toggle() {
     HWND h = FindWindowW(name_, nullptr);
     if (!h) {
-        if (Installed()) launch(name_, nullptr);
+        if (Installed()) launch(name_, args_);
         return;
     }
     // So it can come to the front when it shows.
