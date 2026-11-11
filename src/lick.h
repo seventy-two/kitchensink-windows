@@ -24,6 +24,11 @@ public:
     // Toggle hides it if it's showing, else shows it (starting it first if
     // need be).
     void Toggle();
+    // Raise puts its window on top without focusing it. The app shows
+    // itself without taking focus (so this button can hide it again at
+    // once), and Windows won't let a background app raise its own window,
+    // so the dashboard, in front when its button is clicked, does it.
+    void Raise() const;
 
 private:
     const wchar_t* name_;

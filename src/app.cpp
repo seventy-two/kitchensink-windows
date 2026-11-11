@@ -618,6 +618,17 @@ void App::Frame() {
     if (!dimmed && Colours().retro) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 1000ul) : 1000;
     // Lick of the Day hides or shows a moment after its button's clicked;
     // draw again to show which.
+    // Mango shows without focus; raise it over other windows once it's up
+    // (a first start takes a few seconds).
+    if (ImGui::GetTime() - mangoClicked_ < 6) {
+        bool shown = mango_.Shown();
+        if (shown && !mangoRaised_) {
+            mango_.Raise();
+            mangoRaised_ = true;
+        }
+        if (!shown) mangoRaised_ = false;
+        frameInterval_ = frameInterval_ ? std::min(frameInterval_, 100ul) : 100;
+    }
     if (ImGui::GetTime() - std::max(lickClicked_, mangoClicked_) < 1) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 100ul) : 100;
     busy_ = ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || settingsOpen_;
     // What's new is saved now and then, not on every change (the
@@ -2922,7 +2933,7 @@ float App::mangoButton(float right, float mid) {
     bool clicked = ImGui::InvisibleButton("##mango", ImVec2(size, size));
     bool hovered = ImGui::IsItemHovered();
     bool shown = mango_.Shown();
-    if (clicked) mango_.Toggle(), mangoClicked_ = ImGui::GetTime();
+    if (clicked) mango_.Toggle(), mangoClicked_ = ImGui::GetTime(), mangoRaised_ = false;
     noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
     ImDrawList* dl = ImGui::GetWindowDrawList();
     if (hovered)

@@ -200,6 +200,7 @@ private:
     double lickClicked_ = -1;           // when its button was last clicked
     HiddenApp mango_{L"mango", L"-docked"};  // Mango (Spotify), docked to the right, shown by the mango
     double mangoClicked_ = -1;
+    bool mangoRaised_ = false;          // raised since the last click
     Launcher launcher_;                 // the apps menu's apps
     const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths
     bool localHovered_ = false;         // a local or action button is under the mouse, so a row's click isn't for the row

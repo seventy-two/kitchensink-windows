@@ -51,6 +51,12 @@ void HiddenApp::Start() {
     if (Installed() && !Running()) launch(name_, L"-background");
 }
 
+void HiddenApp::Raise() const {
+    HWND h = FindWindowW(name_, nullptr);
+    if (h && IsWindowVisible(h))
+        SetWindowPos(h, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
 void HiddenApp::Toggle() {
     HWND h = FindWindowW(name_, nullptr);
     if (!h) {

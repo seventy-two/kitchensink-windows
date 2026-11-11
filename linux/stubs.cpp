@@ -43,6 +43,7 @@ bool HiddenApp::Running() const { return false; }
 bool HiddenApp::Shown() const { return false; }
 void HiddenApp::Start() {}
 void HiddenApp::Toggle() {}
+void HiddenApp::Raise() const {}
 
 struct Grabber::Shared {};
 Grabber::Grabber(std::function<void()>) {}
