@@ -2911,9 +2911,10 @@ float App::lickButton(float right, float mid) {
 }
 
 // mangoButton hides or shows Mango, the Spotify player (starting it if it
-// isn't running). Drawn as a flat mango with a leaf, solid like the guitar.
+// isn't running). Drawn as the low-poly mango of Mango's icon: a mesh
+// traced from the user's picture, its colours blended across each facet.
+// Faint while Mango is hidden, full colour while it shows or is hovered.
 float App::mangoButton(float right, float mid) {
-    const Palette& p = Colours();
     float size = ImGui::GetFrameHeight();
     ImVec2 origin = ImGui::GetWindowPos();
     ImGui::SetCursorPos(ImVec2(right - origin.x - size, mid - size / 2));
@@ -2928,45 +2929,45 @@ float App::mangoButton(float right, float mid) {
         dl->AddRectFilled(min, ImVec2(min.x + size, min.y + size),
                           ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
                           ImGui::GetStyle().FrameRounding);
-    ImU32 body = u32(hovered ? p.text : shown ? p.muted : mix(p.muted, p.bg, 0.45f));
 
-    // The fruit: an oval, flatter on one side like a kidney, fuller at the
-    // bottom, leant over; and an almond leaf from the stem. Both from about
-    // -1 to 1, then centred by their bounds.
-    float r = size * 0.4f;
-    std::vector<ImVec2> fruit, leaf;
-    const float lean = -0.49f, cl = std::cos(lean), sl = std::sin(lean);
-    for (int i = 0; i < 28; i++) {
-        float th = 6.2831853f * i / 28;
-        float x = 0.60f * std::cos(th), y = 0.80f * std::sin(th);
-        float c = std::max(0.0f, std::cos(th));
-        x -= 0.13f * c * c * (1 - std::fabs(std::sin(th)));
-        x *= 1.0f + 0.10f * std::sin(th);
-        fruit.push_back(ImVec2(x * cl - y * sl, x * sl + y * cl + 0.12f));
-    }
-    {
-        ImVec2 base(0.06f, -0.60f), tip(0.74f, -0.96f);
-        float dx = tip.x - base.x, dy = tip.y - base.y, len = std::sqrt(dx * dx + dy * dy);
-        float ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
-        for (int side : {1, -1})
-            for (int i = 0; i <= 8; i++) {
-                float t = (side == 1 ? i : 8 - i) / 8.0f;
-                float w = 0.17f * std::pow(std::sin(3.14159265f * t), 0.9f) * side;
-                leaf.push_back(ImVec2(base.x + ux * len * t + nx * w, base.y + uy * len * t + ny * w));
+    // Rows from the stem down, each from the left edge across to the right;
+    // x and y about -1..1, colour 0xRRGGBB.
+    struct V {
+        float x, y;
+        unsigned rgb;
+    };
+    static const V kMesh[10][6] = {
+        {{0.273f, -0.982f, 0x76AF0C}, {0.259f, -0.985f, 0x77B309}, {0.246f, -0.988f, 0x74B108}, {0.232f, -0.991f, 0x72AF09}, {0.220f, -0.993f, 0x73AE0A}, {0.212f, -0.995f, 0x71AB0D}},
+        {{0.410f, -0.838f, 0x8D910A}, {0.328f, -0.855f, 0x8AA008}, {0.247f, -0.871f, 0x8EB80B}, {0.165f, -0.888f, 0x88BA0B}, {0.092f, -0.902f, 0x81AC09}, {0.047f, -0.911f, 0x86A918}},
+        {{0.507f, -0.610f, 0xAF760F}, {0.374f, -0.637f, 0xA78008}, {0.241f, -0.664f, 0xA6A90A}, {0.108f, -0.691f, 0xA2B70A}, {-0.010f, -0.715f, 0x9AB20D}, {-0.084f, -0.730f, 0x96B01F}},
+        {{0.580f, -0.304f, 0xD13818}, {0.382f, -0.344f, 0xE04C07}, {0.184f, -0.384f, 0xED9207}, {-0.014f, -0.424f, 0xF3AB07}, {-0.190f, -0.460f, 0xE5AA08}, {-0.301f, -0.482f, 0xC6AB17}},
+        {{0.593f, 0.011f, 0xA81E16}, {0.350f, -0.038f, 0xCF240B}, {0.107f, -0.087f, 0xFD620B}, {-0.136f, -0.137f, 0xFE7E0C}, {-0.352f, -0.180f, 0xFE940D}, {-0.487f, -0.208f, 0xECA31B}},
+        {{0.541f, 0.313f, 0x981714}, {0.287f, 0.261f, 0xA91A0E}, {0.034f, 0.210f, 0xEE3310}, {-0.220f, 0.159f, 0xFD560F}, {-0.445f, 0.113f, 0xF67610}, {-0.586f, 0.085f, 0xF98D27}},
+        {{0.389f, 0.574f, 0x941513}, {0.166f, 0.529f, 0x9B1611}, {-0.056f, 0.483f, 0xCF2311}, {-0.278f, 0.438f, 0xDF3412}, {-0.476f, 0.398f, 0xEC620F}, {-0.600f, 0.373f, 0xF28423}},
+        {{0.219f, 0.789f, 0x8C0F10}, {0.046f, 0.754f, 0x94100E}, {-0.128f, 0.719f, 0xC02415}, {-0.302f, 0.683f, 0xBB1E11}, {-0.457f, 0.652f, 0xC62B0F}, {-0.553f, 0.633f, 0xD24A15}},
+        {{-0.020f, 0.928f, 0x78090D}, {-0.124f, 0.907f, 0x850F0F}, {-0.228f, 0.886f, 0xA41611}, {-0.332f, 0.865f, 0xA6160F}, {-0.424f, 0.846f, 0xAD1D10}, {-0.482f, 0.834f, 0xB32914}},
+        {{-0.151f, 0.997f, 0x74060B}, {-0.198f, 0.988f, 0x7A080C}, {-0.244f, 0.978f, 0x920F10}, {-0.291f, 0.969f, 0x940F0F}, {-0.332f, 0.961f, 0x96100E}, {-0.358f, 0.955f, 0x960F10}},
+    };
+    const float alpha = hovered ? 1.0f : shown ? 0.9f : 0.5f;
+    const float r = size * 0.42f;
+    const ImVec2 c(min.x + size / 2, min.y + size / 2);
+    const ImVec2 uv = ImGui::GetFontTexUvWhitePixel();
+    auto vtx = [&](const V& v) {
+        ImU32 colour = IM_COL32((v.rgb >> 16) & 0xFF, (v.rgb >> 8) & 0xFF, v.rgb & 0xFF, int(alpha * 255));
+        dl->PrimWriteVtx(ImVec2(c.x + v.x * r, c.y + v.y * r), uv, colour);
+    };
+    dl->PrimReserve(9 * 5 * 6, 9 * 5 * 6);
+    for (int i = 0; i < 9; i++)
+        for (int j = 0; j < 5; j++) {
+            const V& a = kMesh[i][j];
+            const V& b = kMesh[i][j + 1];
+            const V& d = kMesh[i + 1][j];
+            const V& e = kMesh[i + 1][j + 1];
+            for (const V* q : {&a, &b, &e, &a, &e, &d}) {
+                dl->PrimWriteIdx(ImDrawIdx(dl->_VtxCurrentIdx));
+                vtx(*q);
             }
-    }
-    ImVec2 lo(FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX);
-    for (auto* shape : {&fruit, &leaf})
-        for (ImVec2& q : *shape) {
-            q = ImVec2(q.x * r, q.y * r);
-            lo = ImVec2(std::min(lo.x, q.x), std::min(lo.y, q.y));
-            hi = ImVec2(std::max(hi.x, q.x), std::max(hi.y, q.y));
         }
-    ImVec2 c(min.x + size / 2 - (lo.x + hi.x) / 2, min.y + size / 2 - (lo.y + hi.y) / 2);
-    for (auto* shape : {&fruit, &leaf}) {
-        for (ImVec2& q : *shape) q = ImVec2(c.x + q.x, c.y + q.y);
-        dl->AddConcavePolyFilled(shape->data(), int(shape->size()), body);
-    }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip(shown ? "Hide Mango" : "Show Mango");
     return min.x;
 }
