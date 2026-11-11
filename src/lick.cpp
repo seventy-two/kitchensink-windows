@@ -11,13 +11,12 @@ namespace ks {
 
 namespace {
 
-// dailylick's window class, and its messages for hiding and showing.
-const wchar_t* kClass = L"dailylick";
+// The apps' message for hiding and showing.
 constexpr UINT WM_APP_TOGGLE = WM_APP + 2;
 
-std::wstring exePath() {
+std::wstring exePath(const wchar_t* name) {
     const wchar_t* v = _wgetenv(L"LOCALAPPDATA");
-    return std::wstring(v ? v : L"") + L"\\Programs\\dailylick\\dailylick.exe";
+    return std::wstring(v ? v : L"") + L"\\Programs\\" + name + L"\\" + name + L".exe";
 }
 
 double seconds() {
@@ -25,37 +24,37 @@ double seconds() {
     return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
 
-void launch(const wchar_t* args) {
-    std::wstring exe = exePath();
+void launch(const wchar_t* name, const wchar_t* args) {
+    std::wstring exe = exePath(name);
     ShellExecuteW(nullptr, L"open", exe.c_str(), args, nullptr, SW_SHOWNORMAL);
 }
 
 }  // namespace
 
-bool LickOfTheDay::Installed() {
+bool HiddenApp::Installed() {
     double t = seconds();
     if (t - checked_ > 5) {
         checked_ = t;
-        installed_ = GetFileAttributesW(exePath().c_str()) != INVALID_FILE_ATTRIBUTES;
+        installed_ = GetFileAttributesW(exePath(name_).c_str()) != INVALID_FILE_ATTRIBUTES;
     }
     return installed_;
 }
 
-bool LickOfTheDay::Running() const { return FindWindowW(kClass, nullptr) != nullptr; }
+bool HiddenApp::Running() const { return FindWindowW(name_, nullptr) != nullptr; }
 
-bool LickOfTheDay::Shown() const {
-    HWND h = FindWindowW(kClass, nullptr);
+bool HiddenApp::Shown() const {
+    HWND h = FindWindowW(name_, nullptr);
     return h && IsWindowVisible(h);
 }
 
-void LickOfTheDay::Start() {
-    if (Installed() && !Running()) launch(L"-background");
+void HiddenApp::Start() {
+    if (Installed() && !Running()) launch(name_, L"-background");
 }
 
-void LickOfTheDay::Toggle() {
-    HWND h = FindWindowW(kClass, nullptr);
+void HiddenApp::Toggle() {
+    HWND h = FindWindowW(name_, nullptr);
     if (!h) {
-        if (Installed()) launch(nullptr);
+        if (Installed()) launch(name_, nullptr);
         return;
     }
     // So it can come to the front when it shows.

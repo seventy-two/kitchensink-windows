@@ -146,6 +146,7 @@ private:
     void temporaries();
     void cat(float width);
     float lickButton(float right, float mid);
+    float mangoButton(float right, float mid);
     float dimButton(float right, float mid);
     float displayOffButton(float right, float mid);
     float appsButton(float right, float mid);
@@ -195,8 +196,10 @@ private:
     std::unique_ptr<Grabber> grabber_;  // the watchlist's download buttons
     Uploader uploader_;                 // local files monitors ask for
     std::unique_ptr<BatteryWatcher> battery_;  // Squeak's readings, for the battery monitor
-    LickOfTheDay lick_;                 // hidden and shown by the button in the corner
+    HiddenApp lick_{L"dailylick"};      // Lick of the Day, hidden and shown by the guitar
     double lickClicked_ = -1;           // when its button was last clicked
+    HiddenApp mango_{L"mango"};         // Mango (Spotify), hidden and shown by the mango
+    double mangoClicked_ = -1;
     Launcher launcher_;                 // the apps menu's apps
     const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths
     bool localHovered_ = false;         // a local or action button is under the mouse, so a row's click isn't for the row

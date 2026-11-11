@@ -38,11 +38,11 @@ void BatteryWatcher::Want(bool) {}
 bool BatteryWatcher::Take(std::string&) { return false; }
 void BatteryWatcher::run() {}
 
-bool LickOfTheDay::Installed() { return false; }
-bool LickOfTheDay::Running() const { return false; }
-bool LickOfTheDay::Shown() const { return false; }
-void LickOfTheDay::Start() {}
-void LickOfTheDay::Toggle() {}
+bool HiddenApp::Installed() { return false; }
+bool HiddenApp::Running() const { return false; }
+bool HiddenApp::Shown() const { return false; }
+void HiddenApp::Start() {}
+void HiddenApp::Toggle() {}
 
 struct Grabber::Shared {};
 Grabber::Grabber(std::function<void()>) {}

@@ -618,7 +618,7 @@ void App::Frame() {
     if (!dimmed && Colours().retro) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 1000ul) : 1000;
     // Lick of the Day hides or shows a moment after its button's clicked;
     // draw again to show which.
-    if (ImGui::GetTime() - lickClicked_ < 1) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 100ul) : 100;
+    if (ImGui::GetTime() - std::max(lickClicked_, mangoClicked_) < 1) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 100ul) : 100;
     busy_ = ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || settingsOpen_;
     // What's new is saved now and then, not on every change (the
     // watchlist's figures change every minute).
@@ -826,6 +826,7 @@ void App::header() {
     buttonsLeft = dimButton(buttonsLeft - 4 * scale_, mid);
     if (CanTurnDisplaysOff()) buttonsLeft = displayOffButton(buttonsLeft, mid);
     if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
+    if (mango_.Installed()) buttonsLeft = mangoButton(buttonsLeft, mid);
     if (!shownApps().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -2906,6 +2907,67 @@ float App::lickButton(float right, float mid) {
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
         ImGui::SetTooltip(shown ? "Hide Lick of the Day" : "Show Lick of the Day");
+    return min.x;
+}
+
+// mangoButton hides or shows Mango, the Spotify player (starting it if it
+// isn't running). Drawn as a flat mango with a leaf, solid like the guitar.
+float App::mangoButton(float right, float mid) {
+    const Palette& p = Colours();
+    float size = ImGui::GetFrameHeight();
+    ImVec2 origin = ImGui::GetWindowPos();
+    ImGui::SetCursorPos(ImVec2(right - origin.x - size, mid - size / 2));
+    ImVec2 min = ImGui::GetCursorScreenPos();
+    bool clicked = ImGui::InvisibleButton("##mango", ImVec2(size, size));
+    bool hovered = ImGui::IsItemHovered();
+    bool shown = mango_.Shown();
+    if (clicked) mango_.Toggle(), mangoClicked_ = ImGui::GetTime();
+    noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (hovered)
+        dl->AddRectFilled(min, ImVec2(min.x + size, min.y + size),
+                          ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
+                          ImGui::GetStyle().FrameRounding);
+    ImU32 body = u32(hovered ? p.text : shown ? p.muted : mix(p.muted, p.bg, 0.45f));
+
+    // The fruit: an oval, flatter on one side like a kidney, fuller at the
+    // bottom, leant over; and an almond leaf from the stem. Both from about
+    // -1 to 1, then centred by their bounds.
+    float r = size * 0.4f;
+    std::vector<ImVec2> fruit, leaf;
+    const float lean = -0.49f, cl = std::cos(lean), sl = std::sin(lean);
+    for (int i = 0; i < 28; i++) {
+        float th = 6.2831853f * i / 28;
+        float x = 0.60f * std::cos(th), y = 0.80f * std::sin(th);
+        float c = std::max(0.0f, std::cos(th));
+        x -= 0.13f * c * c * (1 - std::fabs(std::sin(th)));
+        x *= 1.0f + 0.10f * std::sin(th);
+        fruit.push_back(ImVec2(x * cl - y * sl, x * sl + y * cl + 0.12f));
+    }
+    {
+        ImVec2 base(0.06f, -0.60f), tip(0.74f, -0.96f);
+        float dx = tip.x - base.x, dy = tip.y - base.y, len = std::sqrt(dx * dx + dy * dy);
+        float ux = dx / len, uy = dy / len, nx = -uy, ny = ux;
+        for (int side : {1, -1})
+            for (int i = 0; i <= 8; i++) {
+                float t = (side == 1 ? i : 8 - i) / 8.0f;
+                float w = 0.17f * std::pow(std::sin(3.14159265f * t), 0.9f) * side;
+                leaf.push_back(ImVec2(base.x + ux * len * t + nx * w, base.y + uy * len * t + ny * w));
+            }
+    }
+    ImVec2 lo(FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX);
+    for (auto* shape : {&fruit, &leaf})
+        for (ImVec2& q : *shape) {
+            q = ImVec2(q.x * r, q.y * r);
+            lo = ImVec2(std::min(lo.x, q.x), std::min(lo.y, q.y));
+            hi = ImVec2(std::max(hi.x, q.x), std::max(hi.y, q.y));
+        }
+    ImVec2 c(min.x + size / 2 - (lo.x + hi.x) / 2, min.y + size / 2 - (lo.y + hi.y) / 2);
+    for (auto* shape : {&fruit, &leaf}) {
+        for (ImVec2& q : *shape) q = ImVec2(c.x + q.x, c.y + q.y);
+        dl->AddConcavePolyFilled(shape->data(), int(shape->size()), body);
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip(shown ? "Hide Mango" : "Show Mango");
     return min.x;
 }
 
