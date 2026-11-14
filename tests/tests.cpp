@@ -578,6 +578,9 @@ static void testPrivate() {
     CHECK(!s.summary[1].lead);
     CHECK(!s.summary[0].bar);
     CHECK(s.summary[1].bar && s.summary[1].hasLevel && s.summary[1].level == 0.5f);
+    CHECK(!SummaryOnly(s));
+    Snapshot only = ParseSnapshot(nlohmann::json::parse(R"({"monitor": "claude", "summary": [{"label": "Week", "value": "1%"}]})"));
+    CHECK(SummaryOnly(only));
 
     Snapshot hidden = WithoutPrivate(s);
     CHECK(!HasPrivate(hidden));

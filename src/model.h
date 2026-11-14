@@ -206,6 +206,10 @@ Snapshot ParseSnapshot(const nlohmann::json& j);
 bool Relevant(const Snapshot& s, int64_t now);
 
 // HasPrivate says whether a snapshot has any private blocks or stats.
+// SummaryOnly says a monitor sends only a summary, no panel (Claude's
+// limits): it stays a row and never opens.
+inline bool SummaryOnly(const Snapshot& s) { return s.blocks.empty() && !s.summary.empty() && s.error.empty(); }
+
 bool HasPrivate(const Snapshot& s);
 // WithoutPrivate is a snapshot with its private blocks and stats left out,
 // for when the user has hidden them.

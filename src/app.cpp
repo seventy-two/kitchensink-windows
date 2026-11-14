@@ -1088,7 +1088,8 @@ bool App::card(const Snapshot& s, float width) {
         wrapped(std::string(icon::Warning) + "  " + s.error, p.warn);
         ImGui::PopFont();
     }
-    if (s.blocks.empty() && s.error.empty()) mutedText("Waiting for the first check…");
+    if (SummaryOnly(s)) summary(s.summary, ImGui::GetContentRegionAvail().x);
+    else if (s.blocks.empty() && s.error.empty()) mutedText("Waiting for the first check…");
 
     for (size_t i = 0; i < s.blocks.size(); i++) {
         ImGui::PushID(int(i));
@@ -1238,7 +1239,10 @@ void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
         p.overhead = compactCard(s, width, Show::Clipped, 1, nullptr) - 1 - p.row;
         ImGui::PopID();
         ImGui::PopID();
-        p.pin = config_.expanded.count(s.monitor) ? Pin::Open : config_.collapsed.count(s.monitor) ? Pin::Closed : Pin::Auto;
+        p.pin = SummaryOnly(s)                      ? Pin::Closed
+                : config_.expanded.count(s.monitor)  ? Pin::Open
+                : config_.collapsed.count(s.monitor) ? Pin::Closed
+                                                     : Pin::Auto;
         p.stale = stale(s);
         panels.push_back(p);
     }
@@ -1257,7 +1261,7 @@ void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
         compactCard(snaps[i], width, fit.show[i], fit.body, &clicked);
         if (faded) ImGui::PopStyleVar();
         ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y * 2));
-        if (!clicked) continue;
+        if (!clicked || SummaryOnly(snaps[i])) continue;
         // Open or close it, keeping that choice only while it differs from
         // what would happen by itself, so a pin doesn't outlive its use.
         const std::string& id = snaps[i].monitor;
@@ -1320,7 +1324,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
     bool onButton = grip(s, top.y + lineH / 2, shown);
     auto controls = [&](bool lit) {
         ImGui::PushFont(fonts_.caption);
-        if (shown) {
+        if (shown && !SummaryOnly(s)) {
             ImGui::SetCursorScreenPos(ImVec2(chevronX + (slot - cw) / 2, top.y + st.FramePadding.y));
             ImGui::TextColored(lit ? p.text : p.muted, "%s", open ? icon::ChevronUp : icon::ChevronDown);
             // Right-click it to choose this panel's closed look.
