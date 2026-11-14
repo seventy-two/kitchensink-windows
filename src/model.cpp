@@ -46,6 +46,7 @@ Stat parseStat(const json& j) {
         if (v.is_number()) st.series.push_back(v.get<float>());
     st.isPrivate = flag(j, "private");
     st.lead = flag(j, "lead");
+    st.bar = flag(j, "bar");
     if (auto it = j.find("brief"); it != j.end() && it->is_string()) {
         st.brief = it->get<std::string>();
         st.hasBrief = true;

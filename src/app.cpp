@@ -1964,6 +1964,13 @@ void App::summary(const std::vector<Stat>& stats, float width) {
     // A bar tile: its value beside its label, and the bar across the tile.
     float barMin = std::round(48 * scale_), barH = std::max(4.0f, std::round(5 * scale_)), barGap = 6 * scale_;
     float groupGap = 12 * scale_;  // the extra room before a new group
+    // A summary of nothing but bars (Claude's limits) shares the line
+    // between them, so they run across rather than sit stubby.
+    float barShare = 0;
+    if (std::all_of(stats.begin(), stats.end(), [](const Stat& s) { return s.bar && s.hasLevel; }) && !stats.empty()) {
+        float n = float(stats.size());
+        barShare = std::min(std::floor((width - spacing * (n - 1)) / n), std::round(280 * scale_));
+    }
     ImVec2 origin = ImGui::GetCursorScreenPos();
     float x = 0, y = 0, lineH = 0;
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1985,6 +1992,7 @@ void App::summary(const std::vector<Stat>& stats, float width) {
         float valueH = ImGui::GetTextLineHeight();
         if (!s.bar) w = std::max({w, ImGui::CalcTextSize(value.c_str()).x, ImGui::CalcTextSize(s.widestValue.c_str()).x});
         ImGui::PopFont();
+        w = std::max(w, barShare);
         // Room kept for figures that change, short of the whole line.
         w = std::min(w, width);
 
@@ -2648,6 +2656,35 @@ void App::stats(const Block& b) {
         const Stat& s = b.stats[i];
         if (i % perRow != 0) ImGui::SameLine(0, spacing);
         ImGui::BeginGroup();
+        if (s.bar && s.hasLevel) {
+            // A bar across the tile, filled to its level (e.g. how much of
+            // a limit is used), with the value small beside the label.
+            const Palette& p = Colours();
+            ImGui::PushFont(fonts_.caption);
+            ImVec2 at = ImGui::GetCursorScreenPos();
+            mutedText(s.label);
+            float vw = ImGui::CalcTextSize(s.value.c_str()).x;
+            ImGui::SetCursorScreenPos(ImVec2(at.x + tileW - vw, at.y));
+            ImGui::TextColored(ToneColour(s.tone), "%s", s.value.c_str());
+            ImGui::PopFont();
+            float barH = std::max(6.0f, std::round(8 * scale_)), above = 4 * scale_;
+            ImVec2 bar(at.x, ImGui::GetCursorScreenPos().y + above);
+            ImVec4 fill = s.tone == Tone::Warn || s.tone == Tone::Bad ? ToneColour(s.tone)
+                          : s.tone == Tone::Muted                     ? p.muted
+                                                                      : p.accent;
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            float r = barH / 2;
+            dl->AddRectFilled(bar, ImVec2(bar.x + tileW, bar.y + barH), u32(p.frame), r);
+            float fw = std::round(tileW * s.level);
+            if (fw > 0) dl->AddRectFilled(bar, ImVec2(bar.x + std::max(fw, barH), bar.y + barH), u32(fill), r);
+            ImGui::SetCursorScreenPos(ImVec2(at.x, bar.y));
+            ImGui::Dummy(ImVec2(tileW, barH + above));
+            ImGui::PushFont(fonts_.caption);
+            mutedText(s.detail.empty() ? " " : s.detail);
+            ImGui::PopFont();
+            ImGui::EndGroup();
+            continue;
+        }
         ImGui::PushFont(fonts_.caption);
         mutedText(s.label);
         ImGui::PopFont();

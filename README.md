@@ -9,7 +9,9 @@ result is a single `kitchensink.exe` with nothing to install.
 - Draws whatever blocks a monitor sends (stats, tables, lists, checklists,
   text) and its summary (tiles, or chips tinted by tone, a `lead` one as plain text on one line, or a
   `summaryBlock` drawn like the panel, such as its table's top rows), so new monitors
-  appear without client changes.
+  appear without client changes. A stat marked `bar` is drawn as a bar filled to its
+  `level`, in panels and summary tiles; a summary of nothing but bars shares the
+  line between them.
 - In a smaller window (under about 1100 px tall or 900 px wide at 100%
   scale) the layout tightens and each monitor becomes one row of its
   summary: the next events, your holdings' moves, today's games, the hourly
