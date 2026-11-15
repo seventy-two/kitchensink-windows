@@ -31,6 +31,9 @@ public:
     // How often the monitor is read again, in seconds, in case its own
     // buttons changed it or the window moved to another monitor.
     static constexpr int kEvery = 60;
+    // How often it tries again while the monitor isn't answering (off,
+    // asleep or unplugged), so the slider comes back soon after it does.
+    static constexpr int kRetry = 5;
 
 private:
     void run();

@@ -51,13 +51,16 @@ int read(const Physical& p) {
 }
 
 // write sets every physical monitor behind it (a monitor's maximum is
-// nearly always 100, but scaled in case it isn't).
-void write(const Physical& p, int value) {
+// nearly always 100, but scaled in case it isn't). It says whether any of
+// them took it.
+bool write(const Physical& p, int value) {
+    bool ok = false;
     for (const auto& h : p.handles) {
         DWORD cur = 0, max = 100;
         if (!GetVCPFeatureAndVCPFeatureReply(h.hPhysicalMonitor, kLuminance, nullptr, &cur, &max) || max == 0) max = 100;
-        SetVCPFeature(h.hPhysicalMonitor, kLuminance, DWORD(std::lround(value * max / 100.0)));
+        if (SetVCPFeature(h.hPhysicalMonitor, kLuminance, DWORD(std::lround(value * max / 100.0)))) ok = true;
     }
+    return ok;
 }
 
 }  // namespace
@@ -109,13 +112,23 @@ void Brightness::run() {
         bool moved = m != p.monitor;
         if (moved) p.open(m);
         int got = -1;
-        if (want >= 0 && !moved) {
-            write(p, want);
+        if (want >= 0 && !moved && write(p, want)) {
+            // Sent; the next reading comes when it's due.
         } else {
             // Due a reading (or the window's on another monitor now, where
-            // what was asked for may not suit).
+            // what was asked for may not suit, or the write failed).
             got = read(p);
-            next = std::chrono::steady_clock::now() + std::chrono::seconds(kEvery);
+            if (got < 0) {
+                // A monitor that's been off (or unplugged) comes back with
+                // its old handles dead, under the same HMONITOR, so open it
+                // afresh next time and try again soon rather than in a
+                // minute.
+                p.close();
+                want = -1;
+                next = std::chrono::steady_clock::now() + std::chrono::seconds(kRetry);
+            } else {
+                next = std::chrono::steady_clock::now() + std::chrono::seconds(kEvery);
+            }
         }
 
         lock.lock();
