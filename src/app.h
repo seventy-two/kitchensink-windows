@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "battery.h"
+#include "brightness.h"
 #include "config.h"
 #include "grabber.h"
 #include "images.h"
@@ -141,6 +142,10 @@ private:
     // whether or not anything's playing so nothing shifts.
     void mediaBar(float width);
     float mediaBarHeight() const;
+    // brightnessBar is a slider for the monitor's brightness under the
+    // landscape; nothing if the monitor can't be set (or on Linux).
+    void brightnessBar(float width);
+    float brightnessBarHeight();
     float landHeight() const;
     bool eventCard(const Event& e, int64_t t, float left);
     void temporaries();
@@ -196,6 +201,7 @@ private:
     std::unique_ptr<Grabber> grabber_;  // the watchlist's download buttons
     Uploader uploader_;                 // local files monitors ask for
     std::unique_ptr<BatteryWatcher> battery_;  // Squeak's readings, for the battery monitor
+    std::unique_ptr<Brightness> brightness_;  // the monitor's brightness, over DDC/CI
     HiddenApp lick_{L"dailylick"};      // Lick of the Day, hidden and shown by the guitar
     double lickClicked_ = -1;           // when its button was last clicked
     HiddenApp mango_{L"mango", L"-docked"};  // Mango (Spotify), docked to the right, shown by the mango

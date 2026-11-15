@@ -1,9 +1,10 @@
 // The Windows client's PC-specific parts, left out on Linux: the "This PC"
 // and "Now playing" panels, the apps menu, Lick of the Day, watchgrab's
-// download buttons, uploading RuneLite's files and Squeak's battery
-// readings. Each is here as the
+// download buttons, uploading RuneLite's files, Squeak's battery
+// readings and the monitor's brightness. Each is here as the
 // do-nothing version the dashboard treats as absent.
 #include "battery.h"
+#include "brightness.h"
 #include "grabber.h"
 #include "launcher.h"
 #include "lick.h"
@@ -44,6 +45,13 @@ bool HiddenApp::Shown() const { return false; }
 void HiddenApp::Start() {}
 void HiddenApp::Toggle() {}
 void HiddenApp::Raise() const {}
+
+Brightness::Brightness(NativeWindow, std::function<void()>) {}
+Brightness::~Brightness() = default;
+bool Brightness::Available() { return false; }
+int Brightness::Value() { return 0; }
+void Brightness::Set(int) {}
+void Brightness::run() {}
 
 struct Grabber::Shared {};
 Grabber::Grabber(std::function<void()>) {}

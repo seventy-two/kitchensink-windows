@@ -246,6 +246,7 @@ App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
       media_(std::make_unique<MediaWatcher>(wake, images_.get())),
       grabber_(std::make_unique<Grabber>(wake)),
       battery_(std::make_unique<BatteryWatcher>(wake)),
+      brightness_(std::make_unique<Brightness>(hwnd, wake)),
       notify_(std::move(notify)) {
     // Idle dimming counts from launch, not from 1970.
     lastActivity_ = now();
@@ -260,6 +261,7 @@ App::~App() {
     if (newsDirty_) SaveConfig(config_);
     media_.reset();  // before images_, which it feeds
     battery_.reset();
+    brightness_.reset();
     local_.reset();
     client_.reset();
     images_.reset();
@@ -563,7 +565,9 @@ void App::Frame() {
             // The lights' card sits above Now playing, at its height last frame.
             const Snapshot* sw = switchesPanel();
             float swH = sw ? switchesH_ : 0;
-            float below = (barH > 0 ? barH + gap : 0) + (skyH > 0 ? skyH + tight : 0) + (sw ? swH + gap : 0);
+            float lightH = brightnessBarHeight();
+            float below = (barH > 0 ? barH + gap : 0) + (skyH > 0 ? skyH + tight : 0) + (sw ? swH + gap : 0) +
+                          (lightH > 0 ? lightH + tight : 0);
             // Scrolled with the wheel; no scrollbar, which would take width
             // and get in the way.
             ImGui::BeginChild("##feed", ImVec2(feedW, -below), ImGuiChildFlags_None,
@@ -581,6 +585,10 @@ void App::Frame() {
             if (skyH > 0) {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
                 sky(feedW, t);
+            }
+            if (lightH > 0) {
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
+                brightnessBar(feedW);
             }
             ImGui::EndGroup();
             feedRect_ = ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
@@ -3262,6 +3270,68 @@ void App::mediaBar(float width) {
         if (!m.playing) tip += "\nPaused";
         ImGui::SetTooltip("%s", tip.c_str());
     }
+    ImGui::PopID();
+}
+
+float App::brightnessBarHeight() {
+    if (!brightness_->Available()) return 0;
+    return mediaBarHeight();
+}
+
+// brightnessBar draws the monitor's brightness as a slider in a slim card
+// like Now playing's: a sun, the track and the percentage. Dragging along
+// it sets the brightness as it goes; the wheel nudges it by 5.
+void App::brightnessBar(float width) {
+    const Palette& p = Colours();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float s = scale_, h = brightnessBarHeight();
+    if (h <= 0) return;
+    float pad = (compact_ ? 6 : 8) * s;
+    ImVec2 start = ImGui::GetCursorScreenPos(), end(start.x + width, start.y + h);
+    int value = brightness_->Value();
+
+    ImGui::PushID("##brightness");
+    dl->AddRectFilled(start, end, u32(p.card));
+    ImGui::PushFont(fonts_.caption);
+    float lineH = ImGui::GetTextLineHeight(), ty = std::round(start.y + (h - lineH) / 2);
+
+    ImGui::SetCursorScreenPos(start);
+    ImGui::InvisibleButton("##level", ImVec2(width, h));
+    bool hovered = ImGui::IsItemHovered(), active = ImGui::IsItemActive();
+    float x = start.x + pad;
+    ImVec4 iconCol = hovered || active ? p.text : p.muted;
+    dl->AddText(ImVec2(x, ty), u32(iconCol), icon::Brightness);
+    x += ImGui::CalcTextSize(icon::Brightness).x + pad;
+    // The widest the percentage gets, so the track doesn't move.
+    float numW = ImGui::CalcTextSize("100%").x;
+    float knob = std::round(5 * s);
+    float x0 = x + knob, x1 = end.x - pad - numW - pad - knob;
+    if (active) {
+        float t = (ImGui::GetIO().MousePos.x - x0) / std::max(1.0f, x1 - x0);
+        value = std::clamp(int(std::lround(t * 100)), 0, 100);
+        brightness_->Set(value);
+    } else if (hovered && ImGui::GetIO().MouseWheel != 0) {
+        int step = ImGui::GetIO().MouseWheel > 0 ? 5 : -5;
+        value = std::clamp((value + step) / 5 * 5, 0, 100);
+        brightness_->Set(value);
+    }
+    if (hovered || active) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        ImGui::SetTooltip("Monitor brightness %d%%", value);
+    }
+    float y = std::round(start.y + h / 2), th = std::max(2.0f, std::round(3 * s));
+    float kx = x0 + (x1 - x0) * value / 100.0f;
+    ImVec4 fill = hovered || active ? p.accent : mix(p.muted, p.accent, 0.5f);
+    dl->AddRectFilled(ImVec2(x0, y - th / 2), ImVec2(x1, y + th / 2), u32(p.frame), th / 2);
+    dl->AddRectFilled(ImVec2(x0, y - th / 2), ImVec2(kx, y + th / 2), u32(fill), th / 2);
+    dl->AddCircleFilled(ImVec2(kx, y), knob, u32(fill));
+    dl->AddCircle(ImVec2(kx, y), knob, u32(p.card), 0, std::max(1.0f, s));
+    char num[8];
+    std::snprintf(num, sizeof(num), "%d%%", value);
+    float nw = ImGui::CalcTextSize(num).x;
+    dl->AddText(ImVec2(end.x - pad - nw, ty), u32(p.muted), num);
+    ImGui::PopFont();
+    bevel(start, end);
     ImGui::PopID();
 }
 

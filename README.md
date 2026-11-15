@@ -56,6 +56,11 @@ result is a single `kitchensink.exe` with nothing to install.
 - Panels show their controls (grip, refresh, open/close) only while the
   mouse is over them. Drag a panel by the dots in its left margin to
   reorder; the order also decides which open first in the compact layout.
+- **Monitor brightness**: a slim slider under the landscape for the
+  brightness of the monitor the dashboard is on, set over DDC/CI as the
+  monitor's own buttons would (VCP 0x10). Drag along it, or turn the wheel
+  over it for steps of 5. It reads the monitor again every minute, and
+  doesn't show at all if the monitor doesn't answer DDC/CI.
 - **Now playing**: what's playing on this PC, from Windows' media
   sessions (the same source as the volume keys' media pop-up), so Spotify,
   browsers and other players all show. A slim bar at the bottom of the
@@ -203,7 +208,7 @@ Wayland): an SDL3 window drawn with OpenGL instead of Win32 and Direct3D,
 libcurl instead of WinHTTP, stb_image instead of WIC. Only the dashboard
 itself: the PC-specific parts (This PC and Drives, Now playing, the apps
 menu, Lick of the Day, watchgrab's buttons, RuneLite uploads, Squeak's battery readings, turning the
-displays off) are stubbed out in `linux/stubs.cpp`. There's no tray, so
+displays off, monitor brightness) are stubbed out in `linux/stubs.cpp`. There's no tray, so
 closing the window quits. Notifications go through `notify-send`.
 
 - Fonts come from fontconfig: Noto Sans (Liberation Sans Bold for the retro
@@ -240,6 +245,7 @@ make -f linux/Makefile -j4        # build/kitchensink, then the tests
 | `src/grabber.cpp` | runs watchgrab for the download buttons and follows its state file |
 | `src/upload.cpp` | sends monitors the local files they ask for |
 | `src/battery.cpp` | runs Squeak for the battery monitor's readings |
+| `src/brightness.cpp` | reads and sets the monitor's brightness over DDC/CI, on a thread of its own |
 | `src/lick.cpp` | starts Lick of the Day with the dashboard, and hides and shows it |
 | `src/launcher.cpp` | the apps menu: finding, starting and bringing up the apps, and their icons |
 | `src/images.cpp` | thumbnail download, WIC decoding and textures |

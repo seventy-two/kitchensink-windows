@@ -57,6 +57,7 @@ inline constexpr const char* CheckMark = "\xEE\x9C\xBE";    // U+E73E
 inline constexpr const char* Lightbulb = "\xEE\xAA\x80";   // U+EA80
 inline constexpr const char* Moon = "\xEE\x9C\x88";        // U+E708 QuietHours
 inline constexpr const char* Monitor = "\xEE\x9F\xB4";     // U+E7F4 TVMonitor
+inline constexpr const char* Brightness = "\xEE\x9C\x86";  // U+E706 Brightness, a sun
 inline constexpr const char* Dismiss = "\xEE\x9C\x91";      // U+E711 Cancel, a cross
 }  // namespace icon
 #else
@@ -83,6 +84,7 @@ inline constexpr const char* CheckMark = "\xEE\xAA\xB2";  // U+EAB2 cod-check
 inline constexpr const char* Lightbulb = "\xEE\xA9\xA1";  // U+EA61 cod-lightbulb
 inline constexpr const char* Moon = "\xEF\x86\x86";  // U+F186 fa-moon
 inline constexpr const char* Monitor = "\xEF\x84\x88";  // U+F108 fa-desktop
+inline constexpr const char* Brightness = "\xEF\x86\x85";  // U+F185 fa-sun
 inline constexpr const char* Dismiss = "\xEE\xA9\xB6";  // U+EA76 cod-close
 }  // namespace icon
 #endif
