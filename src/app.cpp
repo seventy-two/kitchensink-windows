@@ -1489,7 +1489,13 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
                                   ImGuiWindowFlags_NoScrollWithMouse);
             localHovered_ = linkHovered = false;
             measure_ = fullTable(s, s.summaryBlock[0]);
-            if (slim) {
+            // A short table with no rows (Big box with nothing worth a
+            // look today) shows nothing, not even its headings.
+            const bool none = s.summaryBlock[0].type == "table" && s.summaryBlock[0].rows.empty();
+            if (none) {
+                if (!slim) panelHead(s);
+                ImGui::Dummy(ImVec2(0, 0));
+            } else if (slim) {
                 // Only its first row, without the headings; buttons smaller.
                 Block b = s.summaryBlock[0];
                 if (b.type == "table" && b.rows.size() > 1) b.rows.resize(1);
