@@ -18,8 +18,7 @@ std::string str(const json& j, const char* key) {
     return it->get<std::string>();
 }
 
-Tone tone(const json& j) {
-    std::string t = str(j, "tone");
+Tone toneNamed(const std::string& t) {
     if (t == "good") return Tone::Good;
     if (t == "bad") return Tone::Bad;
     if (t == "warn") return Tone::Warn;
@@ -27,6 +26,8 @@ Tone tone(const json& j) {
     if (t == "accent") return Tone::Accent;
     return Tone::None;
 }
+
+Tone tone(const json& j) { return toneNamed(str(j, "tone")); }
 
 const json& array(const json& j, const char* key) {
     static const json empty = json::array();
@@ -53,6 +54,21 @@ Stat parseStat(const json& j) {
     }
     st.icon = str(j, "icon");
     st.url = str(j, "url");
+    st.tag = str(j, "tag");
+    if (auto it = j.find("spark"); it != j.end() && it->is_object()) {
+        const json& sp = *it;
+        for (const auto& v : array(sp, "points"))
+            if (v.is_number()) st.spark.points.push_back(v.get<float>());
+        for (const auto& v : array(sp, "ext"))
+            if (v.is_number()) st.spark.ext.push_back(v.get<float>());
+        if (auto b = sp.find("base"); b != sp.end() && b->is_number()) {
+            st.spark.base = b->get<float>();
+            st.spark.hasBase = true;
+        }
+        st.spark.tone = toneNamed(str(sp, "tone"));
+        st.spark.extTone = toneNamed(str(sp, "extTone"));
+        st.spark.faded = flag(sp, "faded");
+    }
     if (auto it = j.find("level"); it != j.end() && it->is_number()) {
         st.level = std::clamp(it->get<float>(), 0.0f, 1.0f);
         st.hasLevel = true;

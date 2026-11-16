@@ -10,6 +10,7 @@
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <cfloat>
 #include <chrono>
 #include <cmath>
@@ -157,6 +158,62 @@ void sparkline(const std::vector<float>& v, ImVec2 size, const ImVec4& colour, f
         dl->AddConvexPolyFilled(quad, 4, u32(fade(colour, 0.18f)));
     }
     dl->AddPolyline(pts.data(), int(pts.size()), u32(colour), 0, 1.5f * ImGui::GetStyle().FramePadding.y / 6);
+}
+
+// dashed draws a line through pts in dashes of dash, with gaps as long,
+// carrying the pattern on round corners.
+void dashed(ImDrawList* dl, const std::vector<ImVec2>& pts, ImU32 col, float thick, float dash) {
+    float along = 0;  // how far into the current dash or gap
+    bool on = true;
+    for (size_t i = 0; i + 1 < pts.size(); i++) {
+        ImVec2 a = pts[i], b = pts[i + 1];
+        float len = std::hypot(b.x - a.x, b.y - a.y), done = 0;
+        while (done < len) {
+            float step = std::min(dash - along, len - done);
+            ImVec2 p0(a.x + (b.x - a.x) * done / len, a.y + (b.y - a.y) * done / len);
+            ImVec2 p1(a.x + (b.x - a.x) * (done + step) / len, a.y + (b.y - a.y) * (done + step) / len);
+            if (on) dl->AddLine(p0, p1, col, thick);
+            done += step, along += step;
+            if (along >= dash) along = 0, on = !on;
+        }
+    }
+}
+
+// sparkChart draws a chip's price line in the box at a, size across: the
+// session's points (dimmed once it's over), then any extended trading
+// dotted after a tick, over a faint dotted line at the base (the previous
+// close). It scales to fit them all.
+void sparkChart(const Spark& s, ImVec2 a, ImVec2 size, float scale) {
+    const Palette& p = Colours();
+    size_t n = s.points.size() + s.ext.size();
+    if (s.points.empty() || n < 2) return;
+    float lo = s.points[0], hi = lo;
+    for (float v : s.points) lo = std::min(lo, v), hi = std::max(hi, v);
+    for (float v : s.ext) lo = std::min(lo, v), hi = std::max(hi, v);
+    if (s.hasBase) lo = std::min(lo, s.base), hi = std::max(hi, s.base);
+    float range = std::max(hi - lo, 1e-6f), thick = 1.5f * scale;
+    auto X = [&](size_t i) { return a.x + size.x * float(i) / float(n - 1); };
+    auto Y = [&](float v) { return a.y + thick / 2 + (size.y - thick) * (1 - (v - lo) / range); };
+    auto colour = [&](Tone t) { return t == Tone::None ? p.muted : ToneColour(t); };
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (s.hasBase) dashed(dl, {ImVec2(a.x, Y(s.base)), ImVec2(a.x + size.x, Y(s.base))}, u32(fade(p.muted, 0.5f)), scale, scale * 1.5f);
+    std::vector<ImVec2> pts;
+    for (size_t i = 0; i < s.points.size(); i++) pts.push_back(ImVec2(X(i), Y(s.points[i])));
+    if (pts.size() >= 2) dl->AddPolyline(pts.data(), int(pts.size()), u32(fade(colour(s.tone), s.faded ? 0.55f : 1)), 0, thick);
+    if (!s.ext.empty()) {
+        float x = pts.back().x;
+        dl->AddLine(ImVec2(x, a.y), ImVec2(x, a.y + size.y), u32(fade(p.muted, 0.6f)), scale);
+        std::vector<ImVec2> ext{pts.back()};
+        for (size_t i = 0; i < s.ext.size(); i++) ext.push_back(ImVec2(X(s.points.size() + i), Y(s.ext[i])));
+        dashed(dl, ext, u32(colour(s.extTone)), thick, 2 * scale);
+    }
+}
+
+// TagText is a stat's tag as drawn: small capitals.
+std::string TagText(const std::string& tag) {
+    std::string t = tag;
+    for (char& c : t) c = char(std::toupper((unsigned char)c));
+    return t;
 }
 
 // DrawListCanvas draws the cat and weather icons with ImGui.
@@ -1645,6 +1702,15 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
     // watchlist's percentages.
     float w = 0, labelH = 0, valueH = 0, detailH = 0;
     float beside = 0;  // the widest label or value with an icon by it
+    // Chips with price lines (the watchlist) put the label and value on
+    // one line, the line under them, on a plain block.
+    const bool sparks = std::any_of(stats.begin(), stats.end(), [](const Stat& s) { return !s.lead && s.HasSpark(); });
+    const float sparkH = std::round(18 * scale_), sparkGap = std::round(3 * scale_);
+    const float tagSize = std::round(fonts_.caption->FontSize * 0.72f), tagGap = std::round(3 * scale_);
+    auto tagWidth = [&](const Stat& s) {
+        if (s.tag.empty()) return 0.0f;
+        return fonts_.caption->CalcTextSizeA(tagSize, FLT_MAX, 0, TagText(s.tag).c_str()).x + tagGap;
+    };
     bool icons = false;
     std::vector<float> need(stats.size());
     std::vector<float> own(stats.size());  // a lead chip's width, else 0
@@ -1678,6 +1744,11 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
         ImVec2 v = ImGui::CalcTextSize(s.value.c_str());
         w = std::max(w, v.x);
         need[i] = std::max(need[i], v.x);
+        if (sparks) {
+            float line = l.x + gap * 2 + v.x + tagWidth(s);
+            w = std::max(w, line);
+            need[i] = std::max(need[i], line);
+        }
         // An icon, if any, goes right of the label and value, as tall as
         // both if there's room, as tall as the value at least.
         if (IsWeatherIcon(s.icon)) {
@@ -1735,7 +1806,7 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
                 if (own[i] == 0) ws[i] = std::max(share, need[i]);
         }
     }
-    float h = pad.y * 2 + labelH + valueH + detailH;
+    float h = sparks ? pad.y * 2 + valueH + sparkGap + sparkH + detailH : pad.y * 2 + labelH + valueH + detailH;
     float iconSize = std::round(std::clamp(w - pad.x * 2 - beside - gap, valueH * 1.2f, labelH + valueH));
 
     // Scrolling anyway, a few long labels (an index's full name) needn't
@@ -1820,7 +1891,14 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
             ImGui::Dummy(ImVec2(w, h));
             continue;
         }
-        dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(coloured ? fade(tone, 0.2f) : p.frame));
+        // Plain blocks for price lines; otherwise no block, just a line
+        // along the bottom in the tone's colour.
+        if (sparks) {
+            dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(p.frame));
+        } else {
+            float t = std::round(2 * scale_);
+            dl->AddRectFilled(ImVec2(a.x, a.y + h - t), ImVec2(a.x + w, a.y + h), u32(coloured ? tone : p.border));
+        }
         if (live && !s.url.empty() && ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(a, ImVec2(a.x + w, a.y + h))) {
             dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(fade(p.text, 0.12f)));
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -1828,6 +1906,36 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
             onLink = true;
         }
         float inner = w - pad.x * 2;
+        if (sparks) {
+            // The label left and the value right on one line, resting on
+            // the same bottom, a tag after the value, the line below.
+            float y = a.y + pad.y;
+            float tagW = tagWidth(s);
+            ImGui::PushFont(fonts_.caption);
+            ImGui::SetCursorScreenPos(ImVec2(a.x + pad.x, y + std::round(valueH - labelH - valueH * 0.08f)));
+            ImGui::TextColored(s.tone == Tone::Muted ? p.muted : p.text, "%s", s.label.c_str());
+            ImGui::PopFont();
+            ImGui::PushFont(fonts_.heading);
+            float valueW = ImGui::CalcTextSize(s.value.c_str()).x;
+            ImGui::SetCursorScreenPos(ImVec2(a.x + w - pad.x - tagW - valueW, y));
+            ImGui::TextColored(coloured ? tone : s.tone == Tone::Muted ? p.muted : p.text, "%s", s.value.c_str());
+            ImGui::PopFont();
+            if (tagW > 0) {
+                float tagY = y + valueH - valueH * 0.12f - tagSize;
+                dl->AddText(fonts_.caption, tagSize, ImVec2(a.x + w - pad.x - tagW + tagGap, std::round(tagY)), u32(p.muted),
+                            TagText(s.tag).c_str());
+            }
+            if (s.HasSpark()) sparkChart(s.spark, ImVec2(a.x + pad.x, y + valueH + sparkGap), ImVec2(inner, sparkH), scale_);
+            if (!s.detail.empty()) {
+                ImGui::PushFont(fonts_.caption);
+                ImGui::SetCursorScreenPos(ImVec2(a.x + pad.x, y + valueH + sparkGap + sparkH));
+                ImGui::TextColored(p.muted, "%s", fitLines(s.detail, inner).c_str());
+                ImGui::PopFont();
+            }
+            ImGui::SetCursorScreenPos(a);
+            ImGui::Dummy(ImVec2(w, h));
+            continue;
+        }
         if (levels) {
             // The levels as one faint chart behind the row: through the
             // middle of each block at its own level, and at each edge
@@ -1884,8 +1992,9 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
 }
 
 // slimStats is a summary on one slim line, for the ultra compact layout:
-// each stat's label then its value, without details, as small blocks
-// tinted by tone when chips, plain otherwise. What doesn't fit is cut
+// each stat's label then its value, without details; as chips, each is
+// underlined in its tone's colour, or a plain block with a small price
+// line after the value when it has one. What doesn't fit is cut
 // short, then left out with a count. With live, ones with a URL open it
 // when clicked; it returns whether the mouse is over one.
 bool App::slimStats(const std::vector<Stat>& stats, float width, bool asChips, bool live) {
@@ -1912,6 +2021,13 @@ bool App::slimStats(const std::vector<Stat>& stats, float width, bool asChips, b
         float valueW = value.empty() ? 0 : ImGui::CalcTextSize(value.c_str()).x;
         float between = labelW > 0 && (valueW > 0 || icon) ? inner : 0;
         float iconW = icon ? lineH + inner : 0;
+        // A tag, small, and a price line, after the value.
+        bool spark = asChips && !st.lead && st.HasSpark();
+        float tagSize = std::round(fonts_.caption->FontSize * 0.72f);
+        std::string tag = st.tag.empty() ? "" : TagText(st.tag);
+        float tagW = tag.empty() ? 0 : fonts_.caption->CalcTextSizeA(tagSize, FLT_MAX, 0, tag.c_str()).x + 3 * scale_;
+        float sparkW = spark ? std::round(40 * scale_) + inner : 0;
+        iconW += tagW + sparkW;
         float w = padX * 2 + labelW + between + valueW + iconW;
         float room = width - x;
         if (w > room) {
@@ -1936,7 +2052,14 @@ bool App::slimStats(const std::vector<Stat>& stats, float width, bool asChips, b
         ImVec2 a(origin.x + x, origin.y), z(a.x + w, a.y + h);
         ImVec4 tone = ToneColour(st.tone);
         bool coloured = st.tone == Tone::Good || st.tone == Tone::Bad || st.tone == Tone::Warn || st.tone == Tone::Accent;
-        if (asChips && !st.lead) dl->AddRectFilled(a, z, u32(coloured ? fade(tone, 0.2f) : p.frame));
+        if (asChips && !st.lead) {
+            if (spark) {
+                dl->AddRectFilled(a, z, u32(p.frame));
+            } else {
+                float t = std::round(2 * scale_);
+                dl->AddRectFilled(ImVec2(a.x, z.y - t), z, u32(coloured ? tone : p.border));
+            }
+        }
         if (live && !st.url.empty() && ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(a, z)) {
             dl->AddRectFilled(a, z, u32(fade(p.text, 0.12f)));
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -1958,7 +2081,16 @@ bool App::slimStats(const std::vector<Stat>& stats, float width, bool asChips, b
             ImGui::SetCursorScreenPos(ImVec2(tx, a.y + padY));
             ImGui::TextColored(coloured || !asChips ? tone : st.tone == Tone::Muted ? p.muted : p.text, "%s", value.c_str());
             ImGui::PopFont();
-            tx += valueW + inner;
+            tx += valueW + (tagW > 0 ? 3 * scale_ : inner);
+        }
+        if (tagW > 0) {
+            dl->AddText(fonts_.caption, tagSize, ImVec2(tx, std::round(a.y + padY + lineH * 0.88f - tagSize)), u32(p.muted), tag.c_str());
+            tx += tagW - 3 * scale_ + inner;
+        }
+        if (spark) {
+            float sh = std::round(lineH * 0.7f);
+            sparkChart(st.spark, ImVec2(tx, a.y + std::round((h - sh) / 2)), ImVec2(sparkW - inner, sh), scale_);
+            tx += sparkW;
         }
         if (icon) weatherIcon(st.icon, ImVec2(tx, a.y + padY), lineH);
         ImGui::SetCursorScreenPos(a);

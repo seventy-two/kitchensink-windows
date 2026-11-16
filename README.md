@@ -7,7 +7,9 @@ It's written in C++ with Win32, Direct3D 11 and
 result is a single `kitchensink.exe` with nothing to install.
 
 - Draws whatever blocks a monitor sends (stats, tables, lists, checklists,
-  text) and its summary (tiles, or chips tinted by tone, a `lead` one as plain text on one line, or a
+  text) and its summary (tiles, or chips underlined in their tone's colour, or plain blocks with a
+  price line under them when they send a `spark` (the watchlist, dotted on through pre-market or
+  after-hours trading), a `lead` one as plain text on one line, or a
   `summaryBlock` drawn like the panel, such as its table's top rows), so new monitors
   appear without client changes. A stat marked `bar` is drawn as a bar filled to its
   `level`, in panels and summary tiles; a summary of nothing but bars shares the
@@ -26,7 +28,8 @@ result is a single `kitchensink.exe` with nothing to install.
   as it's resized.
 - **Ultra compact** (Settings → Layout): the compact layout at any window
   size, with every closed panel cut to one slim line: summaries as label
-  and value pairs (chips as small tinted blocks), what doesn't fit counted
+  and value pairs (chips underlined in their tone's colour, a small price
+  line after the value when they have one), what doesn't fit counted
   as "+n", no subtitles, a short table's first row only, without details,
   and smaller buttons. Closed rows leave out table headings; an open panel is always
   the full one, headings and all.

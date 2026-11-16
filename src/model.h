@@ -19,6 +19,18 @@ enum class Tone { None, Good, Bad, Warn, Muted, Accent };
 enum class Align { Left, Right, Center };
 enum class Priority { Low, Normal, High };
 
+// Spark is a chip's small price line: points evenly spaced, then ext
+// carrying on dotted after a tick (pre-market or after hours). base, when
+// hasBase, is a level drawn faintly (the previous close); faded dims the
+// points, whose session is over.
+struct Spark {
+    std::vector<float> points, ext;
+    float base = 0;
+    bool hasBase = false;
+    Tone tone = Tone::None, extTone = Tone::None;
+    bool faded = false;
+};
+
 struct Stat {
     std::string label, value, detail;
     Tone tone = Tone::None;
@@ -47,6 +59,11 @@ struct Stat {
     // ultra compact layout); empty leaves only the label.
     std::string brief;
     bool hasBrief = false;
+    // tag is a word drawn small after the value, e.g. "pre".
+    std::string tag;
+    // spark, when it has two points or more, is drawn in a chip.
+    Spark spark;
+    bool HasSpark() const { return spark.points.size() + spark.ext.size() >= 2 && !spark.points.empty(); }
 };
 
 struct Column {

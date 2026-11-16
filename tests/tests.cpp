@@ -175,6 +175,20 @@ static void testBrief() {
     CHECK(!s.summary[1].hasBrief);
 }
 
+static void testSpark() {
+    Snapshot s = ParseSnapshot(nlohmann::json::parse(
+        R"({"monitor":"stocks","summary":[{"label":"NVDA","value":"-3.50%","tone":"bad","tag":"pre","spark":{"points":[1,2,3],"ext":[2.5],"base":1.5,"tone":"good","extTone":"bad","faded":true}},{"label":"BP.","value":"+1%","spark":{"points":[1]}},{"label":"MU","value":"+1%"}]})"));
+    CHECK(s.summary.size() == 3);
+    const Stat& n = s.summary[0];
+    CHECK_EQ(n.tag, std::string("pre"));
+    CHECK(n.HasSpark());
+    CHECK(n.spark.points.size() == 3 && n.spark.ext.size() == 1);
+    CHECK(n.spark.hasBase && n.spark.base == 1.5f);
+    CHECK(n.spark.tone == Tone::Good && n.spark.extTone == Tone::Bad && n.spark.faded);
+    CHECK(!s.summary[1].HasSpark());  // one point isn't a line
+    CHECK(!s.summary[2].HasSpark() && !s.summary[2].spark.hasBase);
+}
+
 static void testRelevance() {
     Snapshot s;
     s.monitor = "m";
@@ -1018,6 +1032,7 @@ int main() {
     testFitPanels();
     testRelevance();
     testBrief();
+    testSpark();
     testSwitchGroup();
     testGpuUtilisation();
     testLocalPanels();
