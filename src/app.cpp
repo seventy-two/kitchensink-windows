@@ -1523,6 +1523,10 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
                 onButton = chips(s.summary, w, clicked && dragging_.empty()) || onButton;
                 drawWhen(y == top.y ? ImGui::GetItemRectMax().x : 0);
             } else {
+                // A line of bars (Claude's limits) sharing the controls'
+                // line sits level with the text beside them.
+                bool barsOnly = std::all_of(s.summary.begin(), s.summary.end(), [](const Stat& t) { return t.bar; });
+                if (barsOnly && y == top.y) ImGui::SetCursorScreenPos(ImVec2(top.x, top.y + st.FramePadding.y));
                 summary(s.summary, avail - (y == top.y ? rightW : 0));
                 drawWhen(0);
             }
