@@ -172,6 +172,7 @@ Snapshot ParseSnapshot(const json& j) {
     s.title = str(j, "title");
     s.error = str(j, "error");
     s.subtitle = str(j, "subtitle");
+    s.subtitleHover = flag(j, "subtitleHover");
     s.timely = j.value("timely", false);
     s.background = j.value("background", false);
     if (j.contains("relevant") && j["relevant"].is_object()) {

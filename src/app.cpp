@@ -1445,7 +1445,9 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
             bool pending = refreshing_.count(s.monitor) && ImGui::GetTime() - refreshing_[s.monitor] < 15;
             when = failed      ? std::string(icon::Warning) + "  Failed"
                    : pending   ? "refreshing…"
-                   : s.updated ? (s.timely ? Ago(s.updated, now()) : "")
+                   : s.updated ? (s.subtitleHover && !s.subtitle.empty() ? s.subtitle
+                                  : s.timely                           ? Ago(s.updated, now())
+                                                                       : "")
                                : "waiting…";
             hidden = !failed && !pending && s.updated && !shown;
             ImGui::PushFont(fonts_.caption);
@@ -1469,7 +1471,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         // summary, which shares the controls' line when there's no
         // subtitle above it.
         float y = top.y;
-        if (!s.subtitle.empty() && !asPanel && !slim) {
+        if (!s.subtitle.empty() && !asPanel && !slim && !s.subtitleHover) {
             ImGui::SetCursorScreenPos(ImVec2(top.x, top.y + st.FramePadding.y));
             ImGui::PushFont(fonts_.caption);
             mutedText(fit(s.subtitle, avail - rightW));
@@ -2109,9 +2111,10 @@ bool App::slimStats(const std::vector<Stat>& stats, float width, bool asChips, b
 
 void App::summary(const std::vector<Stat>& stats, float width) {
     const Palette& p = Colours();
-    bool details = std::any_of(stats.begin(), stats.end(), [](const Stat& s) { return !s.detail.empty(); });
+    // Bars keep their details for a tooltip.
+    bool details = std::any_of(stats.begin(), stats.end(), [](const Stat& s) { return !s.bar && !s.detail.empty(); });
     float spacing = 24 * scale_;
-    // A bar tile: its value beside its label, and the bar across the tile.
+    // A bar tile is one line: its label, the bar, then its value.
     float barMin = std::round(48 * scale_), barH = std::max(4.0f, std::round(5 * scale_)), barGap = 6 * scale_;
     float groupGap = 12 * scale_;  // the extra room before a new group
     // A summary of nothing but bars (Claude's limits) shares the line
@@ -2130,13 +2133,13 @@ void App::summary(const std::vector<Stat>& stats, float width) {
         ImGui::PushFont(fonts_.caption);
         std::string label = fit(s.label, width), detail = fit(s.detail, width);
         float labelW = ImGui::CalcTextSize(label.c_str()).x;
-        float w = std::max({labelW, ImGui::CalcTextSize(detail.c_str()).x, ImGui::CalcTextSize(s.widestDetail.c_str()).x});
+        float w = s.bar ? labelW
+                        : std::max({labelW, ImGui::CalcTextSize(detail.c_str()).x, ImGui::CalcTextSize(s.widestDetail.c_str()).x});
         float captionH = ImGui::GetTextLineHeight();
         std::string value = fit(s.value, width);
-        if (s.bar) {
-            float valueW = std::max(ImGui::CalcTextSize(value.c_str()).x, ImGui::CalcTextSize(s.widestValue.c_str()).x);
-            w = std::max({w, labelW + barGap + valueW, barMin});
-        }
+        // The room for the value, kept for its widest so the bar holds still.
+        float valueW = std::max(ImGui::CalcTextSize(value.c_str()).x, ImGui::CalcTextSize(s.widestValue.c_str()).x);
+        if (s.bar) w = labelW + barGap + barMin + barGap + valueW;
         ImGui::PopFont();
         ImGui::PushFont(fonts_.heading);
         float valueH = ImGui::GetTextLineHeight();
@@ -2156,34 +2159,41 @@ void App::summary(const std::vector<Stat>& stats, float width) {
                         std::max(1.0f, std::round(scale_)));
             x += groupGap;
         }
-        ImGui::SetCursorScreenPos(ImVec2(origin.x + x, origin.y + y));
+        ImVec2 at(origin.x + x, origin.y + y);
+        ImGui::SetCursorScreenPos(at);
         ImGui::BeginGroup();
-        ImGui::PushFont(fonts_.caption);
-        mutedText(label);
         if (s.bar) {
-            // The value beside the label, right-aligned in the tile.
-            ImGui::SameLine(0, 0);
+            // The label, the bar, then the value right-aligned in the
+            // tile; how full in the accent normally, the tone's colour as
+            // it fills up. The detail (when it resets) is for a closer
+            // look: a tooltip.
+            ImGui::PushFont(fonts_.caption);
+            mutedText(label);
             float vw = ImGui::CalcTextSize(value.c_str()).x;
-            ImGui::SetCursorScreenPos(ImVec2(origin.x + x + w - vw, ImGui::GetCursorScreenPos().y));
+            ImGui::SetCursorScreenPos(ImVec2(at.x + w - vw, at.y));
             ImGui::TextColored(ToneColour(s.tone), "%s", value.c_str());
-        }
-        ImGui::PopFont();
-        ImGui::PushFont(fonts_.heading);
-        if (s.bar) {
-            // How full, as a bar across the tile: in the accent normally, the
-            // tone's colour as it fills up.
-            ImGui::SetCursorScreenPos(ImVec2(origin.x + x, ImGui::GetCursorScreenPos().y));
-            ImVec2 at = ImGui::GetCursorScreenPos();
-            float by = std::round(at.y + (valueH - barH) / 2);
+            ImGui::PopFont();
+            float bx = at.x + labelW + barGap, bw = w - labelW - valueW - barGap * 2;
+            float by = std::round(at.y + (captionH - barH) / 2);
             ImVec4 fill = s.tone == Tone::Warn || s.tone == Tone::Bad ? ToneColour(s.tone)
                           : s.tone == Tone::Muted                     ? p.muted
                                                                       : p.accent;
-            dl->AddRectFilled(ImVec2(at.x, by), ImVec2(at.x + w, by + barH), u32(p.frame));
-            dl->AddRectFilled(ImVec2(at.x, by), ImVec2(at.x + std::round(w * s.level), by + barH), u32(fill));
-            ImGui::Dummy(ImVec2(w, valueH));
-        } else {
-            ImGui::TextColored(ToneColour(s.tone), "%s", value.c_str());
+            dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + bw, by + barH), u32(p.frame));
+            dl->AddRectFilled(ImVec2(bx, by), ImVec2(bx + std::round(bw * s.level), by + barH), u32(fill));
+            ImGui::SetCursorScreenPos(at);
+            ImGui::Dummy(ImVec2(w, captionH));
+            if (!detail.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+                ImGui::SetTooltip("%s", s.detail.c_str());
+            ImGui::EndGroup();
+            lineH = std::max(lineH, ImGui::GetItemRectSize().y);
+            x += w + spacing;
+            continue;
         }
+        ImGui::PushFont(fonts_.caption);
+        mutedText(label);
+        ImGui::PopFont();
+        ImGui::PushFont(fonts_.heading);
+        ImGui::TextColored(ToneColour(s.tone), "%s", value.c_str());
         ImGui::PopFont();
         if (details) {
             ImGui::PushFont(fonts_.caption);

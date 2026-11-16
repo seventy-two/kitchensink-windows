@@ -173,6 +173,9 @@ struct Block {
 struct Snapshot {
     std::string monitor, kind, title, error;
     std::string subtitle;  // what it's watching, when that isn't obvious
+    // subtitleHover shows the subtitle only on hover, in place of when it
+    // was updated (when Claude's usage was read).
+    bool subtitleHover = false;
     bool timely = false;   // when it was updated matters at the moment
     // When the panel matters most (Unix seconds; from 0 for now, until
     // exclusive, 0 for never): it moves under Recent then. See Relevant.
