@@ -1700,7 +1700,7 @@ void App::dragDrop() {
 // at its start. A lead chip
 // has no block, just its label and value on one line, as wide as they
 // are, with more room after it.
-bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
+bool App::chips(const std::vector<Stat>& stats, float width, bool live, bool grid) {
     if (stats.empty()) return false;
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -1717,7 +1717,7 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
     // Chips with price lines (the watchlist) put the label and value on
     // one line, the line under them, on a plain block.
     const bool sparks = std::any_of(stats.begin(), stats.end(), [](const Stat& s) { return !s.lead && s.HasSpark(); });
-    const float sparkH = std::round(18 * scale_), sparkGap = std::round(3 * scale_);
+    const float sparkH = std::round((grid ? 40 : 18) * scale_), sparkGap = std::round(3 * scale_);
     const float tagSize = std::round(fonts_.caption->FontSize * 0.72f), tagGap = std::round(3 * scale_);
     auto tagWidth = [&](const Stat& s) {
         if (s.tag.empty()) return 0.0f;
@@ -1792,7 +1792,7 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
     for (size_t i = 0; i < n; i++) ws[i] = own[i] > 0 ? own[i] : std::min(w, width);
     float natural = gaps;
     for (float x : ws) natural += x;
-    if (natural > width + 0.5f && shared > 0 && oneRow > 0) {
+    if (!grid && natural > width + 0.5f && shared > 0 && oneRow > 0) {
         // All on one row: the chips that need more than an equal share
         // take it, and the rest share what's left. Short ones (the
         // dailies' "W", "C") can go narrow, as long as each still fits.
@@ -1830,7 +1830,7 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
         std::vector<float> needs;
         for (size_t i = 0; i < n; i++)
             if (own[i] == 0) needs.push_back(need[i]);
-        if (natural > width + 0.5f && !needs.empty()) {
+        if (!grid && natural > width + 0.5f && !needs.empty()) {
             std::sort(needs.begin(), needs.end());
             w = needs[(needs.size() - 1) * 4 / 5];
             for (size_t i = 0; i < n; i++)
@@ -1846,7 +1846,20 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live) {
     std::vector<ImVec2> at(n);
     std::vector<bool> row(n);
     float rowW = 0;
-    for (size_t i = 0; i < n; i++) {
+    if (grid) {
+        // A grid (a panel's charts): as many columns as fit at the shared
+        // width, stretched to fill the line, on as many rows as it takes.
+        size_t cols = std::clamp<size_t>(size_t((width + gap) / (w + gap)), 1, n);
+        float tw = std::floor((width - gap * float(cols - 1)) / float(cols));
+        for (size_t i = 0; i < n; i++) {
+            size_t r = i / cols, c = i % cols;
+            ws[i] = tw;
+            row[i] = c == 0;
+            at[i] = ImVec2(origin.x + float(c) * (tw + gap), origin.y + float(r) * (h + gap));
+        }
+        rowW = width;  // it never scrolls
+    }
+    for (size_t i = 0; i < n && !grid; i++) {
         row[i] = rowW == 0;
         at[i] = ImVec2(origin.x + rowW, origin.y);
         rowW += ws[i] + (i + 1 < n ? after[i] : 0);
@@ -2129,7 +2142,10 @@ void App::summary(const std::vector<Stat>& stats, float width) {
         barShare = std::min(std::floor((width - spacing * (n - 1)) / n), std::round(280 * scale_));
     }
     ImVec2 origin = ImGui::GetCursorScreenPos();
-    float x = 0, y = 0, lineH = 0;
+    // lineH is the current line's height since its group began; a group
+    // that runs out of room carries on under itself from groupX (the
+    // drives, on the right of This PC), and bottom is the lowest yet.
+    float x = 0, y = 0, lineH = 0, groupX = 0, bottom = 0;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     ImGui::BeginGroup();
     for (size_t i = 0; i < stats.size(); i++) {
@@ -2154,7 +2170,13 @@ void App::summary(const std::vector<Stat>& stats, float width) {
         w = std::min(w, width);
 
         bool group = s.group && x > 0;
-        if (x > 0 && x + (group ? groupGap : 0) + w > width) x = 0, y += lineH + 4 * scale_, lineH = 0, group = false;
+        if (x > 0 && x + (group ? groupGap : 0) + w > width) {
+            if (!group && groupX > 0 && groupX + w <= width) {
+                x = groupX, y += lineH + 4 * scale_, lineH = 0;
+            } else {
+                x = 0, y = bottom + 4 * scale_, lineH = 0, groupX = 0, group = false;
+            }
+        }
         if (group) {
             // A faint rule midway between the groups.
             float rx = std::round(origin.x + x - spacing / 2 + groupGap / 2);
@@ -2162,6 +2184,7 @@ void App::summary(const std::vector<Stat>& stats, float width) {
             dl->AddLine(ImVec2(rx, origin.y + y + 2 * scale_), ImVec2(rx, origin.y + y + h - 2 * scale_), u32(p.border),
                         std::max(1.0f, std::round(scale_)));
             x += groupGap;
+            groupX = x, lineH = 0;
         }
         ImVec2 at(origin.x + x, origin.y + y);
         ImGui::SetCursorScreenPos(at);
@@ -2190,6 +2213,7 @@ void App::summary(const std::vector<Stat>& stats, float width) {
                 ImGui::SetTooltip("%s", s.detail.c_str());
             ImGui::EndGroup();
             lineH = std::max(lineH, ImGui::GetItemRectSize().y);
+            bottom = std::max(bottom, y + ImGui::GetItemRectSize().y);
             x += w + spacing;
             continue;
         }
@@ -2206,9 +2230,56 @@ void App::summary(const std::vector<Stat>& stats, float width) {
         }
         ImGui::EndGroup();
         lineH = std::max(lineH, ImGui::GetItemRectSize().y);
+        bottom = std::max(bottom, y + ImGui::GetItemRectSize().y);
         x += w + spacing;
     }
     ImGui::EndGroup();
+}
+
+// chipsBlock draws a stats block as a grid of chips (the watchlist's
+// charts) under its title, with buttons on the right of the title's line
+// to switch every chip between its views (Today, 1W, 1M), remembered for
+// the panel.
+void App::chipsBlock(const std::string& monitor, const Block& b) {
+    const Palette& p = Colours();
+    size_t& view = chipView_[monitor];
+    if (view >= b.views.size()) view = 0;
+    float width = ImGui::GetContentRegionAvail().x;
+    ImGui::PushFont(fonts_.caption);
+    ImVec2 top = ImGui::GetCursorScreenPos();
+    float lineH = ImGui::GetTextLineHeight() + 4 * scale_;
+    if (!b.title.empty()) {
+        ImGui::SetCursorScreenPos(ImVec2(top.x, top.y + 2 * scale_));
+        ImGui::TextColored(p.blockTitle, "%s", b.title.c_str());
+    }
+    if (b.views.size() > 1) {
+        // Small buttons, the chosen one filled, at the right.
+        float padX = 8 * scale_, total = 0;
+        for (const auto& v : b.views) total += ImGui::CalcTextSize(v.label.c_str()).x + padX * 2;
+        float x = top.x + width - total;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        for (size_t i = 0; i < b.views.size(); i++) {
+            const std::string& label = b.views[i].label;
+            float w = ImGui::CalcTextSize(label.c_str()).x + padX * 2;
+            ImVec2 a(x, top.y), z(x + w, top.y + lineH);
+            ImGui::SetCursorScreenPos(a);
+            ImGui::PushID(int(i));
+            bool clicked = ImGui::InvisibleButton("##view", ImVec2(w, lineH));
+            bool hovered = ImGui::IsItemHovered();
+            ImGui::PopID();
+            if (clicked) view = i;
+            if (i == view) dl->AddRectFilled(a, z, u32(p.frame));
+            else if (hovered) dl->AddRectFilled(a, z, u32(p.hover));
+            if (hovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            dl->AddText(ImVec2(x + padX, top.y + 2 * scale_), u32(i == view ? p.text : p.muted), label.c_str());
+            x += w;
+        }
+    }
+    ImGui::PopFont();
+    bool header = !b.title.empty() || b.views.size() > 1;
+    ImGui::SetCursorScreenPos(ImVec2(top.x, top.y + (header ? lineH + 4 * scale_ : 0)));
+    const std::vector<Stat>& stats = b.views.empty() ? b.stats : b.views[view].stats;
+    if (chips(stats, width, true, true)) linkHovered = true;
 }
 
 void App::block(const std::string& monitor, const Block& b) {
@@ -2217,7 +2288,8 @@ void App::block(const std::string& monitor, const Block& b) {
         ImGui::TextColored(Colours().blockTitle, "%s", b.title.c_str());
         ImGui::PopFont();
     }
-    if (b.type == "stats") stats(b);
+    if (b.type == "stats" && b.chips) chipsBlock(monitor, b);
+    else if (b.type == "stats") stats(b);
     else if (b.type == "table") table(monitor, b);
     else if (b.type == "list") list(b);
     else if (b.type == "checklist") checklist(monitor, b);

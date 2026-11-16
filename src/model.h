@@ -165,6 +165,15 @@ struct Block {
     bool isPrivate = false;  // personal figures, hidden on request
     Media media;
     std::vector<Stat> stats;
+    // A stats block drawn as chips (a grid of the watchlist's charts), and
+    // other sets of its stats to switch between (Today, 1W, 1M): stats is
+    // the first view's.
+    bool chips = false;
+    struct View {
+        std::string label;
+        std::vector<Stat> stats;
+    };
+    std::vector<View> views;
     std::vector<Column> columns;
     std::vector<std::vector<Cell>> rows;
     std::vector<Item> items;

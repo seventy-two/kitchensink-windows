@@ -14,7 +14,7 @@ result is a single `kitchensink.exe` with nothing to install.
   appear without client changes. A stat marked `bar` is drawn as a bar filled to its
   `level`, in panels and summary tiles (in a tile, one line: label, bar, value,
   with its detail as a tooltip); a summary of nothing but bars shares the
-  line between them. A `subtitleHover` subtitle shows only on hover, where
+  line between them; a group of them (the drives) that runs out of room carries on under itself. A stats block marked `chips` is a grid of chips (the open watchlist's charts), with buttons to switch between its `views` (Today, 1W, 1M). A `subtitleHover` subtitle shows only on hover, where
   the time it was updated goes. A monitor that sends only a summary (no blocks)
   stays a row and never opens.
 - In a smaller window (under about 1100 px tall or 900 px wide at 100%

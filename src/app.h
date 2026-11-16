@@ -107,7 +107,7 @@ private:
     bool slimStats(const std::vector<Stat>& stats, float width, bool asChips, bool live);
     // chips draws a summary as chips. With live, chips with a URL open it
     // when clicked; it returns whether the mouse is over one.
-    bool chips(const std::vector<Stat>& stats, float width, bool live = false);
+    bool chips(const std::vector<Stat>& stats, float width, bool live = false, bool grid = false);
     void refreshButton(const Snapshot& s);
     // pasteButton sends the clipboard's text to a monitor that takes it.
     void pasteButton(const Snapshot& s);
@@ -122,6 +122,7 @@ private:
     // checklist sends its actions.
     void block(const std::string& monitor, const Block& b);
     void stats(const Block& b);
+    void chipsBlock(const std::string& monitor, const Block& b);
     void table(const std::string& monitor, const Block& b);
     void list(const Block& b);
     void checklist(const std::string& monitor, const Block& b);
@@ -220,6 +221,8 @@ private:
     unsigned long long pendingSince_ = 0;
     std::unordered_map<std::string, float> heights_;  // card heights last frame
     std::unordered_map<std::string, double> refreshing_;
+    // Which view each chips block shows, by monitor (Today, 1W, 1M).
+    std::unordered_map<std::string, size_t> chipView_;
     std::unordered_map<std::string, double> pasted_;  // when each monitor was last sent the clipboard
     bool busy_ = false;
     unsigned long frameInterval_ = 0, catInterval_ = 0;

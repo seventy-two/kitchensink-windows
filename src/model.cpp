@@ -82,6 +82,12 @@ Block parseBlock(const json& j) {
     b.title = str(j, "title");
     b.text = str(j, "text");
     for (const auto& s : array(j, "stats")) b.stats.push_back(parseStat(s));
+    b.chips = flag(j, "chips");
+    for (const auto& v : array(j, "views")) {
+        Block::View view{str(v, "label"), {}};
+        for (const auto& s : array(v, "stats")) view.stats.push_back(parseStat(s));
+        b.views.push_back(std::move(view));
+    }
     for (const auto& c : array(j, "columns")) {
         std::string a = str(c, "align");
         auto fill = c.find("fill");
