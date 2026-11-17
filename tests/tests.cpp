@@ -226,6 +226,25 @@ static void testRelevance() {
     s.relevantUntil = now + 60;
     CHECK(PanelTier(s, n, now) == Tier::Top);
 
+    // A calm panel (Reddit): its summary changing isn't news, so it's low
+    // until the server says it's relevant (a J-Mod's post) or it has an
+    // event.
+    {
+        Snapshot c;
+        c.calm = true;
+        News cn;
+        cn.changed = now - 60;
+        CHECK(PanelTier(c, cn, now) == Tier::Stale);
+        c.relevantUntil = now + 600;
+        CHECK(PanelTier(c, cn, now) == Tier::Top);
+        c.relevantUntil = 0;
+        cn.event = now - kTopFor - 1;
+        CHECK(PanelTier(c, cn, now) == Tier::Middle);
+        cn.event = now - kStaleAfter;
+        CHECK(PanelTier(c, cn, now) == Tier::Stale);
+        CHECK(ParseSnapshot(nlohmann::json::parse(R"({"monitor": "reddit", "calm": true})")).calm);
+    }
+
     std::vector<size_t> order = ByTier({Tier::Stale, Tier::Middle, Tier::Top, Tier::Middle, Tier::Top});
     CHECK(order == (std::vector<size_t>{2, 4, 1, 3, 0}));
 }

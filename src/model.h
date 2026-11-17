@@ -192,6 +192,9 @@ struct Snapshot {
     // It only feeds other panels (the mail reader), so it's shown with the
     // settings rather than on the dashboard.
     bool background = false;
+    // calm: a change to its summary isn't news (Reddit's hot posts turning
+    // over), so only being relevant or an event lifts it (see PanelTier).
+    bool calm = false;
     // paste, if set, is the tooltip of a button that sends the clipboard's
     // text as a "paste" action (the dailies' share text).
     std::string paste;
@@ -341,7 +344,8 @@ uint64_t SummaryFingerprint(const Snapshot& s);
 // Tier is how relevant a panel is now. Top: the server says it matters now
 // (a game on, an appointment soon) or it had an event in the last
 // kTopFor. Stale: neither an event nor a change to its summary for
-// kStaleAfter. The rest are Middle.
+// kStaleAfter; for a calm panel, whose summary changing isn't news, no
+// event for that long. The rest are Middle.
 enum class Tier { Top, Middle, Stale };
 constexpr int64_t kTopFor = 2 * 3600;
 constexpr int64_t kStaleAfter = 12 * 3600;

@@ -43,7 +43,10 @@ result is a single `kitchensink.exe` with nothing to install.
   says matters now (a game on, an appointment soon) or that had an event
   in the last two hours rises to the top; one with neither an event nor a
   change to its summary for 12 hours sinks to the bottom, fades and doesn't
-  open by itself (click it to). Each keeps the dragged order among its
+  open by itself (click it to). A panel the server marks `calm` (Reddit,
+  whose hot posts always turn over) doesn't count summary changes: it stays
+  at the bottom unless it matters now (a J-Mod's post is up) or had an event
+  in the last 12 hours. Each keeps the dragged order among its
   own. When each monitor last had something new is kept in `config.json`
   as `news`.
 - In the wide layout, where every panel fits open, a panel's chevron (top

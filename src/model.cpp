@@ -181,6 +181,7 @@ Snapshot ParseSnapshot(const json& j) {
     s.subtitleHover = flag(j, "subtitleHover");
     s.timely = j.value("timely", false);
     s.background = j.value("background", false);
+    s.calm = flag(j, "calm");
     if (j.contains("relevant") && j["relevant"].is_object()) {
         s.relevantFrom = std::max<int64_t>(0, ParseTime(str(j["relevant"], "from")));
         s.relevantUntil = std::max<int64_t>(0, ParseTime(str(j["relevant"], "until")));
@@ -262,6 +263,7 @@ uint64_t SummaryFingerprint(const Snapshot& s) {
 Tier PanelTier(const Snapshot& s, const News& n, int64_t now) {
     if (Relevant(s, now)) return Tier::Top;
     if (n.event > 0 && now - n.event < kTopFor) return Tier::Top;
+    if (s.calm) return n.event > 0 && now - n.event < kStaleAfter ? Tier::Middle : Tier::Stale;
     int64_t last = std::max(n.event, n.changed);
     if (last > 0 && now - last >= kStaleAfter) return Tier::Stale;
     return Tier::Middle;
