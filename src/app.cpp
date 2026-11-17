@@ -2491,7 +2491,9 @@ void App::checklist(const std::string& monitor, const Block& b) {
 
 // checklistButtons draws a checklist's items as small buttons in a row,
 // wrapping; in a switches block, lit (with a dot of the item's colour)
-// while on. Clicking one opens its controls, as a switch tile, in a popup.
+// while on. Clicking one ticks it, or turns a light on or off; a light's
+// right-click opens its controls (brightness and colour), as a switch
+// tile, in a popup.
 void App::checklistButtons(const std::string& monitor, const Block& b) {
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -2563,7 +2565,16 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
             }
         }
         ImGui::SetCursorScreenPos(ImVec2(x, y));
-        if (ImGui::InvisibleButton("##light", ImVec2(w, h))) ImGui::OpenPopup("##controls");
+        if (ImGui::InvisibleButton("##light", ImVec2(w, h), ImGuiButtonFlags_MouseButtonLeft | (b.switches ? ImGuiButtonFlags_MouseButtonRight : 0))) {
+            if (b.switches && ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
+                ImGui::OpenPopup("##controls");
+            } else {
+                ticked_[key] = {!done, now};
+                client_->Act(monitor, nlohmann::json{{"type", "toggle"}, {"id", it.id}}.dump());
+                done = !done;
+                on = !on;
+            }
+        }
         bool hovered = ImGui::IsItemHovered();
         if (hovered) {
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
@@ -2587,7 +2598,10 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
         }
         ImVec4 text = !on ? p.muted : it.tone == Tone::None ? p.text : ToneColour(it.tone);
         dl->AddText(ImVec2(tx, std::round(y + (h - ImGui::GetTextLineHeight()) / 2)), u32(text), labels[i].c_str());
-        if (hovered && joined[i]) ImGui::SetTooltip("%s", it.title.c_str());
+        if (hovered && b.switches && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip("%s%sRight-click for brightness and colour", joined[i] ? it.title.c_str() : "",
+                              joined[i] ? "\n" : "");
+        else if (hovered && joined[i]) ImGui::SetTooltip("%s", it.title.c_str());
 
         // The controls, in the body's font, sized to fit the title.
         ImGui::PushFont(fonts_.body);
@@ -2596,11 +2610,7 @@ void App::checklistButtons(const std::string& monitor, const Block& b) {
         if (ImGui::BeginPopup("##controls")) {
             float avail = ImGui::GetContentRegionAvail().x;
             float titleW = std::min(ImGui::CalcTextSize(it.title.c_str()).x, avail * 0.45f);
-            if (b.switches) switchTile(monitor, key, it, done, avail, titleW);
-            else if (ImGui::Checkbox(it.title.c_str(), &done)) {
-                ticked_[key] = {done, now};
-                client_->Act(monitor, nlohmann::json{{"type", "toggle"}, {"id", it.id}}.dump());
-            }
+            switchTile(monitor, key, it, done, avail, titleW);
             ImGui::EndPopup();
         }
         ImGui::PopFont();

@@ -124,8 +124,9 @@ result is a single `kitchensink.exe` with nothing to install.
   wheel, and an on/off switch. Clicking elsewhere on the row toggles it;
   a warning subtitle (e.g. unavailable) shows before the swatch. A `buttons` block (the lights'
   summary block, drawn when the panel is short) is a row of small buttons,
-  lit with a dot of the item's colour while on; clicking one opens its
-  tile in a popup under it.
+  lit with a dot of the item's colour while on; clicking one turns it on
+  or off, and right-clicking a light opens its tile (brightness and
+  colour) in a popup under it.
 - Keeps the server's event stream open, reconnects with backoff, and
   catches up on events missed while offline. A burst of events becomes one
   notification.
