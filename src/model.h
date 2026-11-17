@@ -143,6 +143,9 @@ struct Media {
     double position = 0;  // seconds, as of asOf
     double duration = 0;  // seconds; 0 if unknown
     double asOf = 0;      // Unix seconds
+    // id says which app's session this is, so its buttons control that
+    // one when several are playing.
+    std::string id;
 };
 
 // Block is one part of a monitor's panel. Only the fields for its type are

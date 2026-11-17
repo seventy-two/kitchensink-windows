@@ -132,28 +132,30 @@ std::string FormatTime(double seconds) {
     return buf;
 }
 
-Snapshot MediaSnapshot(const NowPlaying& np, int64_t now) {
+Snapshot MediaSnapshot(const std::vector<NowPlaying>& playing, int64_t now) {
     Snapshot snap;
     snap.monitor = "local:media";
     snap.kind = kLocalKind;
     snap.title = "Now playing";
     snap.updated = now;
-    if (!np.active) return snap;
+    for (const NowPlaying& np : playing) {
+        if (!np.active) continue;
 
-    std::string from;
-    for (const std::string& part : {np.album, np.app})
-        if (!part.empty()) from += (from.empty() ? "" : " · ") + part;
-    Block b;
-    b.type = "media";
-    std::string title = StripEmoji(np.title), artist = StripEmoji(np.artist);
-    from = StripEmoji(from);
-    b.items.push_back({title.empty() ? "Unknown track" : title, artist, from, "", np.image});
-    b.media = np.media;
-    snap.blocks.push_back(b);
-    std::string detail = artist;
-    if (!np.app.empty()) detail += (detail.empty() ? "" : " · ") + np.app;
-    snap.summary.push_back({np.media.playing ? "Now playing" : "Paused", b.items[0].title, detail,
-                            np.media.playing ? Tone::None : Tone::Muted, {}});
+        std::string from;
+        for (const std::string& part : {np.album, np.app})
+            if (!part.empty()) from += (from.empty() ? "" : " · ") + part;
+        Block b;
+        b.type = "media";
+        std::string title = StripEmoji(np.title), artist = StripEmoji(np.artist);
+        from = StripEmoji(from);
+        b.items.push_back({title.empty() ? "Unknown track" : title, artist, from, "", np.image});
+        b.media = np.media;
+        snap.blocks.push_back(b);
+        std::string detail = artist;
+        if (!np.app.empty()) detail += (detail.empty() ? "" : " · ") + np.app;
+        snap.summary.push_back({np.media.playing ? "Now playing" : "Paused", b.items[0].title, detail,
+                                np.media.playing ? Tone::None : Tone::Muted, {}});
+    }
     return snap;
 }
 

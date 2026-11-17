@@ -55,8 +55,8 @@ Snapshot DrivesSnapshot(const std::vector<DriveInfo>& drives, int64_t now);
 // under its stats, titled "Drives", and their tiles after its own.
 Snapshot WithDrives(Snapshot pc, const Snapshot& drives);
 
-// NowPlaying is what Windows says is playing, from whichever app it
-// considers current. active is false when nothing is.
+// NowPlaying is one app's media session, as Windows reports it. active is
+// false when it isn't worth showing.
 struct NowPlaying {
     bool active = false;
     std::string title, artist, album, app;
@@ -64,9 +64,10 @@ struct NowPlaying {
     Media media;
 };
 
-// MediaSnapshot is the "Now playing" panel. It has no blocks when nothing
-// is playing, and isn't shown then.
-Snapshot MediaSnapshot(const NowPlaying& np, int64_t now);
+// MediaSnapshot is the "Now playing" panel: a media block (and summary
+// line) for each active session, in the order given. It has no blocks
+// when nothing is playing, and isn't shown then.
+Snapshot MediaSnapshot(const std::vector<NowPlaying>& playing, int64_t now);
 
 // AppName turns the app ID Windows reports for a media session into a
 // name: "Spotify.exe" is "Spotify", "msedge" is "Edge" and so on.

@@ -410,17 +410,34 @@ static void testMedia() {
     np.image = "media:1";
     np.media.playing = true;
     np.media.duration = 200;
-    Snapshot s = MediaSnapshot(np, 1000);
+    np.media.id = "Spotify.exe\nSong";
+    Snapshot s = MediaSnapshot({np}, 1000);
     CHECK(IsLocal(s));
     CHECK_EQ(s.blocks[0].type, std::string("media"));
     CHECK_EQ(s.blocks[0].items[0].subtitle, std::string("Band"));
     CHECK_EQ(s.blocks[0].items[0].detail, std::string("Record · Spotify"));
     CHECK_EQ(s.blocks[0].items[0].image, std::string("media:1"));
     CHECK_EQ(s.blocks[0].media.duration, 200.0);
+    CHECK_EQ(s.blocks[0].media.id, std::string("Spotify.exe\nSong"));
     CHECK_EQ(s.summary[0].label, std::string("Now playing"));
     CHECK_EQ(s.summary[0].detail, std::string("Band · Spotify"));
     np.media.playing = false;
-    CHECK_EQ(MediaSnapshot(np, 1000).summary[0].label, std::string("Paused"));
+    CHECK_EQ(MediaSnapshot({np}, 1000).summary[0].label, std::string("Paused"));
+
+    // Several sessions stack, in the order given; inactive ones are left out.
+    NowPlaying video;
+    video.active = true;
+    video.title = "A video";
+    video.app = "Firefox";
+    video.media.playing = true;
+    NowPlaying old = video;
+    old.active = false;
+    s = MediaSnapshot({video, old, np}, 1000);
+    CHECK_EQ(s.blocks.size(), size_t(2));
+    CHECK_EQ(s.blocks[0].items[0].title, std::string("A video"));
+    CHECK_EQ(s.blocks[1].items[0].title, std::string("Song"));
+    CHECK_EQ(s.summary.size(), size_t(2));
+    CHECK_EQ(s.summary[1].label, std::string("Paused"));
 }
 
 static void testArrange() {

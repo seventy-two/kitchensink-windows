@@ -139,10 +139,12 @@ private:
     // they are now, for config_.place; nothing without one.
     void sky(float width, int64_t t);
     float skyHeight() const;
-    // mediaBar is Now playing as one slim line above the landscape, there
+    // mediaBar is Now playing as slim lines (one per app) above the landscape, there
     // whether or not anything's playing so nothing shifts.
     void mediaBar(float width);
+    void mediaLine(float width, const Block* b);
     float mediaBarHeight() const;
+    float mediaLineHeight() const;
     // brightnessBar is a slider for the monitor's brightness under the
     // landscape; nothing if the monitor can't be set (or on Linux).
     void brightnessBar(float width);

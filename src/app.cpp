@@ -2343,9 +2343,10 @@ void App::mediaBlock(const Block& b) {
     // Controls, flat and dim until hovered, like refresh.
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_Text, p.muted);
+    ImGui::PushID(m.id.c_str());  // several sessions can be showing
     auto control = [&](const char* glyph, bool enabled, MediaCommand c, const char* tip) {
         ImGui::BeginDisabled(!enabled);
-        if (ImGui::Button(glyph)) media_->Command(c);
+        if (ImGui::Button(glyph)) media_->Command(c, m.id);
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
         ImGui::EndDisabled();
     };
@@ -2354,6 +2355,7 @@ void App::mediaBlock(const Block& b) {
     control(m.playing ? icon::Pause : icon::Play, m.canToggle, MediaCommand::TogglePlay, m.playing ? "Pause" : "Play");
     ImGui::SameLine(0, 2 * scale_);
     control(icon::Next, m.canNext, MediaCommand::Next, "Next");
+    ImGui::PopID();
     ImGui::PopStyleColor(2);
     ImGui::EndGroup();
 }
@@ -3393,30 +3395,57 @@ float App::skyHeight() const {
     return landHeight() + std::round(pad * 0.7f) * 2 + fonts_.caption->FontSize;
 }
 
-float App::mediaBarHeight() const {
+// mediaLineHeight is one line of Now playing's bar (and the brightness bar).
+float App::mediaLineHeight() const {
 #ifndef _WIN32
     return 0;  // no Now playing on Linux
 #endif
     return std::round(fonts_.caption->FontSize + (compact_ ? 8 : 10) * scale_);
 }
 
-// mediaBar draws what's playing in one line: the track and artist,
-// previous, play/pause and next, and its progress as a thin line along the
-// bottom. With nothing playing it says so and stays put.
+// mediaBarLines is how many lines Now playing's bar has: one per session
+// showing (at most kMediaLines), or one saying nothing is.
+static constexpr int kMediaLines = 4;
+static int mediaBarLines(const Snapshot& media) {
+    return std::clamp(int(media.blocks.size()), 1, kMediaLines);
+}
+
+float App::mediaBarHeight() const {
+    float line = mediaLineHeight();
+    if (line <= 0) return 0;
+    int n = mediaBarLines(mediaPanel_);
+    return line * n + std::round(4 * scale_) * (n - 1);
+}
+
+// mediaBar draws what's playing, a line for each app playing, stacked
+// (playing ones first). With nothing playing it says so and stays put.
 void App::mediaBar(float width) {
 #ifndef _WIN32
     return;  // no Now playing on Linux
 #endif
+    float h = mediaLineHeight(), gap = std::round(4 * scale_);
+    ImVec2 at = ImGui::GetCursorScreenPos();
+    int n = mediaBarLines(mediaPanel_);
+    for (int i = 0; i < n; i++) {
+        ImGui::SetCursorScreenPos(ImVec2(at.x, at.y + i * (h + gap)));
+        mediaLine(width, i < int(mediaPanel_.blocks.size()) ? &mediaPanel_.blocks[i] : nullptr);
+    }
+}
+
+// mediaLine draws one session in one line: the track and artist,
+// previous, play/pause and next, and its progress as a thin line along the
+// bottom; or, for no session, "Nothing playing".
+void App::mediaLine(float width, const Block* b) {
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    float s = scale_, h = mediaBarHeight();
+    float s = scale_, h = mediaLineHeight();
     float pad = (compact_ ? 6 : 8) * s;
     ImVec2 start = ImGui::GetCursorScreenPos(), end(start.x + width, start.y + h);
-    const Block* b = mediaPanel_.blocks.empty() ? nullptr : &mediaPanel_.blocks[0];
     const Item* it = b && !b->items.empty() ? &b->items[0] : nullptr;
     Media m = b ? b->media : Media{};
 
     ImGui::PushID("##media");
+    ImGui::PushID(m.id.c_str());
     dl->AddRectFilled(start, end, u32(p.card));
     ImGui::PushFont(fonts_.caption);
     float lineH = ImGui::GetTextLineHeight(), ty = std::round(start.y + (h - lineH) / 2);
@@ -3437,7 +3466,7 @@ void App::mediaBar(float width) {
             dl->AddRectFilled(a, z, u32(p.hover));
             ImGui::SetTooltip("%s", tip);
         }
-        if (clicked) media_->Command(c);
+        if (clicked) media_->Command(c, m.id);
         ImVec2 gs = ImGui::CalcTextSize(glyph);
         ImVec4 col = !enabled ? mix(p.muted, p.card, 0.5f) : hovered ? p.text : p.muted;
         dl->AddText(ImVec2(std::round(right + (btn - gs.x) / 2), ty), u32(col), glyph);
@@ -3484,11 +3513,12 @@ void App::mediaBar(float width) {
         ImGui::SetTooltip("%s", tip.c_str());
     }
     ImGui::PopID();
+    ImGui::PopID();
 }
 
 float App::brightnessBarHeight() {
     if (!brightness_->Available()) return 0;
-    return mediaBarHeight();
+    return mediaLineHeight();
 }
 
 // brightnessBar draws the monitor's brightness as a slider in a slim card

@@ -5,7 +5,9 @@
 #include <algorithm>
 #include <chrono>
 #include <ctime>
+#include <map>
 #include <string>
+#include <vector>
 
 #include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Foundation.h>
@@ -74,10 +76,11 @@ bool MediaWatcher::Take(Snapshot& out) {
     return true;
 }
 
-void MediaWatcher::Command(MediaCommand c) {
+void MediaWatcher::Command(MediaCommand c, const std::string& id) {
     {
         std::lock_guard<std::mutex> lock(mu_);
         command_ = c;
+        commandId_ = id;
     }
     cv_.notify_all();
 }
@@ -86,15 +89,14 @@ void MediaWatcher::run() {
     // WinRT calls block with .get(), which needs a multithreaded apartment.
     winrt::init_apartment(winrt::apartment_type::multi_threaded);
     GlobalSystemMediaTransportControlsSessionManager manager{nullptr};
-    std::string track;  // title, artist and album of the cover we have
-    std::string image;
-    int covers = 0;
+    // Covers by track (title, artist and album), so each is read once.
+    std::map<std::string, std::string> covers;
+    int coverCount = 0;
     // A paused track stays for a while after it last played, so pausing
     // from the panel doesn't make it vanish, then hides: a video paused
-    // hours ago isn't worth the space.
+    // hours ago isn't worth the space. By session id, when each last played.
     constexpr unsigned long long kPausedShownMs = 10 * 60 * 1000;
-    std::string lastPlayed;
-    unsigned long long lastPlayedAt = 0;
+    std::map<std::string, unsigned long long> lastPlayed;
 
     std::unique_lock<std::mutex> lock(mu_);
     while (!stop_) {
@@ -105,83 +107,123 @@ void MediaWatcher::run() {
             continue;
         }
         MediaCommand command = command_;
+        std::string commandId = commandId_;
         command_ = MediaCommand::None;
         lock.unlock();
 
-        NowPlaying np;
+        // Every session worth showing, with the session itself for commands.
+        struct Shown {
+            NowPlaying np;
+            GlobalSystemMediaTransportControlsSession session{nullptr};
+            std::string appID;
+            bool current = false;
+        };
+        std::vector<Shown> shown;
+        std::map<std::string, std::string> seenCovers;
+        unsigned long long now = GetTickCount64();
         try {
             if (!manager) manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
-            // A playing app wins over Windows' current one, which is just
-            // the most recent and may well be paused.
-            // Any of these reads can come back null rather than throwing
-            // when an app closes its session mid-read, so each is checked.
-            auto playing = [](const GlobalSystemMediaTransportControlsSession& s) {
-                auto info = s.GetPlaybackInfo();
-                return info && info.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-            };
-            GlobalSystemMediaTransportControlsSession session = manager.GetCurrentSession();
-            if (!session || !playing(session))
-                for (const auto& s : manager.GetSessions())
-                    if (s && playing(s)) {
-                        session = s;
-                        break;
-                    }
-            if (session) {
-                switch (command) {
-                case MediaCommand::Previous: session.TrySkipPreviousAsync().get(); break;
-                case MediaCommand::TogglePlay: session.TryTogglePlayPauseAsync().get(); break;
-                case MediaCommand::Next: session.TrySkipNextAsync().get(); break;
-                case MediaCommand::None: break;
-                }
-                auto props = session.TryGetMediaPropertiesAsync().get();
-                auto playback = session.GetPlaybackInfo();
-                if (!playback) throw winrt::hresult_error(E_POINTER);
-                auto controls = playback.Controls();
-                auto timeline = session.GetTimelineProperties();
-                if (!props || !controls || !timeline) throw winrt::hresult_error(E_POINTER);
-                np.active = true;
-                np.title = Narrow(props.Title());
-                np.artist = Narrow(props.Artist());
-                if (np.artist.empty()) np.artist = Narrow(props.AlbumArtist());
-                np.album = Narrow(props.AlbumTitle());
-                np.app = AppName(Narrow(session.SourceAppUserModelId()));
-                np.media.playing =
-                    playback.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
-                np.media.canPrevious = controls.IsPreviousEnabled();
-                np.media.canNext = controls.IsNextEnabled();
-                np.media.canToggle = controls.IsPlayPauseToggleEnabled();
-                double start = seconds(timeline.StartTime());
-                np.media.duration = std::max(0.0, seconds(timeline.EndTime()) - start);
-                np.media.position = seconds(timeline.Position()) - start;
-                np.media.asOf = unixSeconds(timeline.LastUpdatedTime());
+            auto current = manager.GetCurrentSession();
+            for (const auto& session : manager.GetSessions()) {
+                // Any of these reads can come back null rather than
+                // throwing when an app closes its session mid-read, so
+                // each is checked; a session that fails is left out.
+                try {
+                    if (!session) continue;
+                    auto props = session.TryGetMediaPropertiesAsync().get();
+                    auto playback = session.GetPlaybackInfo();
+                    if (!props || !playback) continue;
+                    auto controls = playback.Controls();
+                    auto timeline = session.GetTimelineProperties();
+                    if (!controls || !timeline) continue;
+                    Shown s;
+                    s.session = session;
+                    s.appID = Narrow(session.SourceAppUserModelId());
+                    s.current = current && current == session;
+                    NowPlaying& np = s.np;
+                    np.title = Narrow(props.Title());
+                    np.artist = Narrow(props.Artist());
+                    if (np.artist.empty()) np.artist = Narrow(props.AlbumArtist());
+                    np.album = Narrow(props.AlbumTitle());
+                    np.app = AppName(s.appID);
+                    np.media.playing =
+                        playback.PlaybackStatus() == GlobalSystemMediaTransportControlsSessionPlaybackStatus::Playing;
+                    np.media.canPrevious = controls.IsPreviousEnabled();
+                    np.media.canNext = controls.IsNextEnabled();
+                    np.media.canToggle = controls.IsPlayPauseToggleEnabled();
+                    double start = seconds(timeline.StartTime());
+                    np.media.duration = std::max(0.0, seconds(timeline.EndTime()) - start);
+                    np.media.position = seconds(timeline.Position()) - start;
+                    np.media.asOf = unixSeconds(timeline.LastUpdatedTime());
+                    std::string track = np.title + "\n" + np.artist + "\n" + np.album;
+                    np.media.id = s.appID + "\n" + track;
 
-                // The cover only changes with the track. Each gets a new
-                // key, since the cache keeps images by key.
-                std::string key = np.title + "\n" + np.artist + "\n" + np.album;
-                if (key != track) {
-                    track = key;
-                    image.clear();
-                    std::string bytes = readCover(props);
-                    if (!bytes.empty()) {
-                        image = "media:" + std::to_string(++covers);
-                        images_->Provide(image, std::move(bytes));
-                    }
-                }
-                np.image = image;
+                    if (np.media.playing) lastPlayed[np.media.id] = now;
+                    auto last = lastPlayed.find(np.media.id);
+                    if (last == lastPlayed.end() || now - last->second > kPausedShownMs) continue;
+                    np.active = true;
 
-                std::string which = np.app + "\n" + key;
-                if (np.media.playing) {
-                    lastPlayed = which;
-                    lastPlayedAt = GetTickCount64();
-                } else if (which != lastPlayed || GetTickCount64() - lastPlayedAt > kPausedShownMs) {
-                    np.active = false;
+                    // The cover only changes with the track. Each gets a
+                    // new key, since the cache keeps images by key.
+                    if (auto c = seenCovers.find(track); c != seenCovers.end()) {
+                        np.image = c->second;
+                    } else if (auto c = covers.find(track); c != covers.end()) {
+                        np.image = seenCovers[track] = c->second;
+                    } else {
+                        std::string bytes = readCover(props);
+                        if (!bytes.empty()) {
+                            np.image = "media:" + std::to_string(++coverCount);
+                            images_->Provide(np.image, std::move(bytes));
+                        }
+                        seenCovers[track] = np.image;
+                    }
+                    shown.push_back(std::move(s));
+                } catch (const winrt::hresult_error&) {
+                    // That app closing mid-read; the next reading will be fine.
                 }
             }
         } catch (const winrt::hresult_error&) {
-            // An app closing mid-read; the next reading will be fine.
             manager = nullptr;
         }
-        Snapshot snap = MediaSnapshot(np, int64_t(std::time(nullptr)));
+        covers = std::move(seenCovers);
+        for (auto it = lastPlayed.begin(); it != lastPlayed.end();)
+            it = now - it->second > kPausedShownMs ? lastPlayed.erase(it) : std::next(it);
+        // Playing ones first, Windows' current one first among equals.
+        std::stable_sort(shown.begin(), shown.end(), [](const Shown& a, const Shown& b) {
+            if (a.np.media.playing != b.np.media.playing) return a.np.media.playing;
+            return a.current && !b.current;
+        });
+
+        // The command goes to the session it was for: the same track, or
+        // failing that (it's moved on) the same app, or the first shown.
+        if (command != MediaCommand::None && !shown.empty()) {
+            const Shown* target = &shown[0];
+            std::string app = commandId.substr(0, commandId.find('\n'));
+            for (const auto& s : shown)
+                if (s.np.media.id == commandId) {
+                    target = &s;
+                    break;
+                }
+            if (target->np.media.id != commandId)
+                for (const auto& s : shown)
+                    if (s.appID == app) {
+                        target = &s;
+                        break;
+                    }
+            try {
+                switch (command) {
+                case MediaCommand::Previous: target->session.TrySkipPreviousAsync().get(); break;
+                case MediaCommand::TogglePlay: target->session.TryTogglePlayPauseAsync().get(); break;
+                case MediaCommand::Next: target->session.TrySkipNextAsync().get(); break;
+                case MediaCommand::None: break;
+                }
+            } catch (const winrt::hresult_error&) {
+            }
+        }
+
+        std::vector<NowPlaying> list;
+        for (auto& s : shown) list.push_back(std::move(s.np));
+        Snapshot snap = MediaSnapshot(list, int64_t(std::time(nullptr)));
 
         lock.lock();
         latest_ = std::move(snap);

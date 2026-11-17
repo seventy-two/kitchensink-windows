@@ -7,6 +7,7 @@
 #include <condition_variable>
 #include <functional>
 #include <mutex>
+#include <string>
 #include <thread>
 
 #include "images.h"
@@ -27,8 +28,9 @@ public:
     void Want();
     // Take gives the latest panel if it's changed since the last call.
     bool Take(Snapshot& out);
-    // Command asks the current app to skip or play/pause.
-    void Command(MediaCommand c);
+    // Command asks the session with this id (Media::id) to skip or
+    // play/pause; the first shown if it's gone.
+    void Command(MediaCommand c, const std::string& id);
 
 private:
     void run();
@@ -40,6 +42,7 @@ private:
     std::condition_variable cv_;
     bool stop_ = false;
     MediaCommand command_ = MediaCommand::None;
+    std::string commandId_;
     Snapshot latest_;
     bool fresh_ = false;
     std::atomic<unsigned long long> wanted_{0};

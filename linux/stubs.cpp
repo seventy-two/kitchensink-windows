@@ -24,7 +24,7 @@ MediaWatcher::MediaWatcher(std::function<void()> wake, ImageCache* images) : wak
 MediaWatcher::~MediaWatcher() = default;
 void MediaWatcher::Want() {}
 bool MediaWatcher::Take(Snapshot&) { return false; }
-void MediaWatcher::Command(MediaCommand) {}
+void MediaWatcher::Command(MediaCommand, const std::string&) {}
 void MediaWatcher::run() {}
 
 void Launcher::Set(const std::vector<std::string>&) {}
