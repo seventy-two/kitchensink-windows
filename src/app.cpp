@@ -1044,7 +1044,7 @@ void App::cards(float width, const std::vector<Snapshot>& snaps) {
             if (faded) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * kStaleAlpha);
             if (collapsed) {
                 ImGui::PushID("row");
-                heights_[id] = compactCard(snaps[i], colW, Show::Row, 0, &toggle);
+                heights_[id] = compactCard(snaps[i], colW, Show::Row, &toggle);
                 ImGui::PopID();
             } else {
                 toggle = card(snaps[i], colW);
@@ -1293,15 +1293,11 @@ void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
         Panel p;
         ImGui::SetCursorScreenPos(origin);
         ImGui::PushID("row");
-        p.row = compactCard(s, width, Show::Row, 0, nullptr);
+        p.row = compactCard(s, width, Show::Row, nullptr);
         ImGui::PopID();
         ImGui::SetCursorScreenPos(origin);
         ImGui::PushID("full");
-        p.full = compactCard(s, width, Show::Full, 0, nullptr);
-        ImGui::PopID();
-        ImGui::SetCursorScreenPos(origin);
-        ImGui::PushID("clipped");
-        p.overhead = compactCard(s, width, Show::Clipped, 1, nullptr) - 1 - p.row;
+        p.full = compactCard(s, width, Show::Full, nullptr);
         ImGui::PopID();
         ImGui::PopID();
         p.pin = SummaryOnly(s)                      ? Pin::Closed
@@ -1313,17 +1309,13 @@ void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
     }
     ImGui::End();
 
-    // A panel only takes the space left over if it shows something useful
-    // there: a table's header and four rows. Otherwise it stays a row.
-    const ImGuiStyle& st = ImGui::GetStyle();
-    float minBody = 5 * (ImGui::GetTextLineHeight() + st.CellPadding.y * 2);
-    Fit fit = FitPanels(panels, height, gap, minBody);
+    Fit fit = FitPanels(panels, height, gap);
     for (size_t i = 0; i < snaps.size(); i++) {
         bool clicked = false;
         // A stale panel fades, unless it's open.
         bool faded = panels[i].stale && fit.show[i] == Show::Row;
         if (faded) ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * kStaleAlpha);
-        compactCard(snaps[i], width, fit.show[i], fit.body, &clicked);
+        compactCard(snaps[i], width, fit.show[i], &clicked);
         if (faded) ImGui::PopStyleVar();
         ImGui::Dummy(ImVec2(0, gap - ImGui::GetStyle().ItemSpacing.y * 2));
         if (!clicked || SummaryOnly(snaps[i])) continue;
@@ -1332,7 +1324,7 @@ void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
         const std::string& id = snaps[i].monitor;
         bool open = fit.show[i] == Show::Row;
         panels[i].pin = Pin::Auto;
-        bool automatic = FitPanels(panels, height, gap, minBody).show[i] != Show::Row;
+        bool automatic = FitPanels(panels, height, gap).show[i] != Show::Row;
         config_.expanded.erase(id);
         config_.collapsed.erase(id);
         if (open != automatic) (open ? config_.expanded : config_.collapsed).insert(id);
@@ -1343,11 +1335,10 @@ void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
 // compactCard draws one monitor: collapsed, a row of its summary; open,
 // its full panel. Either way the top line ends in the same two slots,
 // refresh then the chevron in the corner, so they line up down the column;
-// an open panel keeps that corner to itself. A clipped panel scrolls
-// within body. It sets *clicked when the row (or an open panel's corner
+// an open panel keeps that corner to itself, at its full height. It sets *clicked when the row (or an open panel's corner
 // strip) is clicked; with no clicked, it's only being measured and ignores
 // the mouse. It returns the card's height.
-float App::compactCard(const Snapshot& s, float width, Show show, float body, bool* clicked) {
+float App::compactCard(const Snapshot& s, float width, Show show, bool* clicked) {
     const Palette& p = Colours();
     bool open = show != Show::Row;
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
@@ -1566,12 +1557,10 @@ float App::compactCard(const Snapshot& s, float width, Show show, float body, bo
         }
 
         ImGui::SetCursorScreenPos(top);
-        bool clip = show == Show::Clipped;
-        // Cut short, it scrolls with the wheel, without a scrollbar.
-        ImGui::BeginChild("##body", ImVec2(avail - strip, clip ? body : 0),
-                          clip ? ImGuiChildFlags_None : ImGuiChildFlags_AutoResizeY,
+        // Always its full height: the column scrolls, not the panel.
+        ImGui::BeginChild("##body", ImVec2(avail - strip, 0), ImGuiChildFlags_AutoResizeY,
                           ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
-                              (clip ? 0 : ImGuiWindowFlags_NoScrollWithMouse));
+                              ImGuiWindowFlags_NoScrollWithMouse);
         panelHead(s);
         for (size_t i = 0; i < s.blocks.size(); i++) {
             ImGui::PushID(int(i));

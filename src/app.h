@@ -102,7 +102,7 @@ private:
     void switchesBar(const Snapshot& s, float width);
     void rowStyleMenu(const std::string& id);
     void compactCards(float width, const std::vector<Snapshot>& snaps);
-    float compactCard(const Snapshot& s, float width, Show show, float body, bool* clicked);
+    float compactCard(const Snapshot& s, float width, Show show, bool* clicked);
     void summary(const std::vector<Stat>& stats, float width);
     bool slimStats(const std::vector<Stat>& stats, float width, bool asChips, bool live);
     // chips draws a summary as chips. With live, chips with a URL open it

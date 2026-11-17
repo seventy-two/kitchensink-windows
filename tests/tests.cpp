@@ -232,41 +232,38 @@ static void testRelevance() {
 
 static void testFitPanels() {
     // Rows of 50, gaps of 10: 300 high holds all four rows (240) with 60 over.
-    std::vector<Panel> p = {{50, 150, 6}, {50, 600, 6}, {50, 80, 6}, {50, 100, 6}};
+    std::vector<Panel> p = {{50, 150}, {50, 600}, {50, 80}, {50, 100}};
     auto shows = [](const Fit& f) {
         std::string s;
-        for (Show v : f.show) s += v == Show::Full ? 'F' : v == Show::Clipped ? 'C' : 'r';
+        for (Show v : f.show) s += v == Show::Full ? 'F' : 'r';
         return s;
     };
     // Plenty of room: everything opens.
-    CHECK_EQ(shows(FitPanels(p, 2000, 10, 40)), std::string("FFFF"));
+    CHECK_EQ(shows(FitPanels(p, 2000, 10)), std::string("FFFF"));
     // The first opens (+100), the second wouldn't fit, the third and
-    // fourth open (+30, +50); the second takes what's left:
-    // 500 - 420 - 6 = 74.
-    Fit f = FitPanels(p, 500, 10, 40);
-    CHECK_EQ(shows(f), std::string("FCFF"));
-    CHECK_EQ(f.body, 74.0f);
-    // At 400 the fourth no longer fits, and 24 is too little left over for
-    // a useful scrolling panel.
-    CHECK_EQ(shows(FitPanels(p, 400, 10, 40)), std::string("FrFr"));
+    // fourth open (+30, +50). The second stays a row: never cut short to
+    // the 74 left over.
+    CHECK_EQ(shows(FitPanels(p, 500, 10)), std::string("FrFF"));
+    // At 400 the fourth no longer fits.
+    CHECK_EQ(shows(FitPanels(p, 400, 10)), std::string("FrFr"));
     // Pins win: a closed one stays closed and an open one opens first,
-    // even when it doesn't fit.
+    // at its full size, even when it doesn't fit.
     p[0].pin = Pin::Closed;
     p[1].pin = Pin::Open;
-    CHECK_EQ(shows(FitPanels(p, 500, 10, 40)), std::string("rFrr"));
+    CHECK_EQ(shows(FitPanels(p, 500, 10)), std::string("rFrr"));
     // Stale panels don't open by themselves, nor take the space left, but
     // a pin still opens one.
     {
-        std::vector<Panel> q = {{50, 150, 6}, {50, 100, 6}, {50, 80, 6}};
+        std::vector<Panel> q = {{50, 150}, {50, 100}, {50, 80}};
         q[0].stale = true;
-        CHECK_EQ(shows(FitPanels(q, 2000, 10, 40)), std::string("rFF"));
+        CHECK_EQ(shows(FitPanels(q, 2000, 10)), std::string("rFF"));
         q[2].stale = true;
-        CHECK_EQ(shows(FitPanels(q, 250, 10, 40)), std::string("rFr"));
+        CHECK_EQ(shows(FitPanels(q, 250, 10)), std::string("rFr"));
         q[0].pin = Pin::Open;
-        CHECK_EQ(shows(FitPanels(q, 2000, 10, 40)), std::string("FFr"));
+        CHECK_EQ(shows(FitPanels(q, 2000, 10)), std::string("FFr"));
     }
     // Unmeasured panels stay as rows.
-    CHECK_EQ(shows(FitPanels({{50, 0, 6}, {50, 100, 6}}, 2000, 10, 40)), std::string("rF"));
+    CHECK_EQ(shows(FitPanels({{50, 0}, {50, 100}}, 2000, 10)), std::string("rF"));
 }
 
 static void testGpuUtilisation() {

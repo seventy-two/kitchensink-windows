@@ -296,9 +296,10 @@ bool OledDim(int64_t now, int64_t lastActivity, int64_t wakeUntil);
 // the current choice so that resizing near the boundary doesn't flicker.
 bool UseCompact(bool compact, float width, float height, float scale);
 
-// Show is how much of a monitor the compact layout shows: its summary row,
-// its full panel, or its panel cut short to fit, scrolling inside.
-enum class Show { Row, Full, Clipped };
+// Show is how much of a monitor the compact layout shows: its summary row
+// or its full panel. An open panel is always its full size, never cut
+// short to fit (the user's call): the column scrolls instead.
+enum class Show { Row, Full };
 
 // Pin is a choice made by hand in the compact layout.
 enum class Pin { Auto, Open, Closed };
@@ -307,8 +308,6 @@ enum class Pin { Auto, Open, Closed };
 struct Panel {
     float row = 0;   // collapsed to its summary
     float full = 0;  // with its full panel; 0 if not measured yet
-    // What clipping adds to the row besides the scrolling area itself.
-    float overhead = 0;
     Pin pin = Pin::Auto;
     // Nothing new for a long while (see PanelTier): it never opens by
     // itself, only by hand.
@@ -317,15 +316,13 @@ struct Panel {
 
 struct Fit {
     std::vector<Show> show;
-    float body = 0;  // height of the clipped panel's scrolling area
 };
 
 // FitPanels fills a column of height with panels, gap apart. Pinned ones
 // are open or closed as chosen; the rest open in order while they fit
-// whole. If space is left, the first that didn't fit takes it, scrolling,
-// as long as that gives it at least minBody. Stale panels are passed over:
+// whole, and stay rows when they don't. Stale panels are passed over:
 // they open only when pinned.
-Fit FitPanels(const std::vector<Panel>& panels, float height, float gap, float minBody);
+Fit FitPanels(const std::vector<Panel>& panels, float height, float gap);
 
 // News is when a monitor last had something new, for ordering panels by
 // relevance through the day: its last event (not a quiet one) and the last

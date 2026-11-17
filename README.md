@@ -23,9 +23,9 @@ result is a single `kitchensink.exe` with nothing to install.
   forecast and so on. A monitor whose summary is its table cut short (the
   watchlist, OSRS) is drawn exactly as its open panel is, with the same
   subtitle, width and column widths, so opening it only adds rows. Full panels open beneath their rows, in panel order,
-  as long as they fit; the first that doesn't takes whatever height is left
-  and scrolls, if that fits a table header and four rows. Click a row to
-  open or close it yourself. Panels have no titles: an open one keeps its controls
+  as long as they fit whole; one that doesn't stays a row. An open panel is
+  always its full size, never cut short to fit: click a row to open or close
+  it yourself, and the column scrolls if it runs past the window. Panels have no titles: an open one keeps its controls
   in a slim strip down its right edge. The layout follows the window live
   as it's resized.
 - **Ultra compact** (Settings → Layout): the compact layout at any window
@@ -158,7 +158,7 @@ result is a single `kitchensink.exe` with nothing to install.
   private apps** in the eye's right-click menu (the eye shows whenever
   there are private apps), and it's remembered.
 - There are no scrollbars: the Recent column, the panels under it, the
-  panels column and a panel cut short to fit scroll with the mouse wheel.
+  and the panels column scroll with the mouse wheel.
 - In the bottom-right corner, under Recent, a strip of countryside shows the sky as it is now: the
   sun and moon at their bearing (north at both ends, south in the middle)
   and height, the moon in its phase, today's path of the sun dotted across,
