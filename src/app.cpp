@@ -1516,7 +1516,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, bool* clicked)
                               ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar |
                                   ImGuiWindowFlags_NoScrollWithMouse);
             localHovered_ = linkHovered = false;
-            measure_ = fullTable(s, s.summaryBlock[0]);
+            measure_ = fullTables(s, s.summaryBlock[0]);
             // A short table with no rows (Big box with nothing worth a
             // look today) shows nothing, not even its headings.
             const bool none = s.summaryBlock[0].type == "table" && s.summaryBlock[0].rows.empty();
@@ -1535,7 +1535,7 @@ float App::compactCard(const Snapshot& s, float width, Show show, bool* clicked)
                 panelHead(s);
                 block(s.monitor, s.summaryBlock[0]);
             }
-            measure_ = nullptr;
+            measure_.clear();
             // A click on a link or local button is for it, not the row.
             onButton = onButton || localHovered_ || (clicked && linkHovered);
             ImGui::EndChild();
@@ -1624,16 +1624,17 @@ void App::panelHead(const Snapshot& s) {
     ImGui::PopFont();
 }
 
-// fullTable finds the panel's table that a short table is cut from (the
+// fullTables finds the panel's tables that a short table is cut from (the
 // same columns), so the short one's columns are as wide as the full one's.
-const Block* App::fullTable(const Snapshot& s, const Block& b) {
+std::vector<const Block*> App::fullTables(const Snapshot& s, const Block& b) {
+    std::vector<const Block*> out;
     for (const auto& full : s.blocks) {
         if (full.type != "table" || full.columns.size() != b.columns.size()) continue;
         bool same = true;
         for (size_t c = 0; c < b.columns.size() && same; c++) same = full.columns[c].title == b.columns[c].title;
-        if (same) return &full;
+        if (same) out.push_back(&full);
     }
-    return nullptr;
+    return out;
 }
 
 // grip draws the six dots that drag a panel, in the card's left margin,
@@ -2990,16 +2991,19 @@ void App::table(const std::string& monitor, const Block& b) {
     if (cols == 0) return;
     // The column marked fill takes the spare width, or failing that the
     // left-aligned column with the most text. The rest fit their contents.
-    // A short table takes its column widths from the full one.
-    const std::vector<std::vector<Cell>>& sized = measure_ ? measure_->rows : b.rows;
+    // A short table takes its column widths from the full ones, and its own.
+    std::vector<const std::vector<Cell>*> sized;
+    for (const Block* full : measure_)
+        for (const auto& r : full->rows) sized.push_back(&r);
+    for (const auto& r : b.rows) sized.push_back(&r);
     auto fill = std::find_if(b.columns.begin(), b.columns.end(), [](const Column& c) { return c.fill; });
     int stretch = fill != b.columns.end() ? int(fill - b.columns.begin()) : -1;
     size_t most = 0;
     for (size_t c = 0; c < cols && fill == b.columns.end(); c++) {
         if (b.columns[c].align != Align::Left) continue;
         size_t total = 0;
-        for (const auto& r : sized)
-            if (c < r.size()) total += r[c].text.size();
+        for (const auto* r : sized)
+            if (c < r->size()) total += (*r)[c].text.size();
         if (stretch < 0 || total > most) stretch = int(c), most = total;
     }
 
@@ -3014,11 +3018,13 @@ void App::table(const std::string& monitor, const Block& b) {
         }
         ImGui::PushFont(fonts_.caption);
         float w = ImGui::CalcTextSize(b.columns[c].title.c_str()).x;
-        for (const auto& r : sized)
-            if (c < r.size() && !r[c].detail.empty() && b.columns[c].align != Align::Left)
-                w = std::max(w, ImGui::CalcTextSize(r[c].detail.c_str()).x);
+        // A detail line under the text, too: this column doesn't wrap.
+        for (const auto* r : sized)
+            if (c < r->size() && !(*r)[c].detail.empty())
+                w = std::max(w, ImGui::CalcTextSize((*r)[c].detail.c_str()).x);
         ImGui::PopFont();
-        for (const auto& r : sized) {
+        for (const auto* rp : sized) {
+            const auto& r = *rp;
             if (c >= r.size()) continue;
             w = std::max(w, ImGui::CalcTextSize(r[c].text.c_str()).x);
             if (!r[c].localApp.empty() && grabber_->Has(r[c].localApp))
@@ -3065,7 +3071,11 @@ void App::table(const std::string& monitor, const Block& b) {
                 choiceCell(monitor, cell);
                 continue;
             }
-            textAligned(cell.text, b.columns[c].align, ToneColour(cell.tone));
+            // The column taking the spare width cuts long text with an
+            // ellipsis rather than mid-letter; hovering shows it all.
+            std::string shown = int(c) == stretch ? fit(cell.text, ImGui::GetContentRegionAvail().x) : cell.text;
+            textAligned(shown, b.columns[c].align, ToneColour(cell.tone));
+            if (shown != cell.text && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", cell.text.c_str());
             linkBehaviour(cell.url, cell.open);
             if (!cell.detail.empty() && !slimBlock_) {  // a slim line has no room for it
                 ImGui::PushFont(fonts_.caption);

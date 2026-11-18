@@ -116,7 +116,7 @@ private:
     void actionButton(const std::string& monitor, const Cell& cell, bool show);
     void choiceCell(const std::string& monitor, const Cell& cell);
     void panelHead(const Snapshot& s);
-    const Block* fullTable(const Snapshot& s, const Block& b);
+    std::vector<const Block*> fullTables(const Snapshot& s, const Block& b);
     bool grip(const Snapshot& s, float y, bool shown);
     bool hoveringCard() const;
     void dragDrop();
@@ -213,7 +213,9 @@ private:
     double mangoClicked_ = -1;
     bool mangoRaised_ = false;          // raised since the last click
     Launcher launcher_;                 // the apps menu's apps
-    const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths
+    // While drawing a short table: the full ones it's cut from (a panel
+    // can have several of the same shape), for column widths.
+    std::vector<const Block*> measure_;
     bool localHovered_ = false;         // a local or action button is under the mouse, so a row's click isn't for the row
     std::set<std::string> sentActions_;  // cells' actions sent, by monitor, type and ID, drawn as done
     // Options picked in drop-downs, by monitor, action and ID, shown until
