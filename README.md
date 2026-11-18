@@ -145,9 +145,10 @@ result is a single `kitchensink.exe` with nothing to install.
   another spot, and finds something to do: a wash, a scratch behind the
   ear, a slow blink at you, a pounce, a drink of milk, hunting a toy mouse,
   a mad sprint, or sitting in a cardboard box. When the panels leave room
-  at the bottom of the window he walks off the right and comes in from the
-  left down there, where he can jump up onto the last panel's edge (and
-  push a mug off it); if a panel opens and the room goes, he's back up top.
+  at the bottom of the window he now and then walks off the right and comes
+  in from the left down there for two or three minutes, where he can jump
+  up onto the last panel's edge (and push a mug off it); if a panel opens
+  and the room goes, he's back up top.
   He's livelier at dawn and dusk, sleepier at night and when the forecast
   says it's raining, and from 07:25 and 17:55 he waits for breakfast and
   dinner. He lifts his head when something new arrives, notices the mouse

@@ -240,6 +240,8 @@ struct Rest {
     CatPlace place = CatPlace::Top;
     CatBed bed = CatBed::Curl;
     bool awake = false;
+    float down = 0;     // at the bottom: seconds he's been down there so far
+    bool back = false;  // just back up from the bottom
 };
 
 // How long each of his activities takes, in seconds.
@@ -717,9 +719,11 @@ Plan makePlan(long long k, Rest r, const CatWorld& w, Special sp, float wait) {
     // there's room at the bottom) the other place.
     CatPlace dest = r.place;
     if (sp == Special::None || sp == Special::Annoyed) {
-        if (r.place == CatPlace::Top && gapOpen(w) && roll(h3, sp == Special::Annoyed ? 60 : night ? 10 : 40))
+        // Down there only now and then, for a couple of minutes: from
+        // the bottom he always comes back up.
+        if (r.place == CatPlace::Top && !r.back && gapOpen(w) && roll(h3, sp == Special::Annoyed ? 25 : night ? 4 : 10))
             dest = CatPlace::Bottom;
-        else if (r.place == CatPlace::Bottom && (!gapOpen(w) || roll(h3, 40)))
+        else if (r.place == CatPlace::Bottom)
             dest = CatPlace::Top;
     }
     float room = roomOf(dest, w), half = halfOf(dest, w);
@@ -811,9 +815,22 @@ Plan makePlan(long long k, Rest r, const CatWorld& w, Special sp, float wait) {
         float base = night ? 180.0f : lively ? 70.0f : 110.0f;
         if (w.rain) base *= 1.4f;
         p.sleep = std::max(20.0f, base - active);
+        // At the bottom, a nap that rounds his visit off at 2 to 3
+        // minutes, counting what he's done down there and his walk out.
+        if (r.place == CatPlace::Bottom) {
+            float stay = 120 + float(h2 % 61);
+            float out = (p.cross ? (p.exitX - r.x) / speed : 0) + kWakeAll + p.turn;
+            p.sleep = std::max(10.0f, stay - r.down - out);
+        }
     }
     p.length = p.sleep + active;
-    p.end = {x, dir, dest, p.bed, false};
+    // Arriving at the bottom, how long he's been there by the end.
+    float down = 0;
+    if (dest == CatPlace::Bottom) {
+        down = active - (p.wake ? kWakeAll : 0) - (p.lash ? kLash : 0) - p.turn - p.walk;
+        down += p.cross ? (to - p.enterX) / speed : p.walk + p.sleep + r.down;
+    }
+    p.end = {x, dir, dest, p.bed, false, down, r.place == CatPlace::Bottom && dest == CatPlace::Top};
     return p;
 }
 

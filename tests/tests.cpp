@@ -783,7 +783,7 @@ static void testCat() {
         std::set<int> did, beds;
         bool down = false, back = false, fell = false;
         Cat prev = mag.Step(0, w);
-        for (double t = 0.05; t < 12000; t += 0.05) {
+        for (double t = 0.05; t < 40000; t += 0.05) {
             Cat c = mag.Step(t, w);
             drawn(c, t, w);
             did.insert(int(c.action));
@@ -806,6 +806,25 @@ static void testCat() {
         for (CatAction a : {CatAction::Zoomies, CatAction::Perch, CatAction::KnockOff, CatAction::Box})
             CHECK(did.count(int(a)));
         CHECK(beds.count(int(CatBed::Belly)));
+    }
+
+    // He goes down only now and then, and stays two or three minutes.
+    {
+        Mag mag;
+        CatWorld w;
+        w.half = 94, w.gapHalf = 280, w.ledge = 175;
+        bool in = false;
+        double since = 0, down = 0, T = 36000;
+        int visits = 0;
+        for (double t = 0; t < T; t += 0.05) {
+            bool b = mag.Step(t, w).place == CatPlace::Bottom;
+            if (b && !in) since = t, visits++;
+            if (!b && in) CHECK(t - since >= 110 && t - since <= 190);
+            down += b ? 0.05 : 0;
+            in = b;
+        }
+        CHECK(visits >= 10 && visits <= 50);
+        CHECK(down < 0.2 * T);
     }
 
     // When the space at the bottom closes while he's there, he's straight
