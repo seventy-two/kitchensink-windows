@@ -549,7 +549,7 @@ bool App::NotificationClicked() {
 }
 
 void App::Frame() {
-    catInterval_ = 0;  // until she's drawn
+    catInterval_ = 0;  // until he's drawn
     // The wheel goes back to the dashboard once no scrolling chips held it
     // last frame.
     if (ImGui::GetKeyOwner(ImGuiKey_MouseWheelY) == ChipsWheel && wheelHeld_ < ImGui::GetFrameCount() - 1)

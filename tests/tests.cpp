@@ -693,12 +693,12 @@ static void testWeatherIcons() {
 // drawn checks a frame of Mag stays in his space: above Recent or in the
 // space at the bottom, 68 units tall (4 below the floor), or reaching up
 // to the panel's edge when he's up there; across, only once he's in sight.
-static void drawn(const Cat& c, double t, const CatWorld& w) {
+static void drawn(const Cat& c, double t, const CatWorld& w, CatStyle style = kCatStyle) {
     for (const Vec2f& paw : c.pose.paw) CHECK(paw.y <= 0.01f);
     CHECK(std::isfinite(c.x) && std::fabs(c.facing) <= 1);
     CHECK(c.look >= 0 && c.look <= 1 && c.purr >= 0 && c.purr <= 1);
     Recorder r;
-    DrawCat(r, c, t, {0, 0}, 1);
+    DrawCat(r, c, t, {0, 0}, 1, style);
     CHECK(r.shapes > 30);
     float half = c.place == CatPlace::Top ? w.half : w.gapHalf;
     bool up = c.action == CatAction::Perch || c.action == CatAction::KnockOff;
@@ -885,6 +885,36 @@ static void testCat() {
             moved = moved || std::fabs(c.x - x) > 20;
         }
         CHECK(lashed && moved);
+    }
+}
+
+static void testCatStyles() {
+    // Drawn in any style he stays inside his space, over many episodes at
+    // a narrow and a wide column and down in the space below the panels,
+    // in every pose (the loaf, on his side, belly up, perched, in a box).
+    for (CatStyle style : {CatStyle::Classic, CatStyle::Sleek, CatStyle::Moonlit, CatStyle::Fluffy, CatStyle::Backlit}) {
+        for (float half : {60.0f, 150.0f}) {
+            Mag mag;
+            CatWorld w;
+            w.half = half, w.warm = true;
+            if (half > 100) w.gapHalf = 280, w.ledge = 160;
+            for (double t = 0; t < 8000; t += 1.0 / 10) drawn(mag.Step(t, w), t, w, style);
+        }
+        // Facing the other way he's the same drawing mirrored, at any
+        // point in a turn or a look round.
+        for (float turn : {0.0f, 0.3f, 0.5f, 0.8f}) {
+            for (float look : {0.0f, 0.6f, 1.0f}) {
+                Cat c = Mag().Step(13.5, CatWorld{150});
+                c.x = 0, c.turn = turn, c.look = look;
+                Recorder right, left;
+                DrawCat(right, c, 0, {0, 0}, 1, style);
+                c.facing = -c.facing;
+                DrawCat(left, c, 0, {0, 0}, 1, style);
+                CHECK_EQ(right.shapes, left.shapes);
+                CHECK(std::fabs(right.minX + left.maxX) < 0.01f && std::fabs(right.maxX + left.minX) < 0.01f);
+                CHECK(std::fabs(right.minY - left.minY) < 0.01f && std::fabs(right.maxY - left.maxY) < 0.01f);
+            }
+        }
     }
 }
 
@@ -1185,6 +1215,7 @@ int main() {
     testSky();
     testRetro();
     testCat();
+    testCatStyles();
     testTemporaryEvents();
     testStaleEvents();
     testUpload();

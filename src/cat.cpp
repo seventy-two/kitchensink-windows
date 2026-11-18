@@ -32,12 +32,12 @@ CatPose make(Vec2f chest, float rc, Vec2f mid, float rm, Vec2f hips, float rh, V
     return p;
 }
 
-// Her poses, facing right.
+// His poses, facing right.
 const CatPose kStand = make({13, -22}, 9.5f, {0, -23}, 9, {-13, -22}, 10, {25, -31}, 0,
                             {{{14, -16}, {11, -16}, {-13, -15}, {-16, -15}}}, {{{15, 0}, {11, 0}, {-12, 0}, {-17, 0}}},
                             {{{-22, -25}, {-27, -29}, {-30, -35}, {-31, -42}, {-30, -48}, {-27, -53}, {-23, -55}, {-20, -54}}},
                             1, 0);
-// Curled up asleep: head down on her paws, tail wrapped round the front.
+// Curled up asleep: head down on his paws, tail wrapped round the front.
 const CatPose kSleep = make({6, -10}, 10, {-4, -12}, 11.5f, {-14, -10}, 10.5f, {19, -7.5f}, 0.25f,
                             {{{10, -4}, {8, -4}, {-12, -4}, {-15, -4}}}, {{{15, -1}, {12, -1}, {-8, -1}, {-11, -1}}},
                             {{{-23, -9}, {-25, -4}, {-21, -1}, {-13, 0}, {-4, 0}, {4, 0}, {11, -1}, {16, -2}}}, 0, 0);
@@ -73,7 +73,7 @@ uint32_t hash(uint32_t x) {
     return x;
 }
 
-// spot is where she settles at the end of episode k, from -1 to 1 across
+// spot is where he settles at the end of episode k, from -1 to 1 across
 // the floor.
 float spot(long long k) { return float(hash(uint32_t(k) * 2654435761u) % 2001) / 1000.0f - 1; }
 
@@ -84,9 +84,9 @@ constexpr float kWake = 1.4f, kToBow = 0.8f, kBowHold = 1.4f, kToArch = 0.9f, kA
                 kTurn = 1.3f, kPause = 0.5f, kLieDown = 1.8f;
 constexpr float kSpeed = 22;   // units a second, walking
 constexpr float kStride = 20;  // units a step cycle
-constexpr float kMinWalk = 10; // closer than this, she doesn't bother
+constexpr float kMinWalk = 10; // closer than this, he doesn't bother
 
-// walking moves her legs, body and tail for a step cycle at phase.
+// walking moves his legs, body and tail for a step cycle at phase.
 void walking(CatPose& p, float phase, double t) {
     static const float offsets[4] = {0, kPi, kPi, 0};  // diagonal pairs together
     for (int i = 0; i < 4; i++) {
@@ -99,8 +99,8 @@ void walking(CatPose& p, float phase, double t) {
     for (int i = 0; i < CatPose::kTailPoints; i++) p.tail[i].x += std::sin(float(t) * 2.2f + i * 0.5f) * i * 0.35f;
 }
 
-// breathing rises and falls her sides, and now and then her tail tip
-// twitches in her sleep.
+// breathing rises and falls his sides, and now and then his tail tip
+// twitches in his sleep.
 void breathing(CatPose& p, double t, float asleep) {
     float b = std::sin(2 * kPi * float(t) / 3.6f) * asleep;
     p.rMid += 0.7f * b, p.mid.y -= 0.4f * b;
@@ -112,8 +112,8 @@ void breathing(CatPose& p, double t, float asleep) {
     }
 }
 
-// More poses, for what she gets up to once she's awake.
-// Sitting up, tail curled round her front paws.
+// More poses, for what he gets up to once he's awake.
+// Sitting up, tail curled round his front paws.
 const CatPose kSit = make({5, -25}, 8.5f, {0, -17}, 9.5f, {-6, -10}, 10.5f, {9, -38}, 0,
                           {{{8, -18}, {6, -18}, {-1, -7}, {-3, -7}}}, {{{9, 0}, {6, 0}, {6, -1}, {4, -1}}},
                           {{{-15, -6}, {-18, -3}, {-16, 0}, {-10, 0}, {-3, 0}, {4, 0}, {10, -1}, {14, -2}}}, 1, 0);
@@ -134,10 +134,10 @@ CatPose withHead(CatPose p, Vec2f head, float tilt, float eyes) {
     return p;
 }
 
-// Curled up, but her head raised drowsily.
+// Curled up, but his head raised drowsily.
 const CatPose kSleepUp = withHead(kSleep, {17, -16}, -0.15f, 0.45f);
 
-// Sitting with her near front paw up at her mouth, to lick it.
+// Sitting with his near front paw up at his mouth, to lick it.
 CatPose pawUp() {
     CatPose p = withHead(kSit, {9, -38}, 0.25f, 0.3f);
     p.joint[0] = {16, -25}, p.paw[0] = {20, -34};
@@ -145,7 +145,7 @@ CatPose pawUp() {
 }
 const CatPose kSitPawUp = pawUp();
 
-// Sitting with her near back leg up behind her ear, to scratch it.
+// Sitting with his near back leg up behind his ear, to scratch it.
 CatPose legUp() {
     CatPose p = withHead(kSit, {10, -37}, -0.45f, 0.25f);
     p.joint[2] = {-10, -19}, p.paw[2] = {2, -43};
@@ -153,14 +153,14 @@ CatPose legUp() {
 }
 const CatPose kSitScratch = legUp();
 
-// Head down over a bowl in front of her, lapping: her chin at its rim and
-// her tongue's tip in the milk, behind the rim.
+// Head down over a bowl in front of him, lapping: his chin at its rim and
+// his tongue's tip in the milk, behind the rim.
 const CatPose kDrink = make({14, -11}, 8.5f, {2, -14}, 9, {-11, -18}, 9.5f, {25, -15}, 0.55f,
                             {{{15, -7}, {12, -7}, {-12, -12}, {-14, -12}}}, {{{17, 0}, {14, 0}, {-11, 0}, {-15, 0}}},
                             {{{-21, -20}, {-26, -23}, {-29, -28}, {-30, -34}, {-29, -39}, {-26, -43}, {-22, -45}, {-19, -44}}},
                             0.4f, 0);
 
-// Crouched with her front paws pinning something ahead of her.
+// Crouched with his front paws pinning something ahead of him.
 CatPose pin() {
     CatPose p = withHead(kCrouch, {27, -11}, 0.25f, 1);
     p.joint[0] = {20, -6}, p.joint[1] = {18, -6};
@@ -169,7 +169,7 @@ CatPose pin() {
 }
 const CatPose kPin = pin();
 
-// The same, batting it on with her near paw.
+// The same, batting it on with his near paw.
 CatPose bat() {
     CatPose p = kPin;
     p.joint[0] = {21, -12}, p.paw[0] = {29, -7};
@@ -1121,10 +1121,10 @@ constexpr Rgba kFur{17, 17, 21}, kRim{92, 98, 112, 170}, kEye{92, 168, 245}, kPu
     kLid{120, 124, 136, 220}, kMouth{176, 84, 100}, kTongue{222, 112, 132}, kWhisker{150, 154, 166, 110}, kZ{150, 156, 172},
     kShadow{0, 0, 0, 55};
 
-// Painter maps her pose onto the canvas, mirrored for which way she
+// Painter maps his pose onto the canvas, mirrored for which way he
 // faces, and turned round about the vertical: pose x is how far forward a
-// point is, and l how far to her side nearer the viewer. While she turns
-// round, her head leads and her hips follow, so each point turns by an
+// point is, and l how far to his side nearer the viewer. While he turns
+// round, his head leads and his hips follow, so each point turns by an
 // angle between theirs, from how far forward it is.
 struct Painter {
     Canvas& c;
@@ -1132,7 +1132,7 @@ struct Painter {
     float x, facing, size;
     float headTurn = 0, hipsTurn = 0;  // radians, 0 to pi
     float lift = 0;                     // units off the floor
-    // Her head can also turn by itself, about its own middle, to look at
+    // His head can also turn by itself, about its own middle, to look at
     // the viewer: head is set while drawing it, about pivot by look radians.
     bool head = false;
     Vec2f pivot;
@@ -1155,7 +1155,7 @@ struct Painter {
         float a = head ? headAngle() : angle(f0);
         return (f - f0) * std::sin(a) + l * std::cos(a);
     }
-    // onHead is this painter drawing her head.
+    // onHead is this painter drawing his head.
     Painter onHead() const {
         Painter h = *this;
         h.head = true;
@@ -1178,8 +1178,8 @@ struct Painter {
     }
 };
 
-// silhouette draws her body, legs, tail and head in one colour, grown by
-// g units all round: once wide for her rim, then in black over it.
+// silhouette draws his body, legs, tail and head in one colour, grown by
+// g units all round: once wide for his rim, then in black over it.
 void silhouette(const Painter& d, const CatPose& p, float g, Rgba col) {
     // Far legs, then the tail, behind the body.
     // One colour throughout, so what's in front of what doesn't matter.
@@ -1228,7 +1228,7 @@ void silhouette(const Painter& d, const CatPose& p, float g, Rgba col) {
 void face(const Painter& body, const CatPose& p) {
     Painter d = body.onHead();
     auto head = [&](Vec2f v) { return add(p.head, rotate(v, p.headTilt)); };
-    // Both eyes, the far one hidden behind her head unless she's turned
+    // Both eyes, the far one hidden behind his head unless he's turned
     // towards the viewer, and narrower the more side on each is.
     for (float l : {2.6f, -2.6f}) {
         Vec2f eye = head({3.8f, -1.2f});
@@ -1245,7 +1245,7 @@ void face(const Painter& body, const CatPose& p) {
     }
     if (p.yawn > 0.3f) d.c.Ellipse(d.m(head({8.5f, 4.6f})), d.w(1.4f), d.w(2.4f * p.yawn), 0, kMouth);
     if (p.tongue > 0.05f) d.c.Ellipse(d.m(head({10.2f, 4.4f})), d.w(1.1f), d.w(1.7f * p.tongue), 0, kTongue);
-    // Whiskers both sides, fanning out, the far ones only once she's
+    // Whiskers both sides, fanning out, the far ones only once he's
     // turned enough to show them.
     bool far = std::sin(d.headAngle()) > 0.25f;
     for (float side : {1.0f, -1.0f}) {
@@ -1257,10 +1257,10 @@ void face(const Painter& body, const CatPose& p) {
     }
 }
 
-// zs float up from her head while she's asleep: a small z, rising, growing
+// zs float up from his head while he's asleep: a small z, rising, growing
 // and fading, one after another.
 void zs(const Painter& d, const Cat& cat, double t) {
-    if (cat.asleep < 0.5f) return;  // not once her head is up
+    if (cat.asleep < 0.5f) return;  // not once his head is up
     for (int i = 0; i < 3; i++) {
         float k = float(std::fmod(t / 4.5 + i / 3.0, 1.0));
         float s = 2.2f + 2.6f * k;
@@ -1268,7 +1268,7 @@ void zs(const Painter& d, const Cat& cat, double t) {
         Vec2f at = add(cat.pose.head, {4 + 9 * k, -14 - rise * k});
         Rgba col = kZ;
         col.a = uint8_t(255 * cat.asleep * std::min(k * 5, 1.0f) * (1 - k));
-        // Z's read left to right whichever way she faces.
+        // Z's read left to right whichever way he faces.
         Vec2f o = d.m(at);
         float w = d.w(s);
         d.c.Line({o.x - w / 2, o.y - w / 2}, {o.x + w / 2, o.y - w / 2}, d.w(0.9f), col);
@@ -1285,8 +1285,8 @@ static Rgba faded(Rgba c, float a) {
     return c;
 }
 
-// drawBowl draws a dish of milk on the floor, its rim over her chin when
-// she's drinking from it.
+// drawBowl draws a dish of milk on the floor, its rim over his chin when
+// he's drinking from it.
 static void drawBowl(Canvas& c, const CatProp& b, Vec2f floor, float size) {
     if (b.alpha <= 0) return;
     float a = b.alpha;
@@ -1297,14 +1297,14 @@ static void drawBowl(Canvas& c, const CatProp& b, Vec2f floor, float size) {
     Vec2f band[4] = {at(-7.4f, -3.2f), at(7.4f, -3.2f), at(7.1f, -2.2f), at(-7.1f, -2.2f)};
     c.Polygon(band, 4, faded(Rgba{90, 140, 220}, a));
     c.Ellipse(at(0, -4.5f), 8 * size, 1.6f * size, 0, faded(Rgba{226, 232, 244}, a));
-    // The milk, lower and narrower as she drinks it.
+    // The milk, lower and narrower as he drinks it.
     if (b.fill > 0.05f) {
         float sink = (1 - b.fill) * 1.1f;
         c.Ellipse(at(0, -4.5f + sink * 0.5f), (6.8f - sink) * size, (1.1f - sink * 0.3f) * size, 0, faded(Rgba{250, 250, 244}, a));
     }
 }
 
-// drawToy draws a toy mouse, facing away from her (dir), tipped by rot.
+// drawToy draws a toy mouse, facing away from his (dir), tipped by rot.
 static void drawToy(Canvas& c, const CatProp& m, float dir, Vec2f floor, float size) {
     if (m.alpha <= 0) return;
     float a = m.alpha;
@@ -1405,29 +1405,468 @@ static void purring(const Painter& d, const Cat& cat, double t) {
     }
 }
 
-void DrawCat(Canvas& c, const Cat& cat, double t, Vec2f floor, float size) {
+// The finer styles. Each draws the same cat from the same pose, with a
+// smooth outline in place of circles and quads, tapered legs with paws, a
+// shaped head and ears, and more to his face. Their colours are opaque, so
+// overlapping shapes don't show in his rim.
+namespace {
+
+// Look is what sets one finer style apart from the others.
+struct Look {
+    enum Eyes { Oval, Almond, Round, Narrow };
+    Rgba rim{70, 75, 86};      // his rim light
+    Rgba under{70, 75, 86};    // the rim where light from above doesn't reach
+    Rgba halo{0, 0, 0, 0};     // a wider, fainter rim outside it, if any
+    Rgba band{17, 17, 21};     // just inside each part's edge: fur colour for none
+    Rgba fur{17, 17, 21};
+    Rgba farFur{17, 17, 21};   // his far legs
+    Rgba earIn{40, 35, 44};    // inside his ears
+    float grow = 1.1f;         // how wide the rim is, in units
+    bool topLit = false;       // the rim brightest along his top edges
+    bool fluffy = false;       // tufts and a bushy tail
+    bool toes = false;
+    bool eyeGlow = false;      // a faint glow round his eyes
+    Eyes eyes = Oval;
+    // His eyes' colours: the iris, lighter below, and the glint, with its
+    // size in units.
+    Rgba eye{92, 168, 245}, iris{132, 198, 255}, glint{238, 246, 255, 235};
+    float glintR = 0.42f;
+};
+
+Look lookOf(CatStyle style) {
+    Look k;
+    switch (style) {
+    case CatStyle::Moonlit:
+        k.rim = {104, 112, 130}, k.under = {46, 49, 58}, k.band = {36, 38, 46};
+        k.farFur = {21, 22, 27}, k.earIn = {52, 44, 54};
+        k.grow = 1.0f, k.topLit = true, k.toes = true, k.eyes = Look::Almond;
+        break;
+    case CatStyle::Fluffy:
+        k.halo = {44, 47, 55}, k.rim = {76, 81, 93}, k.band = {30, 32, 38}, k.earIn = {50, 42, 52};
+        k.grow = 0.8f, k.fluffy = true, k.eyes = Look::Round;
+        break;
+    case CatStyle::Backlit:
+        k.rim = {78, 104, 148}, k.halo = {36, 44, 62};
+        k.grow = 0.9f, k.eyeGlow = true, k.eyes = Look::Almond;
+        break;
+    case CatStyle::Sleek:
+        // Calm eyes: a narrower almond in a muted steel blue, a thin slit
+        // and a small, dim glint.
+        k.eyes = Look::Narrow;
+        k.eye = {74, 128, 172}, k.iris = {98, 148, 186}, k.glint = {214, 226, 240, 150}, k.glintR = 0.3f;
+        break;
+    default: break;
+    }
+    return k;
+}
+
+// along is the point u of the way along a smooth curve through n points,
+// with u counted in points: 0 at the first, n - 1 at the last.
+Vec2f along(const Vec2f* p, int n, float u) {
+    int i = std::clamp(int(u), 0, n - 2);
+    float t = u - float(i), t2 = t * t, t3 = t2 * t;
+    Vec2f a = p[std::max(i - 1, 0)], b = p[i], c = p[i + 1], d = p[std::min(i + 2, n - 1)];
+    auto mix = [&](float a0, float b0, float c0, float d0) {
+        return 0.5f * (2 * b0 + (c0 - a0) * t + (2 * a0 - 5 * b0 + 4 * c0 - d0) * t2 + (3 * b0 - a0 - 3 * c0 + d0) * t3);
+    };
+    return {mix(a.x, b.x, c.x, d.x), mix(a.y, b.y, c.y, d.y)};
+}
+
+// Brush draws his parts in one colour, each grown by g units all round
+// (or shrunk, below 0). Shapes are placed in pose units but worked out on
+// the canvas, so they keep their thickness however he's turned.
+struct Brush {
+    Painter d;
+    float g;
+    Rgba col;
+
+    // tube is a run of circles, each joined to the next along the lines
+    // touching both: a smooth, tapering limb.
+    void tube(const Vec2f* pts, const float* r, int n, float l = 0) const {
+        Vec2f a;
+        float ra = 0;
+        for (int i = 0; i < n; i++) {
+            Vec2f b = d.m(pts[i], l);
+            float rb = d.w(std::max(0.25f, r[i] + g));
+            d.c.Circle(b, rb, col);
+            if (i > 0) {
+                Vec2f u = sub(b, a);
+                float len = std::hypot(u.x, u.y), s = len > 0 ? (ra - rb) / len : 1;
+                if (std::fabs(s) < 1) {  // otherwise one circle is inside the other
+                    u = scale(u, 1 / len);
+                    float c = std::sqrt(1 - s * s);
+                    Vec2f n1 = {u.x * s - u.y * c, u.y * s + u.x * c}, n2 = {u.x * s + u.y * c, u.y * s - u.x * c};
+                    // Clockwise on the canvas, as ImGui's smooth edges want.
+                    Vec2f quad[4] = {add(a, scale(n2, ra)), add(b, scale(n2, rb)), add(b, scale(n1, rb)), add(a, scale(n1, ra))};
+                    d.c.Polygon(quad, 4, col);
+                }
+            }
+            a = b, ra = rb;
+        }
+    }
+    void blob(Vec2f at, float r, float l = 0) const { tube(&at, &r, 1, l); }
+
+    // shape is a convex polygon, each point with its own l, its edges moved
+    // out by g. Seen edge on it's left out.
+    void shape(const Vec2f* pts, const float* l, int n) const {
+        Vec2f p[8], out[8];
+        float area = 0;
+        for (int i = 0; i < n; i++) p[i] = d.m(pts[i], l[i]);
+        for (int i = 0; i < n; i++) area += p[i].x * p[(i + 1) % n].y - p[(i + 1) % n].x * p[i].y;
+        if (std::fabs(area) < d.w(1) * d.w(1)) return;
+        float turn = area > 0 ? 1.0f : -1.0f, by = d.w(g);
+        for (int i = 0; i < n; i++) {
+            auto normal = [&](Vec2f from, Vec2f to) {
+                Vec2f e = sub(to, from);
+                float len = std::max(0.001f, std::hypot(e.x, e.y));
+                return Vec2f{e.y / len * turn, -e.x / len * turn};
+            };
+            Vec2f n1 = normal(p[(i + n - 1) % n], p[i]), n2 = normal(p[i], p[(i + 1) % n]);
+            Vec2f mid = add(n1, n2);
+            float len = std::max(0.001f, std::hypot(mid.x, mid.y));
+            mid = scale(mid, 1 / len);
+            // Sharp corners would grow into long spikes: hold them back.
+            out[i] = add(p[i], scale(mid, by / std::max(0.55f, mid.x * n1.x + mid.y * n1.y)));
+        }
+        // Clockwise on the canvas, as ImGui's smooth edges want: mirrored,
+        // he's drawn the other way round.
+        if (turn < 0) std::reverse(out, out + n);
+        d.c.Polygon(out, n, col);
+    }
+    void shape(const Vec2f* pts, float l, int n) const {
+        float ls[8];
+        std::fill(ls, ls + n, l);
+        shape(pts, ls, n);
+    }
+
+    // tuft is a lock of fur on the circle at c: its root across the angle
+    // at, its tip len further out and leaning by lean. Angles are radians
+    // from ahead (a unit vector) round towards belly. It only reaches
+    // below the floor where the circle does.
+    void tuft(Vec2f c, float r, Vec2f ahead, Vec2f belly, float at, float len, float lean) const {
+        auto on = [&](float a, float out) {
+            return add(c, add(scale(ahead, std::cos(a) * out), scale(belly, std::sin(a) * out)));
+        };
+        Vec2f pts[3] = {on(at - 0.36f, r - 0.8f), on(at + lean, r + len), on(at + 0.36f, r - 0.8f)};
+        pts[1].y = std::min(pts[1].y, std::max(0.5f, c.y + r - 0.8f));
+        shape(pts, 0.0f, 3);
+    }
+};
+
+// His parts, back to front.
+enum : unsigned { kFarLegs = 1, kTorso = 2, kHind = 4, kFront = 8, kTail = 16, kHead = 32, kWhole = 63 };
+
+// leg draws leg i from inside his body out to its toes: front legs taper
+// from the shoulder, back legs from the haunch with a hock bent back,
+// towards his tail, whichever way the leg points.
+void leg(const Brush& b, const CatPose& p, const Look& k, int i) {
+    bool hind = i >= 2;
+    float l = (i % 2 == 0 ? 1.0f : -1.0f) * (hind ? 4.0f : 3.5f);
+    Vec2f joint = p.joint[i], paw = p.paw[i];
+    Vec2f dir = sub(paw, joint);
+    float len = std::max(0.001f, std::hypot(dir.x, dir.y));
+    dir = scale(dir, 1 / len);
+    Vec2f pts[5];
+    float r[5];
+    int n = 0;
+    float fluff = k.fluffy ? 0.45f : 0;
+    // A back leg folded under him is short: its knee is rounder, and it
+    // shows no hock.
+    float straight = hind ? std::clamp((len - 6) / 8, 0.0f, 1.0f) : 1;
+    pts[n] = lerp(hind ? p.hips : p.chest, joint, hind ? 0.2f : 0.3f), r[n++] = hind ? p.rHips * 0.68f : 5.0f;
+    pts[n] = joint, r[n++] = (hind ? 3.3f + 1.6f * (1 - straight) : 2.9f) + fluff;
+    if (hind) {
+        Vec2f back = {-dir.y, dir.x}, rear = sub(p.hips, p.chest);
+        if (back.x * rear.x + back.y * rear.y < 0) back = scale(back, -1);
+        Vec2f hock = add(lerp(joint, paw, 0.62f), scale(back, 2.4f * straight));
+        hock.y = std::min(hock.y, std::max(joint.y, paw.y));
+        pts[n] = hock, r[n++] = 2.3f + fluff;
+    }
+    pts[n] = paw, r[n++] = 2.2f;
+    // Toes point along the floor when the paw is down, else on from the leg.
+    Vec2f toe = lerp(dir, {1, 0}, std::clamp(1 + paw.y / 3, 0.0f, 1.0f));
+    toe = scale(toe, 1.8f / std::max(0.001f, std::hypot(toe.x, toe.y)));
+    toe.y = std::min(toe.y, 0.2f);
+    pts[n] = add(paw, toe), r[n++] = 1.9f;
+    b.tube(pts, r, n, l);
+}
+
+// nearLeg reports whether leg i is on the side of him towards the viewer,
+// which swaps as he turns round.
+bool nearLeg(const Painter& d, const CatPose& p, int i) { return (i % 2 == 0) == (std::cos(d.angle(p.joint[i].x)) >= 0); }
+
+// pawRaised is his near front paw up by his face, to be drawn over it.
+bool pawRaised(const CatPose& p) { return p.paw[0].y < p.head.y + 9; }
+
+void tailShape(const Brush& b, const CatPose& p, const Look& k) {
+    constexpr int kPer = 3, kCount = (CatPose::kTailPoints - 1) * kPer + 2;
+    Vec2f pts[kCount];
+    float r[kCount];
+    // It starts inside his hips, so it leaves them smoothly.
+    pts[0] = lerp(p.hips, p.tail[0], 0.55f), r[0] = k.fluffy ? 4.2f : 3.6f;
+    for (int i = 1; i < kCount; i++) {
+        float u = float(i - 1) / float(kCount - 2);
+        pts[i] = along(p.tail.data(), CatPose::kTailPoints, u * (CatPose::kTailPoints - 1));
+        // Tapering, from a thicker root.
+        float thin = lerpf(2.6f, 1.45f, std::pow(u, 0.8f));
+        r[i] = thin + 1.1f * std::max(0.0f, 1 - u / 0.25f);
+        if (k.fluffy) {
+            // A plume: swelling past the base, then tapering to a point.
+            r[i] = u < 0.4f ? lerpf(2.7f, 3.5f, smooth(u / 0.4f)) : lerpf(3.5f, 1.4f, smooth((u - 0.4f) / 0.6f));
+            // Lying along the floor it rests on it, where a thin tail would.
+            pts[i].y -= std::max(0.0f, r[i] - thin) * std::clamp(1 - std::fabs(pts[i].y) / 3, 0.0f, 1.0f);
+        }
+    }
+    b.tube(pts, r, kCount);
+}
+
+void torsoShape(const Brush& b, const CatPose& p, const Look& k) {
+    const Vec2f spine[3] = {p.hips, p.mid, p.chest};
+    const float girth[3] = {p.rHips, p.rMid, p.rChest};
+    constexpr int kPer = 4, kCount = 2 * kPer + 1;
+    Vec2f pts[kCount];
+    float r[kCount];
+    for (int i = 0; i < kCount; i++) {
+        float u = float(i) / kPer;
+        int at = std::min(int(u), 1);
+        pts[i] = along(spine, 3, u), r[i] = lerpf(girth[at], girth[at + 1], u - float(at));
+    }
+    b.tube(pts, r, kCount);
+    // His neck, wide at the shoulders.
+    Vec2f neck[3] = {lerp(p.chest, p.head, 0.22f), lerp(p.chest, p.head, 0.55f), lerp(p.chest, p.head, 0.82f)};
+    float rn[3] = {p.rChest * 0.74f, 5.4f, 4.7f};
+    b.tube(neck, rn, 3);
+    if (k.fluffy) {
+        // A bib on his chest, his belly, and his britches: placed from
+        // which way his body runs and which side his legs are, so they
+        // follow him onto his back.
+        Vec2f ahead = sub(p.chest, p.hips);
+        ahead = scale(ahead, 1 / std::max(0.001f, std::hypot(ahead.x, ahead.y)));
+        Vec2f belly = {-ahead.y, ahead.x};
+        Vec2f legs = sub(add(p.joint[0], p.joint[2]), add(p.chest, p.hips));
+        if (belly.x * legs.x + belly.y * legs.y < 0) belly = scale(belly, -1);
+        // The fur is fuller there too.
+        Vec2f bib = add(p.chest, add(scale(ahead, 3.2f), scale(belly, 1.6f)));
+        Vec2f seat = add(p.hips, add(scale(ahead, -2.5f), scale(belly, 2.5f)));
+        float rb = p.rChest * 0.78f, rs = p.rHips * 0.74f;
+        b.blob(bib, rb), b.blob(seat, rs);
+        for (float a : {0.2f, 0.75f, 1.3f}) b.tuft(bib, rb, ahead, belly, a, 1.8f, 0.5f);
+        b.tuft(p.mid, p.rMid, ahead, belly, 1.7f, 1.5f, 0.5f);
+        for (float a : {2.1f, 2.7f}) b.tuft(seat, rs, ahead, belly, a, 1.8f, -0.5f);
+    }
+}
+
+// The points of an ear seen from his side, about the middle of its base,
+// and seen face on, across from the middle of his head: forward or
+// across, then up.
+const Vec2f kEarSide[5] = {{-3.2f, 1.4f}, {-2.7f, -4.6f}, {0.4f, -8.5f}, {1.5f, -8.3f}, {3.6f, 0.8f}};
+const Vec2f kEarFront[5] = {{0.8f, -1.4f}, {3.9f, -8.5f}, {4.9f, -8.2f}, {6.5f, -4.2f}, {6.9f, 0.6f}};
+constexpr float kEarAcross = 4.3f;  // how far across its tip is
+constexpr float kEarBase = -4.8f;   // how far up his head its base is
+
+// ear draws one ear as two blades sharing a tip: one seen from his side,
+// one seen face on, so it has some width from wherever it's seen. inner
+// shrinks them to the hollow inside the ear. swivel turns the ear about
+// its base, in radians: forward above 0, back below.
+void ear(const Brush& h, const CatPose& p, float side, bool inner, float swivel = 0) {
+    float e = side < 0 ? -3.1f : 3.0f;  // the far ear sits further back
+    // A point of the ear, from where it is over the base's middle.
+    auto at = [&](Vec2f v) { return add(p.head, rotate(add(rotate(v, swivel), {e, kEarBase}), p.headTilt)); };
+    auto hollow = [&](Vec2f v, Vec2f about) { return inner ? lerp(about, v, 0.55f) : v; };
+    Vec2f pts[5];
+    float ls[5];
+    for (int i = 0; i < 5; i++) pts[i] = at(hollow(kEarSide[i], {0.9f, -2.6f})), ls[i] = side * kEarAcross;
+    // From his side, only the near ear shows its hollow.
+    if (!inner || side * std::cos(h.d.headAngle()) > 0) h.shape(pts, ls, 5);
+    for (int i = 0; i < 5; i++) {
+        Vec2f v = hollow(kEarFront[i], {4.2f, -2.8f});
+        pts[i] = at({0.6f, v.y}), ls[i] = side * v.x;
+    }
+    h.shape(pts, ls, 5);
+}
+
+void headShape(const Brush& b, const CatPose& p, const Look& k) {
+    Brush h{b.d.onHead(), b.g, b.col};
+    auto at = [&](Vec2f v) { return add(p.head, rotate(v, p.headTilt)); };
+    h.blob(p.head, p.rHead);
+    // His muzzle runs smoothly out of his cheek.
+    Vec2f muzzle[2] = {at({2.5f, 1.2f}), at({6.9f, 2.7f})};
+    float rm[2] = {6.2f, 3.8f};
+    h.tube(muzzle, rm, 2);
+    for (float side : {-1.0f, 1.0f}) {
+        ear(h, p, side, false, side > 0 ? p.ear * 0.5f : 0);  // the near ear flicks
+        if (!k.fluffy) continue;
+        // Ruffs on his cheeks, out to each side when he's face on.
+        h.blob(at({-1.0f, 3.2f}), 6.3f, side * 3);
+        Vec2f ruff[3] = {at({-4.8f, 3.6f}), at({-3.6f, 10.6f}), at({1.4f, 7.2f})};
+        ruff[1].y = std::min(ruff[1].y, std::max(0.5f, p.head.y + p.rHead - 0.8f));
+        float ls[3] = {side * 5, side * 8, side * 4};
+        h.shape(ruff, ls, 3);
+    }
+}
+
+// parts draws those of his parts in which.
+void parts(const Brush& b, const CatPose& p, const Look& k, unsigned which) {
+    for (int i = 0; i < 4; i++) {
+        bool near = nearLeg(b.d, p, i);
+        unsigned part = !near ? kFarLegs : i >= 2 ? kHind : kFront;
+        if (which & part) leg(b, p, k, i);
+    }
+    if (which & kTorso) torsoShape(b, p, k);
+    if (which & kTail) tailShape(b, p, k);
+    if (which & kHead) headShape(b, p, k);
+}
+
+// shifted is a painter moved up the canvas by up units, and by ahead
+// units the way he faces: less the more he's turned towards the viewer.
+Painter shifted(Painter d, float up, float ahead = 0) {
+    d.floor.y -= up * d.size;
+    d.floor.x += ahead * d.facing * std::cos((d.headTurn + d.hipsTurn) / 2) * d.size;
+    return d;
+}
+
+// eye draws an open eye at a point on the canvas: narrow is how much of
+// its width shows (he may be side on), open how far its lids are apart,
+// slant its tilt in radians.
+void eye(const Painter& d, Vec2f at, float narrow, float open, float slant, const Look& k) {
+    constexpr Rgba kSocket{8, 8, 10};
+    float rx = 1.9f * narrow, ry = 2.4f * open, slit = 0.5f, tall = 0.84f, glint = k.glintR, socket = 0.4f;
+    if (k.eyes == Look::Almond) rx = 2.3f * narrow, ry = 1.9f * open, tall = 0.92f;
+    if (k.eyes == Look::Round) rx = 2.15f * narrow, ry = 2.3f * open, slit = 0.95f * narrow, tall = 0.78f, glint = 0.5f;
+    if (k.eyes == Look::Narrow) rx = 2.15f * narrow, ry = 1.55f * open, slit = 0.32f, tall = 0.9f, socket = 0.3f, slant *= 1.4f;
+    if (k.eyes != Look::Almond && k.eyes != Look::Narrow) slant = 0;
+    if (k.eyeGlow) d.c.Ellipse(at, d.w(rx + 1.0f), d.w(ry + 1.0f), slant, Rgba{k.eye.r, k.eye.g, k.eye.b, 26});
+    d.c.Ellipse(at, d.w(rx + socket), d.w(ry + socket), slant, kSocket);
+    d.c.Ellipse(at, d.w(rx), d.w(ry), slant, k.eye);
+    // Lighter towards the bottom, where light through the eye comes out.
+    d.c.Ellipse({at.x, at.y + d.w(ry * 0.42f)}, d.w(rx * 0.72f), d.w(ry * 0.46f), slant, k.iris);
+    d.c.Ellipse(at, d.w(slit), d.w(ry * tall), 0, kPupil);
+    if (open > 0.55f) d.c.Circle({at.x - d.w(rx * 0.36f), at.y - d.w(ry * 0.42f)}, d.w(glint), k.glint);
+}
+
+void fineFace(const Painter& body, const CatPose& p, const Look& k) {
+    constexpr Rgba kNose{92, 64, 76}, kLine{44, 46, 56};
+    Painter d = body.onHead();
+    auto head = [&](Vec2f v) { return add(p.head, rotate(v, p.headTilt)); };
+    float facing = d.facing;
+    // The hollows of his ears.
+    Brush in{d, 0, k.earIn};
+    for (float side : {-1.0f, 1.0f}) ear(in, p, side, true, side > 0 ? p.ear * 0.5f : 0);
+    // Both eyes, the far one hidden behind his head unless he's turned
+    // towards the viewer, and narrower the more side on each is.
+    for (float l : {2.6f, -2.6f}) {
+        Vec2f at = head({3.8f, -1.2f});
+        float show = std::clamp((d.depth(at.x, l, p.head.x) + 0.5f) / 3, 0.0f, 1.0f);
+        if (show <= 0) continue;
+        if (p.eyes > 0.15f) {
+            // Each slants down towards his nose.
+            float slant = (0.2f * (l > 0 ? 1.0f : -1.0f) * p.eyes + p.headTilt) * facing;
+            eye(d, d.m(at, l), 0.5f + 0.5f * show, p.eyes, slant, k);
+        } else {
+            // Closed: a sleepy curve.
+            const Vec2f lid[4] = {{2.1f, -0.8f}, {3.1f, 0.05f}, {4.5f, 0.05f}, {5.5f, -0.8f}};
+            for (int i = 0; i + 1 < 4; i++) d.line(head(lid[i]), head(lid[i + 1]), 0.75f, kLid, l);
+            for (int i = 1; i < 3; i++) d.circle(head(lid[i]), 0.37f, kLid, l);
+        }
+    }
+    if (p.yawn > 0.3f) d.c.Ellipse(d.m(head({8.5f, 4.6f})), d.w(1.4f), d.w(2.4f * p.yawn), 0, kMouth);
+    if (p.tongue > 0.05f) d.c.Ellipse(d.m(head({10.2f, 4.4f})), d.w(1.1f), d.w(1.7f * p.tongue), 0, kTongue);
+    // His nose, and the line of his mouth below it: its two sides part as
+    // he turns to face the viewer.
+    d.circle(head({10.1f, 1.5f}), 0.8f, kNose);
+    if (p.yawn <= 0.3f) {
+        d.line(head({10.0f, 2.2f}), head({9.4f, 3.6f}), 0.4f, kLine);
+        for (float side : {1.0f, -1.0f}) d.c.Line(d.m(head({9.4f, 3.6f})), d.m(head({7.6f, 4.6f}), side * 1.6f), d.w(0.4f), kLine);
+    }
+    // Whiskers both sides, fanning out and drooping, the far ones only
+    // once he's turned enough to show them.
+    bool far = std::sin(d.headAngle()) > 0.25f;
+    for (float side : {1.0f, -1.0f}) {
+        if (side < 0 && !far) continue;
+        for (float dy : {-0.9f, 0.3f, 1.5f}) {
+            Vec2f a = d.m(head({8.6f, 2.6f + dy * 0.5f}), side * 1.5f), b = d.m(head({11.8f, 1.6f + dy * 1.3f}), side * 3.8f),
+                  c = d.m(head({14.6f, 1.8f + dy * 2.2f}), side * 6);
+            d.c.Line(a, b, d.w(0.42f), kWhisker);
+            d.c.Line(b, c, d.w(0.3f), kWhisker);
+        }
+    }
+    // Lines between his toes, on the paws that are down.
+    if (k.toes) {
+        for (int i = 0; i < 4; i++) {
+            if (!nearLeg(body, p, i) || p.paw[i].y < -0.5f) continue;
+            float l = (i % 2 == 0 ? 1.0f : -1.0f) * (i >= 2 ? 4.0f : 3.5f);
+            for (float x : {1.3f, 2.4f}) body.line(add(p.paw[i], {x, 0.2f}), add(p.paw[i], {x + 0.5f, 1.6f}), 0.35f, kLine, l);
+        }
+    }
+}
+
+// drawFine draws him in one of the finer styles: his rim first, as his
+// whole shape grown, then each part over the last, back to front.
+void drawFine(const Painter& d, const CatPose& p, const Look& k) {
+    if (k.halo.a > 0) parts(Brush{d, k.grow + 0.5f, k.halo}, p, k, kWhole);
+    if (k.topLit) {
+        // Light from above: a dim rim all round, and his shape again in
+        // the bright rim, raised, so it shows along his top edges.
+        parts(Brush{d, k.grow, k.under}, p, k, kWhole);
+        parts(Brush{shifted(d, 0.85f), 0.25f, k.rim}, p, k, kWhole);
+    } else {
+        parts(Brush{d, k.grow, k.rim}, p, k, kWhole);
+    }
+    bool banded = k.band.r != k.fur.r || k.band.g != k.fur.g || k.band.b != k.fur.b;
+    bool raised = pawRaised(p);
+    auto layer = [&](unsigned which, Rgba fur) {
+        if (!banded) return parts(Brush{d, 0, fur}, p, k, which);
+        // A lighter band inside the part's edge picks it out from what's
+        // behind: along the top of his body, tail and head, and round the
+        // front of his legs, so a haunch shows as a curve, not a disc.
+        bool legs = which & (kHind | kFront);
+        parts(Brush{d, 0, k.band}, p, k, which);
+        parts(Brush{shifted(d, legs ? -0.3f : -0.5f, legs ? -0.45f : 0.0f), -0.12f, fur}, p, k, which);
+    };
+    parts(Brush{d, 0, k.farFur}, p, k, kFarLegs);
+    layer(kTorso, k.fur);
+    layer(raised ? kHind : kHind | kFront, k.fur);
+    layer(kTail, k.fur);
+    layer(kHead, k.fur);
+    if (raised) layer(kFront, k.fur);
+    fineFace(d, p, k);
+}
+
+}  // namespace
+
+void DrawCat(Canvas& c, const Cat& cat, double t, Vec2f floor, float size, CatStyle style) {
     // The toy goes under his paws; the bowl's rim over his chin; a box
     // behind him, or round him when he's in it.
     drawToy(c, cat.toy, cat.facing, floor, size);
     drawBox(c, cat.box, floor, size, cat.inBox ? BoxPart::Back : BoxPart::All);
     Painter d{c, floor, cat.x, cat.facing, size};
-    // Turning round, her head comes round first, towards the viewer, and
-    // her hips follow.
+    // Turning round, his head comes round first, towards the viewer, and
+    // his hips follow.
     d.headTurn = kPi * smooth(cat.turn * 1.4f);
     d.hipsTurn = kPi * smooth(cat.turn * 1.4f - 0.4f);
     float across = std::fabs(std::cos((d.headTurn + d.hipsTurn) / 2));
-    // Her shadow stays on the floor, smaller the higher she leaps.
+    // His shadow stays on the floor, smaller the higher he leaps.
     float high = 1 - std::clamp((cat.lift - cat.ground) / 30, 0.0f, 0.5f);
-    if (!cat.inBox)
-        d.c.Ellipse(d.m({0, 0.5f - cat.ground}), d.w(26 * std::max(0.55f, across) * high),
-                    d.w((2.6f + 0.8f * (1 - across)) * high), 0, kShadow);
+    float wide = 26 * std::max(0.55f, across) * high, deep = (2.6f + 0.8f * (1 - across)) * high;
+    if (cat.inBox) {
+    } else if (style == CatStyle::Classic) {
+        d.c.Ellipse(d.m({0, 0.5f - cat.ground}), d.w(wide), d.w(deep), 0, kShadow);
+    } else {
+        // Softer at its edge: three fainter shadows, one inside the next.
+        for (float k : {1.0f, 0.78f, 0.55f})
+            d.c.Ellipse(d.m({0, 0.5f - cat.ground}), d.w(wide * k), d.w(deep * k), 0, Rgba{0, 0, 0, 22});
+    }
     d.lift = cat.lift;
-    // Looking at the viewer, her head comes most of the way round.
+    // Looking at the viewer, his head comes most of the way round.
     d.pivot = cat.pose.head;
     d.look = cat.look * kPi * 0.42f;
-    silhouette(d, cat.pose, 1.1f, kRim);
-    silhouette(d, cat.pose, 0, kFur);
-    face(d, cat.pose);
+    if (style == CatStyle::Classic) {
+        silhouette(d, cat.pose, 1.1f, kRim);
+        silhouette(d, cat.pose, 0, kFur);
+        face(d, cat.pose);
+    } else {
+        drawFine(d, cat.pose, lookOf(style));
+    }
     if (cat.inBox) drawBox(c, cat.box, floor, size, BoxPart::Front);
     drawBowl(c, cat.bowl, floor, size);
     drawFood(c, cat.food, floor, size);

@@ -122,9 +122,21 @@ private:
     std::unique_ptr<State> s_;
 };
 
+// CatStyle is how he's drawn. He's the same cat in each, in the same
+// poses: Classic is his first look, built from circles; the others draw
+// him more finely.
+enum class CatStyle {
+    Classic,
+    Sleek,    // a smooth outline with an even rim, flat black inside
+    Moonlit,  // lit from above, with soft shading that picks out his legs, tail and head
+    Fluffy,   // long-haired: tufts, a bushy tail and round eyes
+    Backlit,  // a cool blue rim with a soft glow outside it, and eyes that glow
+};
+constexpr CatStyle kCatStyle = CatStyle::Sleek;
+
 // DrawCat draws him, mapping pose units to the canvas by floor + p * size,
 // where floor is the middle of the floor. t moves his Z's along.
-void DrawCat(Canvas& c, const Cat& cat, double t, Vec2f floor, float size);
+void DrawCat(Canvas& c, const Cat& cat, double t, Vec2f floor, float size, CatStyle style = kCatStyle);
 
 // CatHead is the top of his head on the canvas, for a speech bubble.
 Vec2f CatHead(const Cat& cat, Vec2f floor, float size);
