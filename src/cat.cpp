@@ -604,7 +604,7 @@ bool doing(const Doing& d, Timeline& tl, double t, float dir, const Where& wh, C
             float fall = mugX + dir * 6;
             if (tl.take(0.8f, k)) {
                 c.pose = blend(kPerchPaw, kPerch, smooth(k)), c.pose.headTilt = 0.55f * smooth(k);
-                c.mug = {fall + dir * 3 * k, L * (1 - k * k), 1, dir * (0.3f + 2.6f * k), 0};
+                c.mug = {fall + dir * 3 * k, L * (1 - k * k), 1, dir * (0.3f + (kPi / 2 - 0.3f) * smooth(k)), 0};
                 return true;
             }
             c.mug = {fall + dir * 3, 0, 1, dir * kPi / 2, 0};
@@ -717,7 +717,7 @@ Plan makePlan(long long k, Rest r, const CatWorld& w, Special sp, float wait) {
     // there's room at the bottom) the other place.
     CatPlace dest = r.place;
     if (sp == Special::None || sp == Special::Annoyed) {
-        if (r.place == CatPlace::Top && gapOpen(w) && roll(h3, sp == Special::Annoyed ? 60 : night ? 10 : 30))
+        if (r.place == CatPlace::Top && gapOpen(w) && roll(h3, sp == Special::Annoyed ? 60 : night ? 10 : 40))
             dest = CatPlace::Bottom;
         else if (r.place == CatPlace::Bottom && (!gapOpen(w) || roll(h3, 40)))
             dest = CatPlace::Top;
@@ -787,14 +787,12 @@ Plan makePlan(long long k, Rest r, const CatWorld& w, Special sp, float wait) {
         int n = night ? 4 : int(sizeof(all) / sizeof(all[0])) - (lively ? 0 : 1);
         int count = night ? 1 : roll(h >> 8, lively ? 50 : 33) ? 2 : 1;
         for (int i = 0; i < count; i++) {
-            int at = int((i == 0 ? h : h2 >> 3) % uint32_t(n));
-            for (int tries = 0; tries < n; tries++, at = (at + 1) % n) {
-                CatAction a = list[at];
-                bool again = p.count > 0 && p.doings[0].a == a;
-                if (!again && fits(a)) break;
-            }
-            CatAction a = list[at];
-            if ((p.count > 0 && p.doings[0].a == a) || !fits(a)) a = CatAction::Groom;
+            // Evenly among what fits here, and not the same thing twice.
+            CatAction fit[16];
+            int m = 0;
+            for (int j = 0; j < n; j++)
+                if (fits(list[j]) && !(p.count > 0 && p.doings[0].a == list[j])) fit[m++] = list[j];
+            CatAction a = m > 0 ? fit[(i == 0 ? h : h2 >> 3) % uint32_t(m)] : CatAction::Groom;
             put(a);
         }
         p.knead = (h >> 12) % 2 == 0;

@@ -758,12 +758,13 @@ static void testCat() {
         for (CatAction a : {CatAction::Stir, CatAction::Groom, CatAction::Scratch, CatAction::Blink, CatAction::Knead, CatAction::Walk})
             CHECK(did.count(int(a)));
         CHECK(did.count(int(CatAction::Drink)) && drank);
-        // No perching up here, and sprints only in a wide column; a narrow column has no room to
-        // land a pounce, chase a toy or get in a box.
+        // No perching up here, and sprints only in a wide column; a narrow
+        // column has no room to chase a toy or get in a box (a pounce only
+        // from near one end of it).
         CHECK(!did.count(int(CatAction::Perch)) && !did.count(int(CatAction::KnockOff)));
         CHECK(did.count(int(CatAction::Zoomies)) == (half > 115));
-        CHECK(leapt == (half > 100));
-        CHECK(did.count(int(CatAction::Pounce)) == (half > 100));
+        CHECK(leapt == did.count(int(CatAction::Pounce)) > 0);
+        if (half > 100) CHECK(leapt);
         CHECK(batted == (half > 100));
         CHECK(did.count(int(CatAction::Box)) == (half > 100));
         // He sleeps curled, as a loaf and on his side; never belly up when
