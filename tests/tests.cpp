@@ -763,7 +763,7 @@ static void testCat() {
         // from near one end of it).
         CHECK(!did.count(int(CatAction::Perch)) && !did.count(int(CatAction::KnockOff)));
         CHECK(did.count(int(CatAction::Zoomies)) == (half > 115));
-        CHECK(leapt == did.count(int(CatAction::Pounce)) > 0);
+        CHECK(leapt == (did.count(int(CatAction::Pounce)) > 0));
         if (half > 100) CHECK(leapt);
         CHECK(batted == (half > 100));
         CHECK(did.count(int(CatAction::Box)) == (half > 100));
