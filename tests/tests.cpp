@@ -776,6 +776,38 @@ static void testCat() {
     CHECK(later.x == again.x && later.facing == again.facing);
 }
 
+static void testCatStyles() {
+    // Drawn in any style he stays inside his space, over many episodes at
+    // a narrow and a wide column.
+    for (CatStyle style : {CatStyle::Classic, CatStyle::Sleek, CatStyle::Moonlit, CatStyle::Fluffy, CatStyle::Backlit}) {
+        for (float half : {60.0f, 150.0f}) {
+            for (double t = 0; t < 30 * kEpisode; t += 1.0 / 10) {
+                Recorder r;
+                DrawCat(r, CatAt(t, half), t, {0, 0}, 1, style);
+                CHECK(r.shapes > 30);
+                CHECK(r.maxY <= 4);
+                CHECK(r.minY >= -64);
+                CHECK(r.minX >= -half && r.maxX <= half);
+            }
+        }
+        // Facing the other way he's the same drawing mirrored, at any
+        // point in a turn or a look round.
+        for (float turn : {0.0f, 0.3f, 0.5f, 0.8f}) {
+            for (float look : {0.0f, 0.6f, 1.0f}) {
+                Cat c = CatAt(13.5, 150);
+                c.x = 0, c.turn = turn, c.look = look;
+                Recorder right, left;
+                DrawCat(right, c, 0, {0, 0}, 1, style);
+                c.facing = -c.facing;
+                DrawCat(left, c, 0, {0, 0}, 1, style);
+                CHECK_EQ(right.shapes, left.shapes);
+                CHECK(std::fabs(right.minX + left.maxX) < 0.01f && std::fabs(right.maxX + left.minX) < 0.01f);
+                CHECK(std::fabs(right.minY - left.minY) < 0.01f && std::fabs(right.maxY - left.maxY) < 0.01f);
+            }
+        }
+    }
+}
+
 static ImDrawVert vert(float x, float y, float u, float v, ImU32 col = IM_COL32(255, 255, 255, 255)) {
     ImDrawVert d;
     d.pos = ImVec2(x, y);
@@ -1073,6 +1105,7 @@ int main() {
     testSky();
     testRetro();
     testCat();
+    testCatStyles();
     testTemporaryEvents();
     testStaleEvents();
     testUpload();
