@@ -690,90 +690,202 @@ static void testWeatherIcons() {
     CHECK(snap.summary[3].hasLevel);  // 0% still draws
 }
 
-static void testCat() {
-    // Over two whole episodes, at a narrow and a wide column, she stays on
-    // the floor and inside her space: 68 units tall (4 below the floor) and
-    // the column's width. She sleeps most of the time, but wakes, yawns,
-    // walks and turns round.
-    for (float half : {120.0f, 150.0f}) {
-        bool walked = false, turned = false, yawned = false;
-        int asleep = 0, frames = 0;
-        float lastX = CatAt(0, half).x;
-        for (double t = 0; t < 2 * kEpisode; t += 1.0 / 20, frames++) {
-            Cat c = CatAt(t, half);
-            for (const Vec2f& paw : c.pose.paw) CHECK(paw.y <= 0.01f);
-            CHECK(std::isfinite(c.x) && std::fabs(c.facing) <= 1);
-            walked = walked || std::fabs(c.x - lastX) > 0.01f;
-            turned = turned || (c.turn > 0.4f && c.turn < 0.6f);
-            yawned = yawned || c.pose.yawn > 0.9f;
-            asleep += c.asleep >= 1;
-            lastX = c.x;
-            Recorder r;
-            DrawCat(r, c, t, {0, 0}, 1);
-            CHECK(r.shapes > 30);
-            CHECK(r.maxY <= 4);
-            CHECK(r.minY >= -64);
-            CHECK(r.minX >= -half && r.maxX <= half);
-        }
-        CHECK(walked);
-        CHECK(yawned);
-        CHECK(asleep > frames / 2);
-        (void)turned;  // depends on where she happens to go
+// drawn checks a frame of Mag stays in his space: above Recent or in the
+// space at the bottom, 68 units tall (4 below the floor), or reaching up
+// to the panel's edge when he's up there; across, only once he's in sight.
+static void drawn(const Cat& c, double t, const CatWorld& w) {
+    for (const Vec2f& paw : c.pose.paw) CHECK(paw.y <= 0.01f);
+    CHECK(std::isfinite(c.x) && std::fabs(c.facing) <= 1);
+    CHECK(c.look >= 0 && c.look <= 1 && c.purr >= 0 && c.purr <= 1);
+    Recorder r;
+    DrawCat(r, c, t, {0, 0}, 1);
+    CHECK(r.shapes > 30);
+    float half = c.place == CatPlace::Top ? w.half : w.gapHalf;
+    bool up = c.action == CatAction::Perch || c.action == CatAction::KnockOff;
+    if (!up) {
+        CHECK(r.maxY <= 4);
+        CHECK(r.minY >= -64);
+    } else {
+        CHECK(r.minY >= -w.ledge - 64);
+        CHECK(r.maxY <= 4);
     }
-    // Over many episodes she gets up to all sorts, always on the floor and
-    // inside her space, pouncing included.
-    for (float half : {60.0f, 150.0f}) {
-        std::set<int> did;
-        bool licked = false, looked = false, leapt = false, drank = false, batted = false;
-        for (double t = 0; t < 30 * kEpisode; t += 1.0 / 10) {
-            Cat c = CatAt(t, half);
+    // Walking out of sight, and props sliding in, go past the ends.
+    bool going = c.action == CatAction::Walk || c.action == CatAction::Box;
+    if (!going) CHECK(r.minX >= -half && r.maxX <= half);
+}
+
+static void testCat() {
+    // Left alone above Recent, at a narrow and a wide column, he stays in
+    // his space. He sleeps most of the time, but wakes, yawns, walks, and
+    // gets up to all sorts, never jumping from one frame to the next.
+    for (float half : {60.0f, 120.0f, 150.0f}) {
+        Mag mag;
+        CatWorld w;
+        w.half = half;
+        std::set<int> did, beds;
+        bool licked = false, looked = false, leapt = false, drank = false, batted = false, yawned = false;
+        int asleep = 0, frames = 0;
+        Cat prev = mag.Step(0, w);
+        for (double t = 0.05; t < 4000; t += 0.05, frames++) {
+            Cat c = mag.Step(t, w);
+            drawn(c, t, w);
+            CHECK(c.place == CatPlace::Top);
             did.insert(int(c.action));
+            if (c.asleep >= 1) beds.insert(int(c.bed));
             licked = licked || c.pose.tongue > 0.9f;
             looked = looked || c.look > 0.99f;
             leapt = leapt || c.lift > 9;
+            yawned = yawned || c.pose.yawn > 0.9f;
             drank = drank || (c.action == CatAction::Drink && c.bowl.alpha >= 1 && c.bowl.fill < 0.5f);
             batted = batted || (c.action == CatAction::Hunt && c.toy.lift > 2);
-            // Props only while she's busy with them.
+            // Props only while he's busy with them.
             if (c.action != CatAction::Drink) CHECK(c.bowl.alpha == 0);
             if (c.action != CatAction::Hunt) CHECK(c.toy.alpha == 0);
-            CHECK(c.lift >= 0 && c.look >= 0 && c.look <= 1);
-            for (const Vec2f& paw : c.pose.paw) CHECK(paw.y <= 0.01f);
-            Recorder r;
-            DrawCat(r, c, t, {0, 0}, 1);
-            CHECK(r.maxY <= 4);
-            CHECK(r.minY >= -64);
-            CHECK(r.minX >= -half && r.maxX <= half);
+            if (c.action != CatAction::Box) CHECK(c.box.alpha == 0);
+            CHECK(c.mug.alpha == 0 && c.food.alpha == 0);  // no panel edge, no mealtime
+            CHECK(c.lift >= 0);
+            // No jumps, and he turns round only by turning.
+            CHECK(std::fabs(c.x - prev.x) < 5);
+            CHECK(std::fabs(c.pose.head.y - prev.pose.head.y) < 3);
+            CHECK(std::fabs(c.lift - prev.lift) < 3);
+            CHECK(std::fabs(c.look - prev.look) < 0.2f);
+            if (c.facing != prev.facing) CHECK(prev.turn > 0.9f);
+            asleep += c.asleep >= 1;
+            prev = c;
         }
-        for (CatAction a : {CatAction::Stir, CatAction::Groom, CatAction::Scratch, CatAction::Blink, CatAction::Knead})
+        CHECK(yawned && licked && looked);
+        CHECK(asleep > frames / 2);
+        for (CatAction a : {CatAction::Stir, CatAction::Groom, CatAction::Scratch, CatAction::Blink, CatAction::Knead, CatAction::Walk})
             CHECK(did.count(int(a)));
-        CHECK(licked && looked);
-        // A narrow column has no room to land a pounce, or chase a toy.
+        CHECK(did.count(int(CatAction::Drink)) && drank);
+        // No perching up here, and sprints only in a wide column; a narrow column has no room to
+        // land a pounce, chase a toy or get in a box.
+        CHECK(!did.count(int(CatAction::Perch)) && !did.count(int(CatAction::KnockOff)));
+        CHECK(did.count(int(CatAction::Zoomies)) == (half > 115));
         CHECK(leapt == (half > 100));
         CHECK(did.count(int(CatAction::Pounce)) == (half > 100));
-        CHECK(did.count(int(CatAction::Hunt)) == (half > 100));
         CHECK(batted == (half > 100));
-        CHECK(did.count(int(CatAction::Drink)) && drank);
+        CHECK(did.count(int(CatAction::Box)) == (half > 100));
+        // He sleeps curled, as a loaf and on his side; never belly up when
+        // it isn't warm.
+        CHECK(beds.count(int(CatBed::Curl)) && beds.count(int(CatBed::Loaf)) && beds.count(int(CatBed::Side)));
+        CHECK(!beds.count(int(CatBed::Belly)));
     }
-    // She never jumps: from one frame to the next she moves a little, and
-    // only turns round by turning, at the end of which she faces the other
-    // way. Over many episodes, including ones she doesn't walk in.
-    for (float half : {60.0f, 150.0f}) {
-        for (double t = 0; t < 40 * kEpisode; t += 0.05) {
-            Cat a = CatAt(t, half), b = CatAt(t + 0.05, half);
-            CHECK(std::fabs(a.x - b.x) < 3);
-            CHECK(std::fabs(a.pose.head.y - b.pose.head.y) < 3);
-            CHECK(std::fabs(a.lift - b.lift) < 3);
-            CHECK(std::fabs(a.look - b.look) < 0.2f);
-            if (a.toy.alpha > 0 && b.toy.alpha > 0) CHECK(std::fabs(a.toy.x - b.toy.x) < 12);
-            if (a.bowl.alpha > 0 && b.bowl.alpha > 0) CHECK(std::fabs(a.bowl.x - b.bowl.x) < 12);
-            if (a.facing != b.facing) CHECK(a.turn > 0.9f);
+
+    // With room at the bottom, he goes down there (off the right, in from
+    // the left), sprints, perches on the panel's edge, knocks the mug off,
+    // and comes back up. Warm, he sleeps belly up too.
+    {
+        Mag mag;
+        CatWorld w;
+        w.half = 94, w.gapHalf = 280, w.ledge = 160, w.warm = true;
+        std::set<int> did, beds;
+        bool down = false, back = false, fell = false;
+        Cat prev = mag.Step(0, w);
+        for (double t = 0.05; t < 12000; t += 0.05) {
+            Cat c = mag.Step(t, w);
+            drawn(c, t, w);
+            did.insert(int(c.action));
+            if (c.asleep >= 1) beds.insert(int(c.bed));
+            if (c.place != prev.place) {
+                // Out of sight on one side, in from out of sight on the other.
+                CHECK(c.action == CatAction::Walk);
+                CHECK(prev.x > (prev.place == CatPlace::Top ? w.half : w.gapHalf) + 40);
+                CHECK(c.x < -(c.place == CatPlace::Top ? w.half : w.gapHalf) - 40);
+                down = down || c.place == CatPlace::Bottom;
+                back = back || c.place == CatPlace::Top;
+            } else {
+                CHECK(std::fabs(c.x - prev.x) < 5);
+            }
+            if (c.action == CatAction::KnockOff && c.mug.alpha > 0 && c.mug.lift == 0) fell = true;
+            if (c.action == CatAction::Perch && c.lift == w.ledge) CHECK(c.ground == w.ledge);
+            prev = c;
         }
+        CHECK(down && back && fell);
+        for (CatAction a : {CatAction::Zoomies, CatAction::Perch, CatAction::KnockOff, CatAction::Box})
+            CHECK(did.count(int(a)));
+        CHECK(beds.count(int(CatBed::Belly)));
     }
-    // Asked out of order, e.g. after a jump in time, she's the same.
-    Cat later = CatAt(37 * kEpisode + 3, 150);
-    CatAt(2 * kEpisode, 150);
-    Cat again = CatAt(37 * kEpisode + 3, 150);
-    CHECK(later.x == again.x && later.facing == again.facing);
+
+    // When the space at the bottom closes while he's there, he's straight
+    // back in at the top, from the left.
+    {
+        Mag mag;
+        CatWorld w;
+        w.half = 94, w.gapHalf = 280, w.ledge = 160;
+        double t = 0;
+        Cat c;
+        for (; t < 20000; t += 0.05) {
+            c = mag.Step(t, w);
+            if (c.place == CatPlace::Bottom && c.action == CatAction::Sleep) break;
+        }
+        CHECK(c.place == CatPlace::Bottom);
+        w.gapHalf = 0;
+        mag.Step(t += 0.05, w);
+        c = mag.Step(t += 0.05, w);
+        CHECK(c.place == CatPlace::Top && c.action == CatAction::Walk && c.x < -w.half);
+        for (int i = 0; i < 400; i++) c = mag.Step(t += 0.05, w);
+        CHECK(c.place == CatPlace::Top && std::fabs(c.x) <= w.half);
+    }
+
+    // Mealtimes: five minutes before 07:30 he's waiting, saying so, and at
+    // 07:30 his food comes; once a day.
+    {
+        Mag mag;
+        CatWorld w;
+        w.half = 120, w.clock = 7 * 3600 + 20 * 60;
+        bool waited = false, said = false, ate = false;
+        double atFood = 0;
+        for (double t = 0; t < 1200; t += 0.05) {
+            w.clock = float(7 * 3600 + 20 * 60 + t);
+            Cat c = mag.Step(t, w);
+            drawn(c, t, w);
+            waited = waited || c.action == CatAction::Wait;
+            said = said || c.say > 0.9f;
+            if (c.action == CatAction::Eat && c.food.alpha >= 1 && !ate) ate = true, atFood = w.clock;
+        }
+        CHECK(waited && said && ate);
+        CHECK(atFood >= 7.5f * 3600 - 5 && atFood < 7.5f * 3600 + 30);
+        // The same day again: no second breakfast.
+        bool again = false;
+        for (double t = 1200; t < 2400; t += 0.05) {
+            w.clock = float(7 * 3600 + 25 * 60 + (t - 1200) / 4);
+            again = again || mag.Step(t, w).action == CatAction::Wait;
+        }
+        CHECK(!again);
+    }
+
+    // Stroked, he purrs and stays put; four strokes in a few seconds and he
+    // lashes his tail and walks off. Something new arriving lifts his head.
+    {
+        Mag mag;
+        CatWorld w;
+        w.half = 150;
+        double t = 0;
+        Cat c = mag.Step(t, w);
+        while (c.action != CatAction::Sleep) c = mag.Step(t += 0.05, w);
+        float headY = c.pose.head.y;
+        CatInput news;
+        news.event = true;
+        mag.Step(t += 0.05, w, news);
+        for (int i = 0; i < 20; i++) c = mag.Step(t += 0.05, w);
+        CHECK(c.pose.head.y < headY - 3);
+        for (int i = 0; i < 100; i++) c = mag.Step(t += 0.05, w);
+        CatInput click;
+        click.click = true;
+        c = mag.Step(t += 0.05, w, click);
+        float x = c.x;
+        for (int i = 0; i < 20; i++) c = mag.Step(t += 0.05, w);
+        CHECK(c.purr > 0.9f && c.x == x && c.action == CatAction::Sleep);
+        bool lashed = false, moved = false;
+        for (int i = 0; i < 3; i++) mag.Step(t += 0.5, w, click);
+        for (int i = 0; i < 600; i++) {
+            c = mag.Step(t += 0.05, w);
+            lashed = lashed || c.action == CatAction::Lash;
+            moved = moved || std::fabs(c.x - x) > 20;
+        }
+        CHECK(lashed && moved);
+    }
 }
 
 static ImDrawVert vert(float x, float y, float u, float v, ImU32 col = IM_COL32(255, 255, 255, 255)) {

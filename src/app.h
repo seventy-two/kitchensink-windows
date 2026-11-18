@@ -12,6 +12,7 @@
 
 #include "battery.h"
 #include "brightness.h"
+#include "cat.h"
 #include "config.h"
 #include "grabber.h"
 #include "images.h"
@@ -155,6 +156,11 @@ private:
     bool eventCard(const Event& e, int64_t t, float left);
     void temporaries();
     void cat(float width);
+    // catBottom draws Mag in the space at the bottom of the panels, when
+    // he's there; gapBelowCards measures that space, in the cards' child.
+    void catBottom();
+    void gapBelowCards();
+    void drawMag(ImDrawList* dl, Vec2f floor, float size);
     float lickButton(float right, float mid);
     float mangoButton(float right, float mid);
     float dimButton(float right, float mid);
@@ -236,6 +242,14 @@ private:
     bool busy_ = false;
     unsigned long frameInterval_ = 0, catInterval_ = 0;
     ImRect feedRect_;  // the Recent column, last frame
+    // Mag, the cat: his state, how he was this frame, the space below the
+    // panels last frame (empty for none), where his floors are and what he
+    // covered last frame (for the mouse), and the newest event he's seen.
+    Mag mag_;
+    Cat magNow_;
+    ImRect gapRect_, magRect_;
+    Vec2f magTop_, magBottom_;
+    int64_t magEventSeen_ = -1;
     // What sky draws, worked out once a minute: today's sunrise and
     // sunset, the sun's path between them and the moon's next rise and set.
     struct SkyDay {

@@ -658,11 +658,14 @@ void App::Frame() {
         ImGui::BeginChild("##cards", ImVec2(cardsW, 0), ImGuiChildFlags_None,
                           ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoScrollbar);
         cards(ImGui::GetContentRegionAvail().x, main);
+        if (config_.cat && feedW > 0) gapBelowCards();
+        else gapRect_ = ImRect();
         ImGui::EndChild();
         if (feedW > 0 && !feedFirst) {
             ImGui::SameLine(0, gap);
             drawFeed();
         }
+        if (feedW > 0) catBottom();
     }
 
     ImGui::EndChild();
@@ -3435,20 +3438,141 @@ float App::appsButton(float right, float mid) {
     return min.x;
 }
 
-// cat draws the black cat along the top of the Recent column.
+namespace {
+
+// BoundsCanvas draws through another canvas and keeps what it covered.
+class BoundsCanvas : public Canvas {
+public:
+    explicit BoundsCanvas(Canvas& c) : c_(c) {}
+    ImRect bounds{FLT_MAX, FLT_MAX, -FLT_MAX, -FLT_MAX};
+    void Circle(Vec2f c, float r, Rgba col) override { see(c, r, r), c_.Circle(c, r, col); }
+    void Ellipse(Vec2f c, float rx, float ry, float rot, Rgba col) override {
+        see(c, std::max(rx, ry), std::max(rx, ry)), c_.Ellipse(c, rx, ry, rot, col);
+    }
+    void Line(Vec2f a, Vec2f b, float w, Rgba col) override { see(a, w / 2, w / 2), see(b, w / 2, w / 2), c_.Line(a, b, w, col); }
+    void Polygon(const Vec2f* p, int n, Rgba col) override {
+        for (int i = 0; i < n; i++) see(p[i], 0, 0);
+        c_.Polygon(p, n, col);
+    }
+
+private:
+    void see(Vec2f p, float rx, float ry) { bounds.Add(ImRect(p.x - rx, p.y - ry, p.x + rx, p.y + ry)); }
+    Canvas& c_;
+};
+
+}  // namespace
+
+// cat moves Mag, the black cat, on a frame and draws him along the top of
+// the Recent column, when he's there.
 void App::cat(float width) {
     float size = 1.6f * scale_;
-    // Her space is 68 units tall: 64 above the floor (an arched tail),
-    // 4 below (rounded paws and her rim).
+    // His space is 68 units tall: 64 above the floor (an arched tail),
+    // 4 below (rounded paws and his rim).
     float h = std::round(68 * size);
     ImVec2 at = ImGui::GetCursorScreenPos();
     ImGui::Dummy(ImVec2(width, h));
     double t = ImGui::GetTime();
-    Cat c = CatAt(t, width / 2 / size);
-    DrawListCanvas canvas(ImGui::GetWindowDrawList());
-    DrawCat(canvas, c, t, Vec2f{at.x + width / 2, at.y + h - 4 * size}, size);
-    // Asleep, her breathing and Z's are slow: ten frames a second will do.
-    catInterval_ = c.asleep >= 1 ? 100 : 33;
+    magTop_ = Vec2f{at.x + width / 2, at.y + h - 4 * size};
+
+    CatWorld w;
+    w.half = width / 2 / size;
+    // The space below the panels, if it's tall enough for him (and the
+    // panels are full-width rows, whose edge he can jump up onto).
+    if (gapRect_.GetHeight() >= 76 * size) {
+        w.gapHalf = gapRect_.GetWidth() / 2 / size;
+        magBottom_ = Vec2f{gapRect_.GetCenter().x, gapRect_.Max.y - 6 * size};
+        if (compact_) w.ledge = (magBottom_.y - gapRect_.Min.y) / size;
+    }
+    std::time_t now = std::time(nullptr);
+    std::tm l{};
+    localtime_s(&l, &now);
+    w.clock = float(l.tm_hour * 3600 + l.tm_min * 60 + l.tm_sec);
+    w.day = l.tm_year * 400 + l.tm_yday;
+    // The weather now, from the forecast's "Now" tile.
+    for (const auto& s : model_.Snapshots())
+        for (const auto& st : s.summary)
+            if (st.label == "Now" && IsWeatherIcon(st.icon)) {
+                w.rain = st.icon == "rain" || st.icon == "drizzle" || st.icon == "showers" || st.icon == "storm";
+                w.warm = std::atof(st.value.c_str()) >= 20;
+            }
+
+    CatInput in;
+    ImGuiIO& io = ImGui::GetIO();
+    Vec2f floor = magNow_.place == CatPlace::Top ? magTop_ : magBottom_;
+    bool free = !settingsOpen_ && !ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+    in.hover = free && ImGui::IsMousePosValid() && magRect_.Contains(io.MousePos);
+    in.mouse = Vec2f{(io.MousePos.x - floor.x) / size, (io.MousePos.y - floor.y) / size};
+    in.click = in.hover && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+    int64_t newest = model_.LastEventID();
+    in.event = magEventSeen_ >= 0 && newest > magEventSeen_;
+    magEventSeen_ = newest;
+
+    magNow_ = mag_.Step(t, w, in);
+    magRect_ = ImRect();
+    if (magNow_.place == CatPlace::Top) {
+        ImGui::PushClipRect(at, ImVec2(at.x + width, at.y + h), true);
+        drawMag(ImGui::GetWindowDrawList(), magTop_, size);
+        ImGui::PopClipRect();
+    }
+    // Asleep, his breathing and Z's are slow: ten frames a second will do.
+    catInterval_ = magNow_.asleep >= 1 && magNow_.purr == 0 ? 100 : 33;
+}
+
+// drawMag draws Mag as he is this frame, with a "mrrp" when he's saying
+// it, and keeps where he is for the mouse.
+void App::drawMag(ImDrawList* dl, Vec2f floor, float size) {
+    double t = ImGui::GetTime();
+    DrawListCanvas canvas(dl);
+    BoundsCanvas bounds(canvas);
+    DrawCat(bounds, magNow_, t, floor, size);
+    magRect_ = bounds.bounds;
+    magRect_.ClipWith(ImRect(dl->GetClipRectMin(), dl->GetClipRectMax()));
+    if (magNow_.say > 0.02f) {
+        const Palette& p = Colours();
+        Vec2f head = CatHead(magNow_, floor, size);
+        ImFont* f = fonts_.caption;
+        const char* text = "mrrp";
+        ImVec2 ts = f->CalcTextSizeA(f->FontSize, FLT_MAX, 0, text);
+        float pad = 4 * scale_;
+        ImVec2 min(head.x + magNow_.facing * 6 * size - (magNow_.facing < 0 ? ts.x + pad * 2 : 0), head.y - ts.y - pad * 2);
+        ImVec2 max(min.x + ts.x + pad * 2, min.y + ts.y + pad * 2);
+        float a = magNow_.say;
+        ImVec4 bg = p.card, fg = p.text;
+        bg.w *= a, fg.w *= a;
+        dl->AddRectFilled(min, max, u32(bg), 6 * scale_);
+        ImVec4 edge = p.border;
+        edge.w *= a;
+        dl->AddRect(min, max, u32(edge), 6 * scale_);
+        dl->AddText(f, f->FontSize, ImVec2(min.x + pad, min.y + pad), u32(fg), text);
+    }
+}
+
+// gapBelowCards keeps the empty space at the bottom of the cards' column
+// this frame, for Mag to go to; it's called inside that child window.
+void App::gapBelowCards() {
+    ImGuiWindow* win = ImGui::GetCurrentWindow();
+    float top = ImGui::GetCursorScreenPos().y - ImGui::GetStyle().ItemSpacing.y;
+    ImRect r(win->Rect().Min.x, top, win->Rect().Max.x, win->Rect().Max.y);
+    gapRect_ = r.GetHeight() > 0 && r.GetWidth() > 0 ? r : ImRect();
+}
+
+// catBottom draws Mag in the space below the panels, in a window of his own
+// over them (he can sit on the last one's edge) that takes no input.
+void App::catBottom() {
+    if (!config_.cat || magNow_.place != CatPlace::Bottom || gapRect_.GetHeight() <= 0 || settingsOpen_) return;
+    float size = 1.6f * scale_;
+    ImVec2 min(gapRect_.Min.x, gapRect_.Min.y - 60 * size), max = gapRect_.Max;
+    ImGui::SetNextWindowPos(min);
+    ImGui::SetNextWindowSize(ImVec2(max.x - min.x, max.y - min.y));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0);
+    ImGui::Begin("##mag", nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav |
+                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoSavedSettings |
+                     ImGuiWindowFlags_NoBackground);
+    drawMag(ImGui::GetWindowDrawList(), magBottom_, size);
+    ImGui::End();
+    ImGui::PopStyleVar(2);
 }
 
 float App::landHeight() const { return std::round((compact_ ? 140 : 160) * scale_); }
