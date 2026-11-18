@@ -24,6 +24,7 @@ Tone toneNamed(const std::string& t) {
     if (t == "warn") return Tone::Warn;
     if (t == "muted") return Tone::Muted;
     if (t == "accent") return Tone::Accent;
+    if (t == "rain") return Tone::Rain;
     return Tone::None;
 }
 

@@ -13,6 +13,9 @@ struct Palette {
     // The app's name and Recent's heading, and blocks' titles: text and
     // muted, except in the retro theme's yellow.
     ImVec4 heading, blockTitle;
+    // Rain in the weather (icons and the chance-of-rain chart): blue, as
+    // the accent is purple; the retro theme keeps its accent.
+    ImVec4 rain;
     // The retro theme's extras: the background's gradient, top to bottom,
     // and panels' bevel, lit along the top and left.
     ImVec4 bgTop, bgBottom, bevelLight, bevelDark;

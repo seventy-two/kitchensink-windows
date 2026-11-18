@@ -15,7 +15,7 @@
 
 namespace ks {
 
-enum class Tone { None, Good, Bad, Warn, Muted, Accent };
+enum class Tone { None, Good, Bad, Warn, Muted, Accent, Rain };
 enum class Align { Left, Right, Center };
 enum class Priority { Low, Normal, High };
 

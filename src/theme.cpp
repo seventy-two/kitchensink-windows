@@ -24,19 +24,19 @@ ImVec4 hex(unsigned rgb, float a = 1.0f) {
 
 const Palette kDark = {
     hex(0x15171C), hex(0x1E2128), hex(0x2B2F38), hex(0xE6E8EC), hex(0x8C929D), hex(0x3FB950),
-    hex(0xF8645A), hex(0xD9A23A), hex(0x5AA8FF), hex(0x262A33), hex(0x22252D), hex(0x2A2E37),
+    hex(0xF8645A), hex(0xD9A23A), hex(0xA78BFA), hex(0x262A33), hex(0x22252D), hex(0x2A2E37),
 };
 
 const Palette kLight = {
     hex(0xF2F3F5), hex(0xFFFFFF), hex(0xE1E4E8), hex(0x1F2328), hex(0x656D76), hex(0x1A7F37),
-    hex(0xCF222E), hex(0x9A6700), hex(0x0969DA), hex(0xF0F3F6), hex(0xF7F8FA), hex(0xEEF0F3),
+    hex(0xCF222E), hex(0x9A6700), hex(0x8250DF), hex(0xF0F3F6), hex(0xF7F8FA), hex(0xEEF0F3),
 };
 
 // Pixels showing black are off on an OLED screen, and dimmer, fainter
 // static parts wear it less.
 const Palette kOled = {
     hex(0x000000), hex(0x0A0B0D), hex(0x17191D), hex(0xC4C8CF), hex(0x6A707A), hex(0x2E9A45),
-    hex(0xD9534B), hex(0xBF8A27), hex(0x4A8AD4), hex(0x15171B), hex(0x0E0F12), hex(0x131518),
+    hex(0xD9534B), hex(0xBF8A27), hex(0x8A70D6), hex(0x15171B), hex(0x0E0F12), hex(0x131518),
 };
 
 // The retro theme, after the WeatherStar 4000: a deep blue sky fading to
@@ -48,7 +48,8 @@ const Palette kRetro = {
 };
 
 // extras fills in what the plain palettes don't set.
-Palette extras(Palette p) {
+Palette extras(Palette p, unsigned rain) {
+    p.rain = hex(rain);
     p.heading = p.text;
     p.blockTitle = p.muted;
     p.bgTop = p.bgBottom = p.bg;
@@ -57,7 +58,7 @@ Palette extras(Palette p) {
 }
 
 Palette retro() {
-    Palette p = extras(kRetro);
+    Palette p = extras(kRetro, 0xFFC21A);
     p.heading = p.blockTitle = hex(0xFFE84A);
     p.bgTop = hex(0x0B1663);
     p.bgBottom = hex(0x3A1D7E);
@@ -67,7 +68,7 @@ Palette retro() {
     return p;
 }
 
-Palette current = extras(kDark);
+Palette current = extras(kDark, 0x5AA8FF);
 
 #ifdef _WIN32
 std::string fontPath(const char* file) {
@@ -153,15 +154,16 @@ ImVec4 ToneColour(Tone t) {
     case Tone::Warn: return current.warn;
     case Tone::Muted: return current.muted;
     case Tone::Accent: return current.accent;
+    case Tone::Rain: return current.rain;
     default: return current.text;
     }
 }
 
 void ApplyTheme(Theme theme, float scale, bool compact) {
     switch (theme) {
-    case Theme::Light: current = extras(kLight); break;
-    case Theme::Dark: current = extras(kDark); break;
-    case Theme::Oled: current = extras(kOled); break;
+    case Theme::Light: current = extras(kLight, 0x0969DA); break;
+    case Theme::Dark: current = extras(kDark, 0x5AA8FF); break;
+    case Theme::Oled: current = extras(kOled, 0x4A8AD4); break;
     case Theme::Retro: current = retro(); break;
     }
     bool dark = theme != Theme::Light;

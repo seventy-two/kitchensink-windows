@@ -246,10 +246,10 @@ Rgba rgba(const ImVec4& a, const ImVec4& b = {}, float k = 0) {
 }
 
 // weatherIcon draws a weather icon in the square at at, size across, in
-// the theme's colours: rain in its accent, so wet hours stand out.
+// the theme's colours: rain in its rain blue, so wet hours stand out.
 void weatherIcon(const std::string& name, ImVec2 at, float size) {
     const Palette& p = Colours();
-    IconColours col{rgba(p.warn), rgba(p.text), rgba(p.text, p.muted, 0.3f), rgba(p.muted, p.frame, 0.2f), rgba(p.accent), rgba(p.text), rgba(p.warn)};
+    IconColours col{rgba(p.warn), rgba(p.text), rgba(p.text, p.muted, 0.3f), rgba(p.muted, p.frame, 0.2f), rgba(p.rain), rgba(p.text), rgba(p.warn)};
     DrawListCanvas canvas(ImGui::GetWindowDrawList());
     DrawWeatherIcon(canvas, name, Vec2f{at.x, at.y}, size, col);
 }
@@ -791,7 +791,7 @@ void App::header() {
     float titleH = ImGui::GetTextLineHeight();
     float mid = captionH_ / 2;
     ImGui::SetCursorPos(ImVec2(ImGui::GetStyle().WindowPadding.x, mid - titleH / 2));
-    ImGui::TextColored(p.heading, "kitchensink");
+    ImGui::TextColored(p.retro ? p.heading : p.accent, "kitchensink");
     ImGui::PopFont();
 
     // The retro theme's clock, as on the WeatherStar: time, then date.
@@ -831,7 +831,13 @@ void App::header() {
     ImGui::SetCursorPosY(mid - textH / 2);
     ImVec2 pos = ImGui::GetCursorScreenPos();
     float r = 4 * scale_;
-    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(pos.x + r, pos.y + textH / 2), r, u32(dot));
+    // Centred on the capitals ("L" of Live), not the line box, whose
+    // descender room would leave the dot sitting high.
+    float dotY = pos.y + textH / 2;
+    ImFont* capFont = ImGui::GetFont();
+    if (const ImFontGlyph* g = capFont->FindGlyph('L'))
+        dotY = pos.y + (g->Y0 + g->Y1) / 2 * (ImGui::GetFontSize() / capFont->FontSize);
+    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(pos.x + r, dotY), r, u32(dot));
     ImGui::Dummy(ImVec2(r * 2, textH));
     ImGui::SameLine(0, 6 * scale_);
     ImGui::SetCursorPosY(mid - textH / 2);
@@ -1926,7 +1932,7 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live, bool gri
         ImVec2 a(at[i].x + shift, at[i].y);
         float w = ws[i];
         ImVec4 tone = ToneColour(s.tone);
-        bool coloured = s.tone == Tone::Good || s.tone == Tone::Bad || s.tone == Tone::Warn || s.tone == Tone::Accent;
+        bool coloured = s.tone == Tone::Good || s.tone == Tone::Bad || s.tone == Tone::Warn || s.tone == Tone::Accent || s.tone == Tone::Rain;
         if (s.lead) {
             // The value centred in the row's height, the label before it
             // on the same line, both resting on its bottom.
@@ -2005,7 +2011,7 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live, bool gri
                 float e = (1 - std::cos(float(k <= steps ? k : k - steps) / steps * 3.14159265f)) / 2;  // eased
                 pts[k] = ImVec2(a.x + u * w, a.y + h - (from + (to - from) * e) * h);
             }
-            ImU32 fill = u32(fade(p.accent, 0.13f)), line = u32(fade(p.accent, 0.5f));
+            ImU32 fill = u32(fade(p.rain, 0.13f)), line = u32(fade(p.rain, 0.5f));
             float thick = 1.25f * scale_, floor = a.y + h - thick / 2;
             for (int k = 0; k < steps * 2; k++) {
                 ImVec2 q0 = pts[k], q1 = pts[k + 1];
@@ -2104,7 +2110,7 @@ bool App::slimStats(const std::vector<Stat>& stats, float width, bool asChips, b
         ImGui::PopFont();
         ImVec2 a(origin.x + x, origin.y), z(a.x + w, a.y + h);
         ImVec4 tone = ToneColour(st.tone);
-        bool coloured = st.tone == Tone::Good || st.tone == Tone::Bad || st.tone == Tone::Warn || st.tone == Tone::Accent;
+        bool coloured = st.tone == Tone::Good || st.tone == Tone::Bad || st.tone == Tone::Warn || st.tone == Tone::Accent || st.tone == Tone::Rain;
         if (asChips && !st.lead) {
             if (spark) {
                 dl->AddRectFilled(a, z, u32(p.frame));
