@@ -224,10 +224,14 @@ CatPose perchPaw() {
 }
 const CatPose kPerchPaw = perchPaw();
 
-// A loaf in a box, wide awake, his tail hanging out over the back.
+// A loaf in a box, wide awake: tucked in small so all of him but his head
+// and the top of his back is below the rim, his chin just over the front
+// and the tip of his tail curled up over the back.
 CatPose boxed() {
-    CatPose p = withHead(kLoaf, {17, -22}, 0, 1);
-    p.tail = {{{-16, -14}, {-19, -18}, {-22, -17}, {-23, -13}, {-23, -9}, {-22, -5}, {-21, -2}, {-19, -1}}};
+    CatPose p = make({7, -12}, 9, {-2, -13}, 10, {-9, -12}, 9.5f, {11, -25}, 0,
+                     {{{9, -8}, {7, -8}, {-7, -8}, {-9, -8}}}, {{{12, -5}, {10, -5}, {-5, -5}, {-8, -5}}},
+                     {{{-15, -14}, {-17, -17}, {-17.5f, -21}, {-17, -25}, {-15.5f, -28.5f}, {-13, -30.5f}, {-10.5f, -31}, {-8.5f, -30}}},
+                     1, 0);
     return p;
 }
 const CatPose kBoxed = boxed();
@@ -259,7 +263,7 @@ constexpr float kBatBy = 5;    // how far each bat sends the toy
 constexpr float kRun = 95;     // units a second, on a mad sprint
 constexpr float kGallop = 34;  // units a stride, sprinting
 constexpr float kSkidBy = 7;   // units he skids at the end of a sprint
-constexpr float kBoxAt = 30, kBoxOut = 22;  // to the box's middle, and on past it hopping out
+constexpr float kBoxAt = 32, kBoxOut = 20;  // to the box's middle, and on past it hopping out
 constexpr float kUpBy = 12, kDownBy = 8;    // forward jumping up onto a panel's edge, and down
 constexpr float kMugAt = 16;                // from his middle to the mug's, up there
 
@@ -1369,15 +1373,15 @@ static void drawBox(Canvas& c, const CatProp& b, Vec2f floor, float size, BoxPar
         c.Polygon(q, 4, faded(col, a));
     };
     if (part != BoxPart::Front) {
-        c.Ellipse(at(0, 0.6f), 20 * size, 1.4f * size, 0, faded(kShadow, a));
-        quad({-15, -21}, {15, -21}, {16, -17}, {-16, -17}, Rgba{92, 66, 40});  // the far flap
-        quad({-17, -17}, {17, -17}, {17, 0}, {-17, 0}, Rgba{104, 76, 46});    // inside
+        c.Ellipse(at(0, 0.6f), 23 * size, 1.4f * size, 0, faded(kShadow, a));
+        quad({-18, -21}, {18, -21}, {19, -17}, {-19, -17}, Rgba{92, 66, 40});  // the far flap
+        quad({-20, -17}, {20, -17}, {20, 0}, {-20, 0}, Rgba{104, 76, 46});    // inside
     }
     if (part != BoxPart::Back) {
-        quad({-17, -15}, {17, -15}, {17, 0.5f}, {-17, 0.5f}, Rgba{172, 128, 80});
-        quad({-17, -15}, {-17, -12.5f}, {-24, -19}, {-22.5f, -21}, Rgba{152, 110, 66});  // side flaps, folded out
-        quad({17, -15}, {22.5f, -21}, {24, -19}, {17, -12.5f}, Rgba{152, 110, 66});
-        quad({-17, -15}, {17, -15}, {17, -14}, {-17, -14}, Rgba{196, 152, 100});         // the rim
+        quad({-20, -15}, {20, -15}, {20, 0.5f}, {-20, 0.5f}, Rgba{172, 128, 80});
+        quad({-20, -15}, {-20, -12.5f}, {-27, -19}, {-25.5f, -21}, Rgba{152, 110, 66});  // side flaps, folded out
+        quad({20, -15}, {25.5f, -21}, {27, -19}, {20, -12.5f}, Rgba{152, 110, 66});
+        quad({-20, -15}, {20, -15}, {20, -14}, {-20, -14}, Rgba{196, 152, 100});         // the rim
         quad({-1.6f, -15}, {1.6f, -15}, {1.6f, 0.5f}, {-1.6f, 0.5f}, Rgba{206, 178, 128, 200});  // tape
     }
 }
