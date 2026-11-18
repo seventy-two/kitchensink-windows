@@ -77,8 +77,8 @@ result is a single `kitchensink.exe` with nothing to install.
   track and artist, previous / play-pause / next and a thin
   progress line; hover it for the rest. When the window is too narrow for
   the Recent column it's a panel among the others instead. A playing app
-  wins over a paused one, and a paused track hides ten minutes after it
-  last played.
+  wins over a paused one, and paused tracks stay for as long as Windows
+  keeps their session, as in its own media pop-up.
 - **Buttons for apps on this PC**: a table cell can name a local app
   (`local`), drawn as a button only where that app is installed. The one
   known is watchgrab (`%LOCALAPPDATA%\Programs\watchgrab\watchgrab.exe`),

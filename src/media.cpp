@@ -92,11 +92,6 @@ void MediaWatcher::run() {
     // Covers by track (title, artist and album), so each is read once.
     std::map<std::string, std::string> covers;
     int coverCount = 0;
-    // A paused track stays for a while after it last played, so pausing
-    // from the panel doesn't make it vanish, then hides: a video paused
-    // hours ago isn't worth the space. By session id, when each last played.
-    constexpr unsigned long long kPausedShownMs = 10 * 60 * 1000;
-    std::map<std::string, unsigned long long> lastPlayed;
 
     std::unique_lock<std::mutex> lock(mu_);
     while (!stop_) {
@@ -120,7 +115,6 @@ void MediaWatcher::run() {
         };
         std::vector<Shown> shown;
         std::map<std::string, std::string> seenCovers;
-        unsigned long long now = GetTickCount64();
         try {
             if (!manager) manager = GlobalSystemMediaTransportControlsSessionManager::RequestAsync().get();
             auto current = manager.GetCurrentSession();
@@ -157,10 +151,8 @@ void MediaWatcher::run() {
                     np.media.asOf = unixSeconds(timeline.LastUpdatedTime());
                     std::string track = np.title + "\n" + np.artist + "\n" + np.album;
                     np.media.id = s.appID + "\n" + track;
-
-                    if (np.media.playing) lastPlayed[np.media.id] = now;
-                    auto last = lastPlayed.find(np.media.id);
-                    if (last == lastPlayed.end() || now - last->second > kPausedShownMs) continue;
+                    // Every session Windows lists shows, paused or not,
+                    // like its own media pop-up.
                     np.active = true;
 
                     // The cover only changes with the track. Each gets a
@@ -186,8 +178,6 @@ void MediaWatcher::run() {
             manager = nullptr;
         }
         covers = std::move(seenCovers);
-        for (auto it = lastPlayed.begin(); it != lastPlayed.end();)
-            it = now - it->second > kPausedShownMs ? lastPlayed.erase(it) : std::next(it);
         // Playing ones first, Windows' current one first among equals.
         std::stable_sort(shown.begin(), shown.end(), [](const Shown& a, const Shown& b) {
             if (a.np.media.playing != b.np.media.playing) return a.np.media.playing;
