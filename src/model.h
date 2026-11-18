@@ -85,6 +85,17 @@ struct Cell {
     // A button that sends the monitor an action of actionType with
     // actionId; actionLabel says what it does.
     std::string actionType, actionId, actionLabel;
+    // A drop-down in place of the text (which model a monitor uses):
+    // picking an option sends the monitor an action of choice.action with
+    // choice.id and the option's value as text.
+    struct Option {
+        std::string label, value;
+    };
+    struct Choice {
+        std::string action, id, value, hint;
+        std::vector<Option> options;
+    } choice;
+    bool HasChoice() const { return !choice.action.empty() && !choice.options.empty(); }
 };
 
 // Slider is a checklist item's 0-100 control (a light's brightness): let

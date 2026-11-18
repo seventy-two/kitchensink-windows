@@ -1196,6 +1196,40 @@ void App::refreshButton(const Snapshot& s) {
 // e.g. eBay's ignore. It shows only while its row is hovered (show), its
 // space kept so nothing moves. Once sent it shows a tick until the server's
 // next snapshot, which usually drops the button.
+// choiceCell is a table cell's drop-down, e.g. which model a monitor
+// uses: picking an option sends its monitor the choice's action with the
+// option's value. The pick shows at once, until the next snapshot agrees.
+void App::choiceCell(const std::string& monitor, const Cell& cell) {
+    const Cell::Choice& ch = cell.choice;
+    std::string key = monitor + "\n" + ch.action + "\n" + ch.id;
+    std::string value = ch.value;
+    if (auto it = pickedChoices_.find(key); it != pickedChoices_.end()) {
+        if (it->second.first == ch.value || ImGui::GetTime() - it->second.second > 15) pickedChoices_.erase(it);
+        else value = it->second.first;
+    }
+    std::string label = cell.text;
+    for (const auto& o : ch.options)
+        if (o.value == value) label = o.label;
+    ImGui::PushID(key.c_str());
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::PushStyleColor(ImGuiCol_Text, ToneColour(cell.tone));
+    bool open = ImGui::BeginCombo("##choice", label.c_str());
+    ImGui::PopStyleColor();
+    if (ImGui::IsItemHovered() && !open && !ch.hint.empty()) ImGui::SetTooltip("%s", ch.hint.c_str());
+    if (open) {
+        for (const auto& o : ch.options) {
+            bool chosen = o.value == value;
+            if (ImGui::Selectable(o.label.c_str(), chosen) && !chosen) {
+                pickedChoices_[key] = {o.value, ImGui::GetTime()};
+                client_->Act(monitor, nlohmann::json{{"type", ch.action}, {"id", ch.id}, {"text", o.value}}.dump());
+            }
+            if (chosen) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::PopID();
+}
+
 void App::actionButton(const std::string& monitor, const Cell& cell, bool show) {
     std::string key = monitor + "\n" + cell.actionType + "\n" + cell.actionId;
     bool sent = sentActions_.count(key) > 0;
@@ -2989,6 +3023,12 @@ void App::table(const std::string& monitor, const Block& b) {
             if (!r[c].localApp.empty() && grabber_->Has(r[c].localApp))
                 w = std::max(w, ImGui::CalcTextSize(icon::Download).x + 8 * scale_);
             if (!r[c].actionType.empty()) w = std::max(w, ImGui::CalcTextSize(icon::Dismiss).x + 8 * scale_);
+            if (r[c].HasChoice()) {
+                // Room for the longest option and the combo's arrow.
+                float widest = 0;
+                for (const auto& o : r[c].choice.options) widest = std::max(widest, ImGui::CalcTextSize(o.label.c_str()).x);
+                w = std::max(w, widest + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2);
+            }
         }
         ImGui::TableSetupColumn(b.columns[c].title.c_str(), ImGuiTableColumnFlags_WidthFixed, std::ceil(w));
     }
@@ -3018,6 +3058,10 @@ void App::table(const std::string& monitor, const Block& b) {
             }
             if (!cell.actionType.empty()) {
                 actionButton(monitor, cell, rowHovered);
+                continue;
+            }
+            if (cell.HasChoice()) {
+                choiceCell(monitor, cell);
                 continue;
             }
             textAligned(cell.text, b.columns[c].align, ToneColour(cell.tone));

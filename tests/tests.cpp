@@ -970,6 +970,22 @@ static void testGrab() {
         CHECK(e.blocks[0].rows[0][0].actionType.empty());
     }
 
+    // A table cell with a drop-down.
+    Snapshot ai = ParseSnapshot(nlohmann::json::parse(R"({"monitor":"ai","blocks":[{"type":"table","columns":[{"title":"Monitor"},{"title":"Uses"}],
+        "rows":[[{"text":"Mail"},{"text":"Gemini","choice":{"action":"choose","id":"mail/provider","value":"gemini","hint":"Who Mail asks",
+        "options":[{"label":"Gemini","value":"gemini"},{"label":"Claude","value":"claude"}]}}]]}]})"));
+    if (!ai.blocks.empty()) {
+        const Cell& c = ai.blocks[0].rows[0][1];
+        CHECK(c.HasChoice());
+        CHECK_EQ(c.choice.action, std::string("choose"));
+        CHECK_EQ(c.choice.id, std::string("mail/provider"));
+        CHECK_EQ(c.choice.value, std::string("gemini"));
+        CHECK_EQ(c.choice.hint, std::string("Who Mail asks"));
+        CHECK_EQ(c.choice.options.size(), size_t(2));
+        if (c.choice.options.size() == 2) CHECK_EQ(c.choice.options[1].label, std::string("Claude"));
+        CHECK(!ai.blocks[0].rows[0][0].HasChoice());
+    }
+
     auto st = ParseWatchgrabState(R"({"started":"2026-10-14T21:22:48Z","films":{
         "fish-tank":{"name":"Fish Tank","old":true,"status":"grabbed","torrent":"Fish Tank 2009 1080p BluRay-hallowed"},
         "pi":{"name":"Pi","status":"have"},

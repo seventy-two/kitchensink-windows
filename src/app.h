@@ -3,6 +3,7 @@
 
 #include <array>
 #include <functional>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -113,6 +114,7 @@ private:
     void pasteButton(const Snapshot& s);
     void localButton(const Cell& cell);
     void actionButton(const std::string& monitor, const Cell& cell, bool show);
+    void choiceCell(const std::string& monitor, const Cell& cell);
     void panelHead(const Snapshot& s);
     const Block* fullTable(const Snapshot& s, const Block& b);
     bool grip(const Snapshot& s, float y, bool shown);
@@ -214,6 +216,9 @@ private:
     const Block* measure_ = nullptr;     // while drawing a short table: the full one, for column widths
     bool localHovered_ = false;         // a local or action button is under the mouse, so a row's click isn't for the row
     std::set<std::string> sentActions_;  // cells' actions sent, by monitor, type and ID, drawn as done
+    // Options picked in drop-downs, by monitor, action and ID, shown until
+    // the server's snapshot agrees (or 15s pass): the value and when.
+    std::map<std::string, std::pair<std::string, double>> pickedChoices_;
     Snapshot mediaPanel_;  // no blocks while nothing's playing
     bool mediaBarShown_ = false;  // Recent's column is up, so Now playing is a bar in it, not a panel
     std::function<void(const std::string&, const std::string&)> notify_;

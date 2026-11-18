@@ -110,6 +110,15 @@ Block parseBlock(const json& j) {
                 cell.actionId = str(*action, "id");
                 cell.actionLabel = str(*action, "label");
             }
+            auto choice = c.find("choice");
+            if (choice != c.end() && choice->is_object()) {
+                cell.choice.action = str(*choice, "action");
+                cell.choice.id = str(*choice, "id");
+                cell.choice.value = str(*choice, "value");
+                cell.choice.hint = str(*choice, "hint");
+                for (const auto& o : array(*choice, "options"))
+                    cell.choice.options.push_back({str(o, "label"), str(o, "value")});
+            }
             row.push_back(std::move(cell));
         }
         b.rows.push_back(std::move(row));
