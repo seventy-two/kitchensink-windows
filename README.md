@@ -137,17 +137,23 @@ result is a single `kitchensink.exe` with nothing to install.
 - An eye button in the title bar, there when a monitor sends private
   figures (a portfolio's value and gains), hides or shows them at a click:
   their blocks and summary chips go, and it's remembered.
-- **Cat** (in settings, off by default): a black cat, drawn in code,
-  sleeps curled up above the Recent column, breathing, with the odd tail
-  twitch and Z's, and now and then stirs to lift her head and look about.
-  Every 100 seconds or so she wakes, stretches, yawns, arches her back,
-  sometimes wanders to another spot, and finds something to do: a wash
-  (licking a paw, then her face), a scratch behind the ear, a slow blink at
-  you, a pounce, a drink from a bowl of milk that slides in from the side,
-  or hunting a toy mouse (stalking, pouncing, batting it along). Some days
-  she kneads her bed before curling up again. Asleep she needs ten frames a
-  second, awake about thirty, and none while the window's minimised or
-  dimmed.
+- **Cat** (in settings, off by default): Mag, a black cat drawn in code,
+  sleeps above the Recent column (curled up, as a loaf, on his side, or
+  belly up on warm days), breathing, with the odd tail twitch and Z's, and
+  now and then stirs to lift his head and look about. Every couple of
+  minutes he wakes, stretches, yawns, arches his back, sometimes wanders to
+  another spot, and finds something to do: a wash, a scratch behind the
+  ear, a slow blink at you, a pounce, a drink of milk, hunting a toy mouse,
+  a mad sprint, or sitting in a cardboard box. When the panels leave room
+  at the bottom of the window he walks off the right and comes in from the
+  left down there, where he can jump up onto the last panel's edge (and
+  push a mug off it); if a panel opens and the room goes, he's back up top.
+  He's livelier at dawn and dusk, sleepier at night and when the forecast
+  says it's raining, and from 07:25 and 17:55 he waits for breakfast and
+  dinner. He lifts his head when something new arrives, notices the mouse
+  now and then, and purrs when clicked (too many clicks and he stalks off).
+  Asleep he needs ten frames a second, awake about thirty, and none while
+  the window's minimised or dimmed.
 - **Lick of the Day**, if it's installed (`%LOCALAPPDATA%\Programs\dailylick`),
   starts with the dashboard and has no taskbar button of its own: the
   electric guitar in the title bar, by the eye, hides and shows it
@@ -261,7 +267,7 @@ make -f linux/Makefile -j4        # build/kitchensink, then the tests
 | `src/config.cpp` | settings and start-with-Windows |
 | `src/theme.cpp` | palettes, fonts and ImGui style |
 | `src/retro.cpp` | the retro theme's text shadows and clock |
-| `src/cat.cpp` | the cat above Recent: her poses, routine and drawing |
+| `src/cat.cpp` | Mag the cat: his poses, behaviour and drawing |
 | `src/weather_icon.cpp` | weather icons for the forecast's chips, drawn from shapes |
 | `src/sky.cpp` | where the sun and moon are, sunrise and sunset and the moon's phase, for the landscape under Recent |
 | `src/canvas.h` | the simple drawing interface those two draw through |
