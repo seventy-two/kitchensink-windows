@@ -59,6 +59,7 @@ inline constexpr const char* Moon = "\xEE\x9C\x88";        // U+E708 QuietHours
 inline constexpr const char* Monitor = "\xEE\x9F\xB4";     // U+E7F4 TVMonitor
 inline constexpr const char* Brightness = "\xEE\x9C\x86";  // U+E706 Brightness, a sun
 inline constexpr const char* Dismiss = "\xEE\x9C\x91";      // U+E711 Cancel, a cross
+inline constexpr const char* Delete = "\xEE\x9D\x8D";       // U+E74D Delete, a bin
 }  // namespace icon
 #else
 namespace icon {
@@ -86,6 +87,7 @@ inline constexpr const char* Moon = "\xEF\x86\x86";  // U+F186 fa-moon
 inline constexpr const char* Monitor = "\xEF\x84\x88";  // U+F108 fa-desktop
 inline constexpr const char* Brightness = "\xEF\x86\x85";  // U+F185 fa-sun
 inline constexpr const char* Dismiss = "\xEE\xA9\xB6";  // U+EA76 cod-close
+inline constexpr const char* Delete = "\xEF\x87\xB8";   // U+F1F8 fa-trash
 }  // namespace icon
 #endif
 

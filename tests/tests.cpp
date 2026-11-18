@@ -968,7 +968,11 @@ static void testGrab() {
         CHECK_EQ(c.actionId, std::string("v1|1|0"));
         CHECK_EQ(c.actionLabel, std::string("Ignore Wipeout from now on"));
         CHECK(e.blocks[0].rows[0][0].actionType.empty());
+        CHECK(c.actionIcon.empty());
     }
+    Snapshot hide = ParseSnapshot(nlohmann::json::parse(R"({"monitor":"ebay","blocks":[{"type":"table","columns":[{"title":""}],
+        "rows":[[{"text":"","action":{"type":"hide","id":"v1|2|0","label":"Hide this listing","icon":"delete"}}]]}]})"));
+    if (!hide.blocks.empty()) CHECK_EQ(hide.blocks[0].rows[0][0].actionIcon, std::string("delete"));
 
     // A table cell with a drop-down.
     Snapshot ai = ParseSnapshot(nlohmann::json::parse(R"({"monitor":"ai","blocks":[{"type":"table","columns":[{"title":"Monitor"},{"title":"Uses"}],

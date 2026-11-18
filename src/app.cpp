@@ -1193,7 +1193,7 @@ void App::refreshButton(const Snapshot& s) {
 }
 
 // actionButton is a table cell's button that sends its monitor an action,
-// e.g. eBay's ignore. It shows only while its row is hovered (show), its
+// e.g. eBay's ignore (a cross) or hide (a bin). It shows only while its row is hovered (show), its
 // space kept so nothing moves. Once sent it shows a tick until the server's
 // next snapshot, which usually drops the button.
 // choiceCell is a table cell's drop-down, e.g. which model a monitor
@@ -1245,7 +1245,8 @@ void App::actionButton(const std::string& monitor, const Cell& cell, bool show) 
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0, 0, 0, 0));
     }
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4 * scale_, 0));
-    if (ImGui::Button(sent ? icon::CheckMark : icon::Dismiss) && !sent) {
+    const char* glyph = cell.actionIcon == "delete" ? icon::Delete : icon::Dismiss;
+    if (ImGui::Button(sent ? icon::CheckMark : glyph) && !sent) {
         sentActions_.insert(key);
         client_->Act(monitor, nlohmann::json{{"type", cell.actionType}, {"id", cell.actionId}}.dump());
     }

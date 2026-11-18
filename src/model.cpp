@@ -109,6 +109,7 @@ Block parseBlock(const json& j) {
                 cell.actionType = str(*action, "type");
                 cell.actionId = str(*action, "id");
                 cell.actionLabel = str(*action, "label");
+                cell.actionIcon = str(*action, "icon");
             }
             auto choice = c.find("choice");
             if (choice != c.end() && choice->is_object()) {

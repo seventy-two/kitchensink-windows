@@ -83,8 +83,9 @@ struct Cell {
     // only where the app is installed.
     std::string localApp, localArg;
     // A button that sends the monitor an action of actionType with
-    // actionId; actionLabel says what it does.
-    std::string actionType, actionId, actionLabel;
+    // actionId; actionLabel says what it does, and actionIcon its picture
+    // ("delete", a bin; a cross otherwise).
+    std::string actionType, actionId, actionLabel, actionIcon;
     // A drop-down in place of the text (which model a monitor uses):
     // picking an option sends the monitor an action of choice.action with
     // choice.id and the option's value as text.
