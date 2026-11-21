@@ -810,7 +810,7 @@ void App::header() {
         std::tm local{};
         localtime_s(&local, &tt);
         clock = p.retro ? RetroClock(local) : PlainClock(local);
-        ImGui::PushFont(p.retro ? fonts_.heading : fonts_.caption);
+        ImGui::PushFont(p.retro ? fonts_.heading : fonts_.body);
         clockW = ImGui::CalcTextSize(clock.first.c_str()).x;
         ImGui::PopFont();
         ImGui::PushFont(fonts_.caption);
@@ -924,8 +924,8 @@ void App::header() {
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float x = buttonsLeft - 16 * scale_ - clockW;
-        // The retro time is bold; the others' matches the date.
-        ImFont* timeFont = p.retro ? fonts_.heading : fonts_.caption;
+        // The retro time is bold; the others' is regular, as dull as the date.
+        ImFont* timeFont = p.retro ? fonts_.heading : fonts_.body;
         ImGui::PushFont(timeFont);
         ImVec2 ts = ImGui::CalcTextSize(clock.first.c_str());
         ImGui::PopFont();
