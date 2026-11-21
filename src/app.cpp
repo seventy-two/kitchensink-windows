@@ -802,7 +802,7 @@ void App::header() {
     ImGui::PopFont();
 
     // The clock. The retro theme's is the WeatherStar's, time then date,
-    // with seconds; the others' is the date, then a duller 24-hour time.
+    // with seconds; the others' is the date, then 24-hour time, both muted.
     std::pair<std::string, std::string> clock;
     float clockW = 0, gapW = 10 * scale_;
     {
@@ -810,7 +810,7 @@ void App::header() {
         std::tm local{};
         localtime_s(&local, &tt);
         clock = p.retro ? RetroClock(local) : PlainClock(local);
-        ImGui::PushFont(fonts_.heading);
+        ImGui::PushFont(p.retro ? fonts_.heading : fonts_.caption);
         clockW = ImGui::CalcTextSize(clock.first.c_str()).x;
         ImGui::PopFont();
         ImGui::PushFont(fonts_.caption);
@@ -924,19 +924,21 @@ void App::header() {
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float x = buttonsLeft - 16 * scale_ - clockW;
-        ImGui::PushFont(fonts_.heading);
+        // The retro time is bold; the others' matches the date.
+        ImFont* timeFont = p.retro ? fonts_.heading : fonts_.caption;
+        ImGui::PushFont(timeFont);
         ImVec2 ts = ImGui::CalcTextSize(clock.first.c_str());
         ImGui::PopFont();
         ImGui::PushFont(fonts_.caption);
         ImVec2 ds = ImGui::CalcTextSize(clock.second.c_str());
         ImGui::PopFont();
-        // Retro: time, then date. Otherwise: date, then a duller time.
+        // Retro: time, then date. Otherwise: date, then time, both muted.
         float timeX = p.retro ? x : x + ds.x + gapW, dateX = p.retro ? x + ts.x + gapW : x;
-        ImGui::PushFont(fonts_.heading);
+        ImGui::PushFont(timeFont);
         dl->AddText(ImVec2(timeX, std::round(origin.y + mid - ts.y / 2)), u32(p.retro ? p.text : p.muted), clock.first.c_str());
         ImGui::PopFont();
         ImGui::PushFont(fonts_.caption);
-        dl->AddText(ImVec2(dateX, std::round(origin.y + mid - ds.y / 2)), u32(p.retro ? p.heading : p.text), clock.second.c_str());
+        dl->AddText(ImVec2(dateX, std::round(origin.y + mid - ds.y / 2)), u32(p.retro ? p.heading : p.muted), clock.second.c_str());
         ImGui::PopFont();
     }
     ImGui::SetCursorPosY(captionH_ + (compact_ ? 2 : 8) * scale_);
