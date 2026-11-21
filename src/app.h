@@ -113,6 +113,13 @@ private:
     void refreshButton(const Snapshot& s);
     // pasteButton sends the clipboard's text to a monitor that takes it.
     void pasteButton(const Snapshot& s);
+    // gearButton opens a panel's own settings (see panelSettings).
+    void gearButton(const Snapshot& s);
+    // panelSettings draws the settings blocks of the panel whose gear was
+    // clicked (panelSettings_), in a window over the dashboard.
+    void panelSettings();
+    // inputCell is a table cell's text box: Enter sends its action.
+    void inputCell(const std::string& monitor, const Cell& cell);
     void localButton(const Cell& cell);
     void actionButton(const std::string& monitor, const Cell& cell, bool show);
     void choiceCell(const std::string& monitor, const Cell& cell);
@@ -222,6 +229,15 @@ private:
     // While drawing a short table: the full ones it's cut from (a panel
     // can have several of the same shape), for column widths.
     std::vector<const Block*> measure_;
+    std::string panelSettings_;  // the monitor whose settings are open
+    // Each text box's text, by monitor, action and id, with the server's
+    // value it started from: a new value replaces it unless it's being
+    // edited.
+    struct InputState {
+        char buf[256] = {};
+        std::string from;
+    };
+    std::map<std::string, InputState> inputs_;
     bool localHovered_ = false;         // a local or action button is under the mouse, so a row's click isn't for the row
     std::set<std::string> sentActions_;  // cells' actions sent, by monitor, type and ID, drawn as done
     // Options picked in drop-downs, by monitor, action and ID, shown until

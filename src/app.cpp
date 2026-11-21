@@ -670,6 +670,7 @@ void App::Frame() {
 
     ImGui::EndChild();
     settings();
+    panelSettings();
 
     // OLED care dims everything when the mouse hasn't been over the window
     // for a while; it's back as soon as it is.
@@ -677,7 +678,7 @@ void App::Frame() {
     // Win32 backend reports the cursor wherever it is on screen. So ask
     // Windows whether the cursor is over this window (and not something on
     // top of it).
-    if (mouseOverWindow() || settingsOpen_) lastActivity_ = t;
+    if (mouseOverWindow() || settingsOpen_ || !panelSettings_.empty()) lastActivity_ = t;
     bool dimmed = config_.forceDim || (config_.oled.dim && OledDim(t, lastActivity_, wakeUntil_));
     if (dimmed) ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, 153));
     // The cat isn't drawn while the window's dimmed.
@@ -1138,13 +1139,19 @@ bool App::card(const Snapshot& s, float width) {
             float bw = ImGui::CalcTextSize(icon::Refresh).x + st.FramePadding.x * 2;
             float ww = ImGui::CalcTextSize(when.c_str()).x;
             float pw = s.paste.empty() ? 0 : ImGui::CalcTextSize(icon::Paste).x + st.FramePadding.x * 2 + st.ItemSpacing.x;
-            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - bw - pw - ww - cw - st.ItemSpacing.x);
+            float gw = s.settings.empty() ? 0 : ImGui::CalcTextSize(icon::Gear).x + st.FramePadding.x * 2 + st.ItemSpacing.x;
+            ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - bw - pw - gw - ww - cw - st.ItemSpacing.x);
             ImGui::AlignTextToFramePadding();
             mutedText(when);
             if (!s.paste.empty()) {
                 ImGui::SameLine();
                 if (show) pasteButton(s);
                 else ImGui::Dummy(ImVec2(pw - st.ItemSpacing.x, ImGui::GetFrameHeight()));
+            }
+            if (!s.settings.empty()) {
+                ImGui::SameLine();
+                if (show) gearButton(s);
+                else ImGui::Dummy(ImVec2(gw - st.ItemSpacing.x, ImGui::GetFrameHeight()));
             }
             ImGui::SameLine();
             if (show) refreshButton(s);
@@ -1312,6 +1319,82 @@ void App::pasteButton(const Snapshot& s) {
     ImGui::PopStyleColor(2);
 }
 
+void App::gearButton(const Snapshot& s) {
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_Text, Colours().muted);
+    ImGui::PushID(s.monitor.c_str());
+    if (ImGui::Button(icon::Gear)) panelSettings_ = s.monitor;
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s settings", s.title.c_str());
+    ImGui::PopID();
+    ImGui::PopStyleColor(2);
+}
+
+void App::panelSettings() {
+    const Snapshot* snap = nullptr;
+    for (const Snapshot& s : model_.Snapshots())
+        if (s.monitor == panelSettings_) snap = &s;
+    if (!snap || snap->settings.empty()) {
+        panelSettings_.clear();
+        return;
+    }
+    if (!ImGui::IsPopupOpen("##panelSettings")) ImGui::OpenPopup("##panelSettings");
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, io.DisplaySize.y / 2), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(760 * scale_, io.DisplaySize.x - 32 * scale_), 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24 * scale_, 20 * scale_));
+    bool open = ImGui::BeginPopupModal("##panelSettings", nullptr,
+                                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
+                                           ImGuiWindowFlags_NoSavedSettings);
+    ImGui::PopStyleVar();
+    if (!open) return;
+    ImGui::PushFont(fonts_.title);
+    ImGui::TextColored(Colours().heading, "%s", snap->title.c_str());
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, 4 * scale_));
+    // Drawn as an open panel's blocks: full size, measured on their own.
+    bool slim = slimBlock_;
+    std::vector<const Block*> measure;
+    std::swap(measure, measure_);
+    slimBlock_ = false;
+    for (size_t i = 0; i < snap->settings.size(); i++) {
+        ImGui::PushID(int(i));
+        block(snap->monitor, snap->settings[i]);
+        ImGui::PopID();
+    }
+    slimBlock_ = slim;
+    std::swap(measure, measure_);
+    ImGui::Dummy(ImVec2(0, 8 * scale_));
+    float bw = 96 * scale_;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - bw);
+    if (ImGui::Button("Close", ImVec2(bw, 0)) || (ImGui::IsKeyPressed(ImGuiKey_Escape) && !ImGui::IsAnyItemActive())) {
+        panelSettings_.clear();
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void App::inputCell(const std::string& monitor, const Cell& cell) {
+    const Cell::Input& in = cell.input;
+    std::string key = monitor + "\n" + in.action + "\n" + in.id;
+    ImGui::PushID(key.c_str());
+    bool fresh = !inputs_.count(key);
+    InputState& st = inputs_[key];
+    // The server's value replaces the text unless it's being edited.
+    if (fresh || (st.from != in.value && ImGui::GetActiveID() != ImGui::GetID("##input"))) {
+        snprintf(st.buf, sizeof st.buf, "%s", in.value.c_str());
+        st.from = in.value;
+    }
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::InputTextWithHint("##input", in.hint.c_str(), st.buf, sizeof st.buf, ImGuiInputTextFlags_EnterReturnsTrue)) {
+        nlohmann::json a{{"type", in.action}, {"text", std::string(st.buf)}};
+        if (!in.id.empty()) a["id"] = in.id;
+        client_->Act(monitor, a.dump());
+        // A box for adding something empties once it's sent.
+        if (in.value.empty() && in.id.empty()) st.buf[0] = 0;
+    }
+    ImGui::PopID();
+}
+
 // compactCards fills the space with one row per monitor, full width so the
 // summaries line up, opening as many full panels as fit (see FitPanels).
 void App::compactCards(float width, const std::vector<Snapshot>& snaps) {
@@ -1416,7 +1499,9 @@ float App::compactCard(const Snapshot& s, float width, Show show, bool* clicked)
     float refreshX = chevronX - 2 * scale_ - slot;
     bool paste = !local && !s.paste.empty();
     float pasteX = refreshX - 2 * scale_ - slot;
-    float controlsX = local ? chevronX : paste ? pasteX : refreshX;
+    bool gear = !local && !s.settings.empty();
+    float gearX = (paste ? pasteX : refreshX) - 2 * scale_ - slot;
+    float controlsX = local ? chevronX : gear ? gearX : paste ? pasteX : refreshX;
 
     // The grip and buttons only show while the mouse is over the panel (or
     // it's being dragged); their places stay kept so nothing moves.
@@ -1452,6 +1537,15 @@ float App::compactCard(const Snapshot& s, float width, Show show, bool* clicked)
             ImGui::SetCursorScreenPos(ImVec2(pasteX, top.y));
             if (shown) {
                 pasteButton(s);
+                onButton = onButton || ImGui::IsItemHovered();
+            } else {
+                ImGui::Dummy(ImVec2(slot, lineH));
+            }
+        }
+        if (gear) {
+            ImGui::SetCursorScreenPos(ImVec2(gearX, top.y));
+            if (shown) {
+                gearButton(s);
                 onButton = onButton || ImGui::IsItemHovered();
             } else {
                 ImGui::Dummy(ImVec2(slot, lineH));
@@ -3039,6 +3133,11 @@ void App::table(const std::string& monitor, const Block& b) {
             if (!r[c].localApp.empty() && grabber_->Has(r[c].localApp))
                 w = std::max(w, ImGui::CalcTextSize(icon::Download).x + 8 * scale_);
             if (!r[c].actionType.empty()) w = std::max(w, ImGui::CalcTextSize(icon::Dismiss).x + 8 * scale_);
+            if (r[c].HasInput()) {
+                // Room for the hint or the value, whichever is longer.
+                float t = std::max(ImGui::CalcTextSize(r[c].input.hint.c_str()).x, ImGui::CalcTextSize(r[c].input.value.c_str()).x);
+                w = std::max(w, t + ImGui::GetStyle().FramePadding.x * 2 + 8 * scale_);
+            }
             if (r[c].HasChoice()) {
                 // Room for the longest option and the combo's arrow.
                 float widest = 0;
@@ -3078,6 +3177,10 @@ void App::table(const std::string& monitor, const Block& b) {
             }
             if (cell.HasChoice()) {
                 choiceCell(monitor, cell);
+                continue;
+            }
+            if (cell.HasInput()) {
+                inputCell(monitor, cell);
                 continue;
             }
             // The column taking the spare width cuts long text with an

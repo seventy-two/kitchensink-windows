@@ -1152,6 +1152,22 @@ static void testGrab() {
         CHECK(!ai.blocks[0].rows[0][0].HasChoice());
     }
 
+    // A table cell with a text box, in a panel's settings.
+    Snapshot ge = ParseSnapshot(nlohmann::json::parse(R"({"monitor":"geprices","blocks":[],
+        "settings":[{"type":"table","columns":[{"title":"Item"},{"title":"Alert at"}],
+        "rows":[[{"text":"Ascension crossbows"},{"text":"<150m","input":{"action":"target","id":"34681","value":"<150m","hint":"e.g. 150m"}}]]}]})"));
+    CHECK_EQ(ge.settings.size(), size_t(1));
+    if (!ge.settings.empty()) {
+        const Cell& c = ge.settings[0].rows[0][1];
+        CHECK(c.HasInput());
+        CHECK_EQ(c.input.action, std::string("target"));
+        CHECK_EQ(c.input.id, std::string("34681"));
+        CHECK_EQ(c.input.value, std::string("<150m"));
+        CHECK_EQ(c.input.hint, std::string("e.g. 150m"));
+        CHECK(!ge.settings[0].rows[0][0].HasInput());
+    }
+    CHECK(ai.settings.empty());
+
     auto st = ParseWatchgrabState(R"({"started":"2026-10-14T21:22:48Z","films":{
         "fish-tank":{"name":"Fish Tank","old":true,"status":"grabbed","torrent":"Fish Tank 2009 1080p BluRay-hallowed"},
         "pi":{"name":"Pi","status":"have"},

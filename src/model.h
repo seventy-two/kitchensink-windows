@@ -97,6 +97,12 @@ struct Cell {
         std::vector<Option> options;
     } choice;
     bool HasChoice() const { return !choice.action.empty() && !choice.options.empty(); }
+    // A text box in place of the text (an alert's price): Enter sends the
+    // monitor an action of input.action with input.id and what was typed.
+    struct Input {
+        std::string action, id, value, hint;
+    } input;
+    bool HasInput() const { return !input.action.empty(); }
 };
 
 // Slider is a checklist item's 0-100 control (a light's brightness): let
@@ -231,6 +237,9 @@ struct Snapshot {
     // summaryBlock, if the monitor sends one, is drawn in place of the
     // summary: e.g. the top rows of its table, so it looks the same short.
     std::vector<Block> summaryBlock;  // none or one
+    // settings, if the monitor sends any, are blocks for changing what it
+    // watches (items and their alerts), shown behind a button on the panel.
+    std::vector<Block> settings;
 };
 
 struct Event {

@@ -64,6 +64,10 @@ result is a single `kitchensink.exe` with nothing to install.
 - Panels show their controls (grip, refresh, open/close) only while the
   mouse is over them. Drag a panel by the dots in its left margin to
   reorder; the order also decides which open first in the compact layout.
+- A panel whose monitor sends `settings` (GE prices: its items and alerts)
+  also shows a gear on hover, opening those blocks in a window over the
+  dashboard. Table cells can be text boxes (`input`): Enter sends their
+  action with what was typed.
 - **Monitor brightness**: a slim slider under the landscape for the
   brightness of the monitor the dashboard is on, set over DDC/CI as the
   monitor's own buttons would (VCP 0x10). Drag along it, or turn the wheel

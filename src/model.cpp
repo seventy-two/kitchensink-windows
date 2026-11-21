@@ -121,6 +121,13 @@ Block parseBlock(const json& j) {
                 for (const auto& o : array(*choice, "options"))
                     cell.choice.options.push_back({str(o, "label"), str(o, "value")});
             }
+            auto input = c.find("input");
+            if (input != c.end() && input->is_object()) {
+                cell.input.action = str(*input, "action");
+                cell.input.id = str(*input, "id");
+                cell.input.value = str(*input, "value");
+                cell.input.hint = str(*input, "hint");
+            }
             row.push_back(std::move(cell));
         }
         b.rows.push_back(std::move(row));
@@ -211,6 +218,7 @@ Snapshot ParseSnapshot(const json& j) {
     for (const auto& st : array(j, "summary")) s.summary.push_back(parseStat(st));
     s.summaryStyle = str(j, "summaryStyle");
     if (j.contains("summaryBlock") && j["summaryBlock"].is_object()) s.summaryBlock.push_back(parseBlock(j["summaryBlock"]));
+    for (const auto& b : array(j, "settings")) s.settings.push_back(parseBlock(b));
     return s;
 }
 
