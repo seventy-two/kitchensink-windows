@@ -110,4 +110,13 @@ std::pair<std::string, std::string> RetroClock(const std::tm& t) {
     return {time, date};
 }
 
+std::pair<std::string, std::string> PlainClock(const std::tm& t) {
+    static const char* days[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+    static const char* months[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    char time[16], date[32];
+    std::snprintf(time, sizeof(time), "%02d:%02d", t.tm_hour, t.tm_min);
+    std::snprintf(date, sizeof(date), "%s %d %s", days[((t.tm_wday % 7) + 7) % 7], t.tm_mday, months[((t.tm_mon % 12) + 12) % 12]);
+    return {time, date};
+}
+
 }  // namespace ks

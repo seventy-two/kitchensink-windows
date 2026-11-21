@@ -685,6 +685,12 @@ void App::Frame() {
     frameInterval_ = dimmed ? 0 : catInterval_;
     // The retro theme's clock shows seconds.
     if (!dimmed && Colours().retro) frameInterval_ = frameInterval_ ? std::min(frameInterval_, 1000ul) : 1000;
+    // The other themes' clock shows minutes: draw again just after the next
+    // one starts (dimmed too, as it's still on screen).
+    else {
+        unsigned long toMinute = 60000ul - static_cast<unsigned long>(std::time(nullptr) % 60) * 1000ul + 50;
+        frameInterval_ = frameInterval_ ? std::min(frameInterval_, toMinute) : toMinute;
+    }
     // Lick of the Day hides or shows a moment after its button's clicked;
     // draw again to show which.
     // Mango shows without focus; raise it over other windows once it's up
@@ -795,14 +801,15 @@ void App::header() {
     ImGui::TextColored(p.retro ? p.heading : p.accent, "kitchensink");
     ImGui::PopFont();
 
-    // The retro theme's clock, as on the WeatherStar: time, then date.
+    // The clock: time, then date. The retro theme's is the WeatherStar's,
+    // with seconds; the others' is plain 24-hour time.
     std::pair<std::string, std::string> clock;
     float clockW = 0, gapW = 10 * scale_;
-    if (p.retro) {
+    {
         std::time_t tt = std::time(nullptr);
         std::tm local{};
         localtime_s(&local, &tt);
-        clock = RetroClock(local);
+        clock = p.retro ? RetroClock(local) : PlainClock(local);
         ImGui::PushFont(fonts_.heading);
         clockW = ImGui::CalcTextSize(clock.first.c_str()).x;
         ImGui::PopFont();
@@ -923,7 +930,7 @@ void App::header() {
         ImGui::PopFont();
         ImGui::PushFont(fonts_.caption);
         ImVec2 ds = ImGui::CalcTextSize(clock.second.c_str());
-        dl->AddText(ImVec2(x + ts.x + gapW, std::round(origin.y + mid - ds.y / 2)), u32(p.heading), clock.second.c_str());
+        dl->AddText(ImVec2(x + ts.x + gapW, std::round(origin.y + mid - ds.y / 2)), u32(p.retro ? p.heading : p.muted), clock.second.c_str());
         ImGui::PopFont();
     }
     ImGui::SetCursorPosY(captionH_ + (compact_ ? 2 : 8) * scale_);

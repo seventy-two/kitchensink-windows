@@ -24,4 +24,8 @@ void AddTextShadows(ImDrawData* data, ImTextureID font, ImVec2 whiteUv, ImVec2 o
 // and "MON 12 OCT".
 std::pair<std::string, std::string> RetroClock(const std::tm& t);
 
+// PlainClock is the header's time and date in the other themes: "16:52" and
+// "Mon 12 Oct".
+std::pair<std::string, std::string> PlainClock(const std::tm& t);
+
 }  // namespace ks

@@ -1038,6 +1038,8 @@ static void testRetro() {
     CHECK_EQ(RetroClock(t).first, std::string("12:05:00 AM"));
     t.tm_hour = 12;
     CHECK_EQ(RetroClock(t).first, std::string("12:05:00 PM"));
+    t.tm_hour = 9, t.tm_wday = 6, t.tm_mday = 21, t.tm_mon = 10;
+    CHECK(PlainClock(t) == std::make_pair(std::string("09:05"), std::string("Sat 21 Nov")));
 }
 
 static void testTemporaryEvents() {

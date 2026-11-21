@@ -136,6 +136,8 @@ result is a single `kitchensink.exe` with nothing to install.
   notification.
 - Draws its own title bar, which keeps Windows' resizing, snapping, shadow
   and double-click to maximise.
+- A clock beside the title bar's buttons: the time (24-hour) and the
+  date, e.g. "18:49 Sat 21 Nov".
 - Closing the window keeps it running in the tray; **Quit** is in the tray
   icon's menu. It can start with Windows (minimised to the tray).
 - An eye button in the title bar, there when a monitor sends private
