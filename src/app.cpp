@@ -801,8 +801,8 @@ void App::header() {
     ImGui::TextColored(p.retro ? p.heading : p.accent, "kitchensink");
     ImGui::PopFont();
 
-    // The clock: time, then date. The retro theme's is the WeatherStar's,
-    // with seconds; the others' is plain 24-hour time.
+    // The clock. The retro theme's is the WeatherStar's, time then date,
+    // with seconds; the others' is the date, then a duller 24-hour time.
     std::pair<std::string, std::string> clock;
     float clockW = 0, gapW = 10 * scale_;
     {
@@ -926,11 +926,17 @@ void App::header() {
         float x = buttonsLeft - 16 * scale_ - clockW;
         ImGui::PushFont(fonts_.heading);
         ImVec2 ts = ImGui::CalcTextSize(clock.first.c_str());
-        dl->AddText(ImVec2(x, std::round(origin.y + mid - ts.y / 2)), u32(p.text), clock.first.c_str());
         ImGui::PopFont();
         ImGui::PushFont(fonts_.caption);
         ImVec2 ds = ImGui::CalcTextSize(clock.second.c_str());
-        dl->AddText(ImVec2(x + ts.x + gapW, std::round(origin.y + mid - ds.y / 2)), u32(p.retro ? p.heading : p.muted), clock.second.c_str());
+        ImGui::PopFont();
+        // Retro: time, then date. Otherwise: date, then a duller time.
+        float timeX = p.retro ? x : x + ds.x + gapW, dateX = p.retro ? x + ts.x + gapW : x;
+        ImGui::PushFont(fonts_.heading);
+        dl->AddText(ImVec2(timeX, std::round(origin.y + mid - ts.y / 2)), u32(p.retro ? p.text : p.muted), clock.first.c_str());
+        ImGui::PopFont();
+        ImGui::PushFont(fonts_.caption);
+        dl->AddText(ImVec2(dateX, std::round(origin.y + mid - ds.y / 2)), u32(p.retro ? p.heading : p.text), clock.second.c_str());
         ImGui::PopFont();
     }
     ImGui::SetCursorPosY(captionH_ + (compact_ ? 2 : 8) * scale_);
