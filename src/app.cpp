@@ -25,6 +25,7 @@
 #include "local.h"
 #include "retro.h"
 #include "sky.h"
+#include "termicon.h"
 
 #ifndef _WIN32
 // localtime_s as Windows has it (arguments the other way round to C11's).
@@ -312,7 +313,7 @@ App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
     if (config_.url.empty() || config_.token.empty()) openSettings();
     lick_.Start();
     launcher_.Set(config_.apps);
-    launcher_.SetPins(config_.pins);
+    launcher_.SetPins(config_.pins, config_.barPins);
     windows_ = std::make_unique<OpenWindows>(hwnd, wake);
     tray_ = std::make_unique<Tray>(hwnd, wake);
     applyTaskbar();
@@ -942,8 +943,8 @@ void App::header() {
     if (CanTurnDisplaysOff()) buttonsLeft = displayOffButton(buttonsLeft, mid);
     if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
     if (mango_.Installed()) buttonsLeft = mangoButton(buttonsLeft, mid);
-    if (!launcher_.Pins().empty()) buttonsLeft = pinButtons(buttonsLeft - 4 * scale_, mid);
-    if (!shownApps().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
+    if (!launcher_.BarPins().empty()) buttonsLeft = pinButtons(buttonsLeft - 4 * scale_, mid);
+    if (!shownApps().empty() || !launcher_.Pins().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float x = buttonsLeft - 16 * scale_ - clockW;
@@ -3487,9 +3488,11 @@ std::vector<LaunchApp> App::shownApps() {
 }
 
 // appsButton draws Windows 95's flag in the title bar, ending at right, that opens a
-// menu of the user's own apps (config.json's "apps", in A-Z order): each with its icon,
-// and a dot while it's running. Picking one brings it to the front or
-// starts it. It returns its left edge.
+// menu of apps: the pinned ones (config.json's "pins") at the top, then the
+// user's own ("apps"), those in no group A-Z under "Apps" and the rest under
+// their groups' headings ("appGroups"). Each has its icon, and a dot while
+// it's running; picking one brings it to the front or starts it. It
+// returns its left edge.
 float App::appsButton(float right, float mid) {
     const Palette& p = Colours();
     float size = ImGui::GetFrameHeight();
@@ -3556,28 +3559,90 @@ float App::appsButton(float right, float mid) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6 * scale_, 6 * scale_));
     if (ImGui::BeginPopup("##apps")) {
         std::vector<LaunchApp> apps = shownApps();
+        const auto& pins = launcher_.Pins();
         float iconSize = std::round(20 * scale_), pad = 6 * scale_;
         float rowH = std::max(iconSize, ImGui::GetTextLineHeight()) + pad * 2;
         float rw = 0;
         for (const auto& a : apps) rw = std::max(rw, ImGui::CalcTextSize(a.name.c_str()).x);
+        for (const auto& pin : pins) rw = std::max(rw, ImGui::CalcTextSize(pin.name.c_str()).x);
         rw += iconSize + pad * 4 + 14 * scale_;
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        for (const auto& a : apps) {
+        float selH = rowH - ImGui::GetStyle().ItemSpacing.y;
+        // row draws one line's icon, name and running dot over the
+        // Selectable just drawn at at.
+        auto row = [&](ImVec2 at, const Texture* icon, const std::string& name, bool running) {
+            float cy = at.y + selH / 2;
+            ImVec2 ic(at.x + pad, std::round(cy - iconSize / 2));
+            if (icon) dl->AddImage((ImTextureID)(intptr_t)icon->srv, ic, ImVec2(ic.x + iconSize, ic.y + iconSize));
+            float th = ImGui::GetTextLineHeight();
+            dl->AddText(ImVec2(ic.x + iconSize + pad * 1.5f, std::round(cy - th / 2)), u32(p.text), name.c_str());
+            if (running) dl->AddCircleFilled(ImVec2(at.x + rw - pad - 3 * scale_, cy), 3 * scale_, u32(p.good));
+        };
+
+        // The pinned apps first, as the taskbar had them: a click brings
+        // up the window used last, or starts the app; a middle click starts
+        // another.
+        std::vector<OpenWindow> wins = windows_->List();
+        for (size_t i = 0; i < pins.size(); i++) {
+            const PinnedApp& pin = pins[i];
+            ImGui::PushID(int(i));
+            std::vector<uintptr_t> mine;
+            for (const auto& w : wins)
+                if (PinMatches(pin.kind, pin.target, w.match)) mine.push_back(w.id);
+            ImVec2 at = ImGui::GetCursorScreenPos();
+            bool picked = ImGui::Selectable("##pin", false, 0, ImVec2(rw, selH));
+            bool middle = ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Middle);
+            if (middle || (picked && mine.empty())) {
+                launcher_.Start(pin);
+            } else if (picked) {
+                windows_->Show(PinTarget(mine, 0, windows_->LastActive()));
+            }
+            if (middle) ImGui::CloseCurrentPopup();
+            row(at, launcher_.PinIcon(pin, false, *images_), pin.name, !mine.empty());
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+                ImGui::SetTooltip("%s", mine.empty() ? "Start" : "Running: bring to the front\nMiddle-click for a new window");
+            ImGui::PopID();
+        }
+
+        // Then the user's own apps: those in no group under "Apps" (A-Z),
+        // then each group in turn, under its heading.
+        auto heading = [&](const char* name) {
+            ImGui::Dummy(ImVec2(0, 2 * scale_));
+            ImGui::PushFont(fonts_.caption);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + pad);
+            ImGui::TextColored(p.muted, "%s", name);
+            ImGui::PopFont();
+        };
+        auto appRow = [&](const LaunchApp& a) {
             ImGui::PushID(a.name.c_str());
             ImVec2 at = ImGui::GetCursorScreenPos();
-            if (ImGui::Selectable("##app", false, 0, ImVec2(rw, rowH - ImGui::GetStyle().ItemSpacing.y))) launcher_.Open(a);
-            float cy = at.y + (rowH - ImGui::GetStyle().ItemSpacing.y) / 2;
-            ImVec2 ic(at.x + pad, std::round(cy - iconSize / 2));
-            std::string key = launcher_.Icon(a, *images_, int(iconSize));
-            if (const Texture* t = images_->Get(key))
-                dl->AddImage((ImTextureID)(intptr_t)t->srv, ic, ImVec2(ic.x + iconSize, ic.y + iconSize));
-            float th = ImGui::GetTextLineHeight();
-            dl->AddText(ImVec2(ic.x + iconSize + pad * 1.5f, std::round(cy - th / 2)), u32(p.text), a.name.c_str());
-            if (launcher_.Running(a))
-                dl->AddCircleFilled(ImVec2(at.x + rw - pad - 3 * scale_, cy), 3 * scale_, u32(p.good));
+            if (ImGui::Selectable("##app", false, 0, ImVec2(rw, selH))) launcher_.Open(a);
+            bool running = launcher_.Running(a);
+            row(at, images_->Get(launcher_.Icon(a, *images_, int(iconSize))), a.name, running);
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-                ImGui::SetTooltip("%s", launcher_.Running(a) ? "Running: bring to the front" : "Start");
+                ImGui::SetTooltip("%s", running ? "Running: bring to the front" : "Start");
             ImGui::PopID();
+        };
+        auto inGroup = [&](const std::string& name) {
+            for (const auto& g : config_.appGroups)
+                if (std::find(g.apps.begin(), g.apps.end(), name) != g.apps.end()) return true;
+            return false;
+        };
+        std::vector<const LaunchApp*> loose;
+        for (const auto& a : apps)
+            if (!inGroup(a.name)) loose.push_back(&a);
+        if (!loose.empty()) {
+            if (!pins.empty() || !config_.appGroups.empty()) heading("Apps");
+            for (const LaunchApp* a : loose) appRow(*a);
+        }
+        for (const auto& g : config_.appGroups) {
+            std::vector<const LaunchApp*> in;
+            for (const auto& name : g.apps)
+                for (const auto& a : apps)
+                    if (a.name == name) in.push_back(&a);
+            if (in.empty()) continue;
+            heading(g.name.c_str());
+            for (const LaunchApp* a : in) appRow(*a);
         }
         ImGui::EndPopup();
     }
@@ -4428,48 +4493,18 @@ bool App::NoActivate(float x, float y) const {
     return false;
 }
 
-// pinButtons draws the pinned apps as the taskbar would: grey until
-// hovered (like the buttons beside them), fainter while not running, with
-// a short bar under those that are. A click brings the app's window up
+// pinButtons draws the title bar's pinned apps as the taskbar would: grey
+// until hovered (like the buttons beside them), fainter while not running,
+// with a short bar under those that are. A click brings the app's window up
 // (the next one, if one's in front already; minimises it if it's the only
-// one), or starts it; a middle click starts another. A chevron on their
-// left folds them away, and back.
+// one), or starts it; a middle click starts another. Windows Terminal is
+// drawn, like Mango beside it; the rest are their own icons.
 float App::pinButtons(float right, float mid) {
     const Palette& p = Colours();
-    const auto& all = launcher_.Pins();
+    const auto& pins = launcher_.BarPins();
     float size = ImGui::GetFrameHeight(), icon = std::round(size * 0.64f);
     ImVec2 origin = ImGui::GetWindowPos();
-    bool collapsed = config_.pinsCollapsed;
-    static const std::vector<PinnedApp> none;
-    const auto& pins = collapsed ? none : all;
     float left = right - size * float(pins.size());
-
-    // The chevron: pointing right (fold them away) while they show, left
-    // (bring them back) while folded.
-    float chevW = std::round(size * 0.6f);
-    ImGui::SetCursorPos(ImVec2(left - chevW - origin.x, mid - size / 2));
-    if (ImGui::InvisibleButton("##pinsChevron", ImVec2(chevW, size))) {
-        config_.pinsCollapsed = !collapsed;
-        SaveConfig(config_);
-    }
-    {
-        ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
-        bool hovered = ImGui::IsItemHovered();
-        noDrag_.push_back(ImRect(min, max));
-        noActivateNext_.push_back(ImRect(min, max));
-        ImDrawList* bar = ImGui::GetWindowDrawList();
-        if (hovered)
-            bar->AddRectFilled(min, max, ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
-                               ImGui::GetStyle().FrameRounding);
-        const char* glyph = collapsed ? icon::ChevronLeft : icon::ChevronRight;
-        ImGui::PushFont(fonts_.caption);
-        ImVec2 gs = ImGui::CalcTextSize(glyph);
-        bar->AddText(ImVec2(std::round(min.x + (chevW - gs.x) / 2), std::round(min.y + (size - gs.y) / 2)),
-                     u32(hovered ? p.text : p.muted), glyph);
-        ImGui::PopFont();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
-            ImGui::SetTooltip(collapsed ? "Show the pinned apps" : "Fold the pinned apps away");
-    }
     std::vector<OpenWindow> wins = windows_->List();
     uintptr_t front = windows_->Front();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -4502,7 +4537,10 @@ float App::pinButtons(float right, float mid) {
         if (hovered)
             dl->AddRectFilled(min, max, ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
                               ImGui::GetStyle().FrameRounding);
-        if (const Texture* t = launcher_.PinIcon(pin, !hovered, *images_)) {
+        bool terminal = pin.kind == PinKind::AppID && pin.target.find("WindowsTerminal") != std::string::npos;
+        if (terminal) {
+            DrawTerminalIcon(dl, min, size, hovered, p.muted, p.bg, mine.empty());
+        } else if (const Texture* t = launcher_.PinIcon(pin, !hovered, *images_)) {
             ImVec2 a(std::round(min.x + (size - icon) / 2), std::round(min.y + (size - icon) / 2));
             ImVec4 tint = hovered || !mine.empty() ? ImVec4(1, 1, 1, 1) : ImVec4(1, 1, 1, 0.5f);
             dl->AddImage((ImTextureID)(intptr_t)t->srv, a, ImVec2(a.x + icon, a.y + icon), ImVec2(0, 0), ImVec2(1, 1),
@@ -4520,7 +4558,7 @@ float App::pinButtons(float right, float mid) {
         }
         ImGui::PopID();
     }
-    return left - chevW;
+    return left;
 }
 
 // drawable drops the characters the current font hasn't (e.g. the symbols

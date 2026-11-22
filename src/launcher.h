@@ -18,7 +18,8 @@ struct LaunchApp {
     std::wstring path;  // the exe
 };
 
-// PinnedApp is one of the title bar's pinned apps, from config.json's "pins".
+// PinnedApp is one of the pinned apps, from config.json's "pins" (the top
+// of the apps menu) or "barPins" (the title bar).
 struct PinnedApp {
     std::string spec;    // as in config.json
     std::string name;    // shown in its tooltip
@@ -51,16 +52,19 @@ public:
     // SetPins takes config.json's "pins": each a shortcut (a .lnk's path,
     // or its file name among the taskbar's pinned ones), a Store app's app
     // ID ("family!App"), or "explorer" for File Explorer (This PC). Kept in
-    // order; ones that can't be found are left out.
-    void SetPins(const std::vector<std::string>& pins);
+    // order; ones that can't be found are left out. menu goes at the top
+    // of the apps menu, bar in the title bar.
+    void SetPins(const std::vector<std::string>& menu, const std::vector<std::string>& bar);
     const std::vector<PinnedApp>& Pins() const { return pins_; }
+    const std::vector<PinnedApp>& BarPins() const { return barPins_; }
     // PinIcon is the pin's icon, in colour or grey, or null.
     const Texture* PinIcon(const PinnedApp& pin, bool grey, ImageCache& images);
     // Start starts a new copy of the pin's app (letting it to the front).
     void Start(const PinnedApp& pin) const;
 
 private:
-    std::vector<PinnedApp> pins_;
+    std::vector<PinnedApp> resolve(const std::vector<std::string>& specs);
+    std::vector<PinnedApp> pins_, barPins_;
     IconStore pinIcons_;
     std::vector<LaunchApp> all_, installed_;
     double checked_ = -1e9;

@@ -171,6 +171,9 @@ result is a single `kitchensink.exe` with nothing to install.
   `config.json` as `"apps"`: a name for
   `%LOCALAPPDATA%\Programs\<name>\<name>.exe`, or a full path to an exe.
   Ones that aren't there are left out, and with none the flag doesn't show.
+  `"appGroups"` sorts some of them under headings, in order, e.g.
+  `[{"name": "System", "apps": ["cooler", "squeak"]}]`; the rest go under
+  "Apps" above them. The pinned apps (`"pins"`, below) sit at the top.
   Apps named in `"privateApps"` can be hidden from the menu with **Hide
   private apps** in the eye's right-click menu (the eye shows whenever
   there are private apps), and it's remembered.
@@ -181,19 +184,20 @@ result is a single `kitchensink.exe` with nothing to install.
   back as it was when the dashboard quits or Windows signs out, and is
   hidden again if Explorer restarts. The Start menu and Windows' shortcuts
   still work.
-  - **Pinned apps** sit in the title bar between the apps flag and Mango,
-    grey like the buttons beside them and in colour when hovered; fainter
-    while not running, with a short bar under them while they are (in the
-    accent colour when one of its windows is in front). A click brings up
-    the app's window, the next one if one's in front already, minimises it
-    if it's the only one, or starts the app; a middle click starts another.
-    The chevron on their left folds them away to just itself, and back
-    (remembered as `"pinsCollapsed"`).
-    List them in `config.json` as `"pins"`, in order: a shortcut's file name
-    among the taskbar's pinned ones (`Firefox.lnk`), a full path to a
-    `.lnk`, a Store app's ID (`Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App`,
-    shown with its unplated logo as the taskbar does), or `explorer` for
-    File Explorer (opens This PC).
+  - **Pinned apps** go at the top of the apps menu (`"pins"`) or in the
+    title bar between the apps flag and Mango (`"barPins"`). In the menu a
+    click brings up the app's window used last, or starts it. In the title
+    bar they're grey like the buttons beside them and in colour when
+    hovered (Windows Terminal is drawn to match Mango); fainter while not
+    running, with a short bar under them while they are (in the accent
+    colour when one of its windows is in front); a click brings up the
+    app's window, the next one if one's in front already, minimises it if
+    it's the only one, or starts the app. A middle click starts another,
+    in either place. Each is a shortcut's file name among the taskbar's
+    pinned ones (`Firefox.lnk`), a full path to a `.lnk`, a Store app's ID
+    (`Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App`, shown with its
+    unplated logo as the taskbar does), or `explorer` for File Explorer
+    (opens This PC).
   - **Windows**: the open windows the taskbar would show, a slim line each,
     sit above the lights in the side column, in the order they opened. The
     one in front is marked; one asking for attention is tinted. A click

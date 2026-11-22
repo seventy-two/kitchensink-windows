@@ -36,7 +36,7 @@ const std::vector<LaunchApp>& Launcher::Installed() { return installed_; }
 std::string Launcher::Icon(const LaunchApp&, ImageCache&, int) { return {}; }
 bool Launcher::Running(const LaunchApp&) { return false; }
 void Launcher::Open(const LaunchApp&) const {}
-void Launcher::SetPins(const std::vector<std::string>&) {}
+void Launcher::SetPins(const std::vector<std::string>&, const std::vector<std::string>&) {}
 const Texture* Launcher::PinIcon(const PinnedApp&, bool, ImageCache&) { return nullptr; }
 void Launcher::Start(const PinnedApp&) const {}
 

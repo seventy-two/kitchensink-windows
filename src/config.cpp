@@ -154,7 +154,19 @@ Config LoadConfig() {
         for (const auto& a : *it)
             if (a.is_string()) c.pins.push_back(a.get<std::string>());
     c.trayCollapsed = j.value("trayCollapsed", false);
-    c.pinsCollapsed = j.value("pinsCollapsed", false);
+    if (auto it = j.find("barPins"); it != j.end() && it->is_array())
+        for (const auto& a : *it)
+            if (a.is_string()) c.barPins.push_back(a.get<std::string>());
+    if (auto it = j.find("appGroups"); it != j.end() && it->is_array())
+        for (const auto& g : *it) {
+            if (!g.is_object()) continue;
+            Config::AppGroup group;
+            group.name = g.value("name", "");
+            if (auto a = g.find("apps"); a != g.end() && a->is_array())
+                for (const auto& n : *a)
+                    if (n.is_string()) group.apps.push_back(n.get<std::string>());
+            if (!group.name.empty()) c.appGroups.push_back(std::move(group));
+        }
     c.hideTaskbar = j.value("hideTaskbar", false);
     c.taskbarAutoHide = j.value("taskbarAutoHide", false);
     if (auto it = j.find("rowStyle"); it != j.end() && it->is_object())
@@ -174,6 +186,8 @@ Config LoadConfig() {
 }
 
 bool SaveConfig(const Config& c) {
+    nlohmann::json groups = nlohmann::json::array();
+    for (const auto& g : c.appGroups) groups.push_back({{"name", g.name}, {"apps", g.apps}});
     nlohmann::json j = {
         {"url", c.url},
         {"token", protect(c.token)},
@@ -197,7 +211,8 @@ bool SaveConfig(const Config& c) {
         {"rowStyle", c.rowStyle},
         {"pins", c.pins},
         {"trayCollapsed", c.trayCollapsed},
-        {"pinsCollapsed", c.pinsCollapsed},
+        {"barPins", c.barPins},
+        {"appGroups", groups},
         {"hideTaskbar", c.hideTaskbar},
         {"taskbarAutoHide", c.taskbarAutoHide},
     };

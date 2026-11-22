@@ -189,8 +189,13 @@ void Launcher::Open(const LaunchApp& app) const {
     ShellExecuteW(nullptr, L"open", app.path.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL);
 }
 
-void Launcher::SetPins(const std::vector<std::string>& specs) {
-    pins_.clear();
+void Launcher::SetPins(const std::vector<std::string>& menu, const std::vector<std::string>& bar) {
+    pins_ = resolve(menu);
+    barPins_ = resolve(bar);
+}
+
+std::vector<PinnedApp> Launcher::resolve(const std::vector<std::string>& specs) {
+    std::vector<PinnedApp> out;
     const wchar_t* appdata = _wgetenv(L"APPDATA");
     std::wstring pinned = std::wstring(appdata ? appdata : L"") +
                           L"\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\";
@@ -243,8 +248,9 @@ void Launcher::SetPins(const std::vector<std::string>& specs) {
             pinIcons_.Put(p.icon, png.colour);
             pinIcons_.Put(p.icon + ":grey", png.grey);
         }
-        pins_.push_back(std::move(p));
+        out.push_back(std::move(p));
     }
+    return out;
 }
 
 const Texture* Launcher::PinIcon(const PinnedApp& pin, bool grey, ImageCache& images) {

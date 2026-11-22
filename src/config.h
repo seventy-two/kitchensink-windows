@@ -64,12 +64,18 @@ struct Config {
     bool relevance = true;
     // When each monitor last had something new, for the above.
     std::map<std::string, News> news;
-    // The title bar's pinned apps, in order: see Launcher::SetPins.
-    std::vector<std::string> pins;
+    // The pinned apps (see Launcher::SetPins), in order: "pins" at the top
+    // of the apps menu, "barPins" as buttons in the title bar.
+    std::vector<std::string> pins, barPins;
+    // The apps menu's groups, in order, each a heading over some of
+    // "apps" (in its own order); the rest go under "Apps" above them.
+    struct AppGroup {
+        std::string name;
+        std::vector<std::string> apps;
+    };
+    std::vector<AppGroup> appGroups;
     // The side column's Tray card, cut to one line.
     bool trayCollapsed = false;
-    // The title bar's pinned apps, folded away behind their chevron.
-    bool pinsCollapsed = false;
     // Hides the Windows taskbar while the dashboard runs (it has the open
     // windows, pins and tray instead), and whether the taskbar auto-hid
     // before, to put it back as it was.
