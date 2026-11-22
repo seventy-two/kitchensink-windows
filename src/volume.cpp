@@ -1,12 +1,17 @@
 #include "volume.h"
 
 #include <windows.h>
+#include <shellapi.h>
+#include <audiopolicy.h>
 #include <endpointvolume.h>
 #include <mmdeviceapi.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <map>
+#include <vector>
 
 using Microsoft::WRL::ComPtr;
 
@@ -71,9 +76,87 @@ private:
     std::atomic<ULONG> refs_{1};
 };
 
+// appName is what the mixer calls a process: its exe's description
+// ("Firefox", "Spotify"), else the exe's name without ".exe".
+std::string appName(DWORD pid) {
+    std::wstring path(MAX_PATH * 2, L'\0');
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!h) return {};
+    DWORD n = DWORD(path.size());
+    bool ok = QueryFullProcessImageNameW(h, 0, path.data(), &n);
+    CloseHandle(h);
+    if (!ok) return {};
+    path.resize(n);
+    DWORD dummy = 0, size = GetFileVersionInfoSizeW(path.c_str(), &dummy);
+    if (size) {
+        std::vector<char> info(size);
+        struct Lang {
+            WORD lang, page;
+        }* langs = nullptr;
+        UINT len = 0;
+        if (GetFileVersionInfoW(path.c_str(), 0, size, info.data()) &&
+            VerQueryValueW(info.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&langs), &len) && len >= sizeof(Lang)) {
+            wchar_t key[64];
+            swprintf(key, 64, L"\\StringFileInfo\\%04x%04x\\FileDescription", langs[0].lang, langs[0].page);
+            wchar_t* desc = nullptr;
+            if (VerQueryValueW(info.data(), key, reinterpret_cast<void**>(&desc), &len) && len > 1 && desc[0])
+                return narrow(desc);
+        }
+    }
+    size_t slash = path.find_last_of(L"\\/");
+    std::wstring file = path.substr(slash + 1);
+    if (file.size() > 4 && _wcsicmp(file.c_str() + file.size() - 4, L".exe") == 0) file.resize(file.size() - 4);
+    return narrow(file.c_str());
+}
+
 }  // namespace
 
 struct Volume::Impl {
+    ComPtr<IMMDevice> device;
+    // The mixer's apps, each with the volume controls of its sessions.
+    std::vector<std::pair<std::string, std::vector<ComPtr<ISimpleAudioVolume>>>> apps;
+    DWORD appsRead = 0;
+    bool appsEver = false;
+
+    void readApps() {
+        DWORD now = GetTickCount();
+        if (appsEver && now - appsRead < 500) return;
+        appsRead = now, appsEver = true;
+        apps.clear();
+        ComPtr<IAudioSessionManager2> manager;
+        ComPtr<IAudioSessionEnumerator> sessions;
+        if (!device || FAILED(device->Activate(__uuidof(IAudioSessionManager2), CLSCTX_ALL, nullptr, &manager)) ||
+            FAILED(manager->GetSessionEnumerator(&sessions)))
+            return;
+        int n = 0;
+        sessions->GetCount(&n);
+        std::map<std::string, size_t> at;
+        for (int i = 0; i < n; i++) {
+            ComPtr<IAudioSessionControl> c;
+            ComPtr<IAudioSessionControl2> c2;
+            ComPtr<ISimpleAudioVolume> v;
+            if (FAILED(sessions->GetSession(i, &c)) || FAILED(c.As(&c2)) || FAILED(c.As(&v))) continue;
+            AudioSessionState state;
+            if (SUCCEEDED(c->GetState(&state)) && state == AudioSessionStateExpired) continue;
+            std::string name;
+            if (c2->IsSystemSoundsSession() == S_OK) {
+                name = "System sounds";
+            } else {
+                DWORD pid = 0;
+                c2->GetProcessId(&pid);
+                name = appName(pid);
+            }
+            if (name.empty()) continue;
+            auto it = at.find(name);
+            if (it == at.end()) {
+                at[name] = apps.size();
+                apps.push_back({name, {v}});
+            } else {
+                apps[it->second].second.push_back(v);
+            }
+        }
+    }
+
     ComPtr<IMMDeviceEnumerator> devices;
     ComPtr<IAudioEndpointVolume> endpoint;
     std::string name;
@@ -90,7 +173,7 @@ struct Volume::Impl {
         tried = now;
         listener->deviceChanged = false;
         close();
-        ComPtr<IMMDevice> device;
+        appsEver = false;
         if (FAILED(devices->GetDefaultAudioEndpoint(eRender, eConsole, &device))) return;
         if (FAILED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, &endpoint))) return;
         endpoint->RegisterControlChangeNotify(listener);
@@ -105,6 +188,8 @@ struct Volume::Impl {
     void close() {
         if (endpoint) endpoint->UnregisterControlChangeNotify(listener);
         endpoint.Reset();
+        device.Reset();
+        apps.clear();
         name.clear();
     }
 };
@@ -156,6 +241,50 @@ void Volume::Set(int value) {
 void Volume::SetMuted(bool muted) {
     impl_->open();
     if (impl_->endpoint) impl_->endpoint->SetMute(muted, nullptr);
+}
+
+std::vector<AppVolume> Volume::Apps() {
+    impl_->open();
+    impl_->readApps();
+    std::vector<AppVolume> out;
+    for (const auto& [name, controls] : impl_->apps) {
+        AppVolume a;
+        a.name = name;
+        float v = 0;
+        BOOL m = FALSE;
+        controls[0]->GetMasterVolume(&v);
+        controls[0]->GetMute(&m);
+        a.value = int(std::lround(v * 100));
+        a.muted = m != FALSE;
+        out.push_back(a);
+    }
+    std::sort(out.begin(), out.end(), [](const AppVolume& a, const AppVolume& b) {
+        if ((a.name == "System sounds") != (b.name == "System sounds")) return b.name == "System sounds";
+        return _stricmp(a.name.c_str(), b.name.c_str()) < 0;
+    });
+    return out;
+}
+
+void Volume::SetApp(const std::string& name, int value) {
+    for (auto& [n, controls] : impl_->apps)
+        if (n == name)
+            for (auto& c : controls) c->SetMasterVolume(float(value) / 100.0f, nullptr);
+}
+
+void Volume::SetAppMuted(const std::string& name, bool muted) {
+    for (auto& [n, controls] : impl_->apps)
+        if (n == name)
+            for (auto& c : controls) c->SetMute(muted, nullptr);
+}
+
+void Volume::OpenDevices() {
+    AllowSetForegroundWindow(ASFW_ANY);
+    ShellExecuteW(nullptr, L"open", L"control.exe", L"mmsys.cpl,,0", nullptr, SW_SHOWNORMAL);
+}
+
+void Volume::OpenSettings() {
+    AllowSetForegroundWindow(ASFW_ANY);
+    ShellExecuteW(nullptr, L"open", L"ms-settings:sound", nullptr, nullptr, SW_SHOWNORMAL);
 }
 
 }  // namespace ks

@@ -3960,10 +3960,10 @@ void App::mediaLine(float width, const Block* b) {
 // sliderCard draws a level, 0 to 100, as a slider in a slim card like Now
 // playing's: a glyph, the track and the percentage. Dragging along it sets
 // value as it goes; the wheel nudges it by step. off greys the track (e.g.
-// muted). It returns whether value changed, and sets glyphClicked when
-// the glyph was clicked (if it's a button).
+// muted). It returns whether value changed, and sets glyphClicked or
+// glyphMenu when the glyph was clicked or right-clicked (if it's a button).
 bool App::sliderCard(const char* id, float width, float h, const char* glyph, bool glyphButton, int& value, int step,
-                     bool off, const std::string& tip, bool* glyphClicked) {
+                     bool off, const std::string& tip, bool* glyphClicked, bool* glyphMenu) {
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     float s = scale_;
@@ -3981,6 +3981,7 @@ bool App::sliderCard(const char* id, float width, float h, const char* glyph, bo
     if (glyphButton) {
         ImGui::SetCursorScreenPos(start);
         if (ImGui::InvisibleButton("##glyph", ImVec2(glyphW, h)) && glyphClicked) *glyphClicked = true;
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && glyphMenu) *glyphMenu = true;
         glyphHovered = ImGui::IsItemHovered();
         if (glyphHovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     }
@@ -4037,7 +4038,7 @@ void App::brightnessBar(float width) {
     int value = brightness_->Value();
     char tip[48];
     std::snprintf(tip, sizeof tip, "Monitor brightness %d%%", value);
-    if (sliderCard("##brightness", width, h, icon::Brightness, false, value, 5, false, tip, nullptr))
+    if (sliderCard("##brightness", width, h, icon::Brightness, false, value, 5, false, tip, nullptr, nullptr))
         brightness_->Set(value);
 }
 
@@ -4048,18 +4049,71 @@ float App::volumeBarHeight() {
 
 // volumeBar draws the speakers' volume as a slider over the brightness's,
 // as the tray's volume icon would have opened; the wheel nudges it by 2,
-// and a click on the speaker mutes it or brings it back.
+// and a click on the speaker mutes it or brings it back. Right-click the
+// speaker for the volume mixer (each app's own volume) and Windows' sound
+// settings, e.g. to switch speakers.
 void App::volumeBar(float width) {
     float h = volumeBarHeight();
     if (h <= 0) return;
+    const Palette& p = Colours();
     int value = volume_->Value();
-    bool muted = volume_->Muted(), clicked = false;
+    bool muted = volume_->Muted(), clicked = false, menu = false;
     std::string tip = volume_->Device();
     if (tip.empty()) tip = "Volume";
     tip += muted ? "\nMuted: click the speaker to unmute" : "\nClick the speaker to mute";
-    if (sliderCard("##volume", width, h, muted ? icon::SpeakerMuted : icon::Speaker, true, value, 2, muted, tip, &clicked))
+    tip += "\nRight-click it for the mixer and sound settings";
+    ImVec2 cardTop = ImGui::GetCursorScreenPos();
+    if (sliderCard("##volume", width, h, muted ? icon::SpeakerMuted : icon::Speaker, true, value, 2, muted, tip, &clicked, &menu))
         volume_->Set(value);
     if (clicked) volume_->SetMuted(!muted);
+
+    ImGui::PushID("##volumeMenus");
+    if (menu) ImGui::OpenPopup("##speaker");
+    bool openMixer = false;
+    if (ImGui::BeginPopup("##speaker")) {
+        if (ImGui::MenuItem("Volume mixer")) openMixer = true;
+        ImGui::Separator();
+        // The classic panel: where devices are disabled (say, a monitor's
+        // speakers a graphics driver made the default) or picked.
+        if (ImGui::MenuItem("Sound devices")) Volume::OpenDevices();
+        if (ImGui::MenuItem("Sound settings")) Volume::OpenSettings();
+        ImGui::EndPopup();
+    }
+    if (openMixer) ImGui::OpenPopup("##mixer");
+    // The mixer, over the card, its bottom left on the card's top left.
+    ImGui::SetNextWindowPos(ImVec2(cardTop.x, cardTop.y - 4 * scale_), ImGuiCond_Appearing, ImVec2(0, 1));
+    ImGui::SetNextWindowSize(ImVec2(width, 0));
+    if (ImGui::BeginPopup("##mixer")) {
+        std::vector<AppVolume> apps = volume_->Apps();
+        ImGui::PushFont(fonts_.caption);
+        ImGui::TextColored(p.muted, "Volume mixer");
+        if (apps.empty()) ImGui::TextColored(p.muted, "Nothing's using the speakers.");
+        float nameW = 0;
+        for (const auto& a : apps) nameW = std::max(nameW, ImGui::CalcTextSize(a.name.c_str()).x);
+        nameW = std::min(nameW, width * 0.4f);
+        for (const auto& a : apps) {
+            ImGui::PushID(a.name.c_str());
+            // The speaker mutes it, as on the card.
+            const char* g = a.muted ? icon::SpeakerMuted : icon::Speaker;
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Text, a.muted ? p.muted : p.text);
+            if (ImGui::Button(g)) volume_->SetAppMuted(a.name, !a.muted);
+            ImGui::PopStyleColor(2);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip(a.muted ? "Unmute" : "Mute");
+            ImGui::SameLine();
+            ImVec2 at = ImGui::GetCursorPos();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(a.muted ? p.muted : p.text, "%s", a.name.c_str());
+            ImGui::SameLine(at.x + nameW + 8 * scale_);
+            ImGui::SetNextItemWidth(-1);
+            int v = a.value;
+            if (ImGui::SliderInt("##level", &v, 0, 100, "%d%%")) volume_->SetApp(a.name, v);
+            ImGui::PopID();
+        }
+        ImGui::PopFont();
+        ImGui::EndPopup();
+    }
+    ImGui::PopID();
 }
 
 float App::netBarHeight() {

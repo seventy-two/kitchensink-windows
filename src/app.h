@@ -178,7 +178,7 @@ private:
     void brightnessBar(float width);
     float brightnessBarHeight();
     bool sliderCard(const char* id, float width, float h, const char* glyph, bool glyphButton, int& value, int step,
-                    bool off, const std::string& tip, bool* glyphClicked);
+                    bool off, const std::string& tip, bool* glyphClicked, bool* glyphMenu);
     // volumeBar is the same for the speakers' volume, over brightness; a
     // click on the speaker mutes. netBar is the network's speeds above it,
     // a slim line that opens to a graph of the last two minutes.

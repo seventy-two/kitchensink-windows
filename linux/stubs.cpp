@@ -95,6 +95,11 @@ bool Volume::Muted() { return false; }
 std::string Volume::Device() { return {}; }
 void Volume::Set(int) {}
 void Volume::SetMuted(bool) {}
+std::vector<AppVolume> Volume::Apps() { return {}; }
+void Volume::SetApp(const std::string&, int) {}
+void Volume::SetAppMuted(const std::string&, bool) {}
+void Volume::OpenDevices() {}
+void Volume::OpenSettings() {}
 
 void NetSpeed::Sample(double) {}
 

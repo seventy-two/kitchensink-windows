@@ -77,6 +77,9 @@ result is a single `kitchensink.exe` with nothing to install.
   (Windows only): drag, or the wheel for steps of 2; a click on the speaker
   mutes or unmutes, and the tooltip names the speakers. It follows changes
   made elsewhere (the volume keys, the flyout, a new default device).
+  Right-click the speaker for the **Volume mixer** (a slider and mute for
+  each app with sound, over the card), **Sound devices** (the classic
+  panel, to pick or disable speakers) or **Sound settings**.
 - **Network**: above the volume, the network's speeds down and up (the
   physical adapters that are up, read every second, always in MB/s so it
   sits at 0 or 0.1 while little is moving; Windows only). A click
