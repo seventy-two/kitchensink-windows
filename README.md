@@ -188,11 +188,9 @@ result is a single `kitchensink.exe` with nothing to install.
     title bar between the apps flag and Mango (`"barPins"`). In the menu a
     click brings up the app's window used last, or starts it. In the title
     bar they're grey like the buttons beside them and in colour when
-    hovered (Windows Terminal is drawn to match Mango); fainter while not
-    running, with a short bar under them while they are (in the accent
-    colour when one of its windows is in front); a click brings up the
-    app's window, the next one if one's in front already, minimises it if
-    it's the only one, or starts the app. A middle click starts another,
+    hovered (Windows Terminal is drawn to match Mango), and fainter while
+    not running; a click brings up the app's window, the next one if one's
+    in front already, minimises it if it's the only one, or starts the app. A middle click starts another,
     in either place. Each is a shortcut's file name among the taskbar's
     pinned ones (`Firefox.lnk`), a full path to a `.lnk`, a Store app's ID
     (`Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App`, shown with its

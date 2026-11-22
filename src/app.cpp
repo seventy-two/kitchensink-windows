@@ -3335,17 +3335,34 @@ float App::dimButton(float right, float mid) {
 float App::displayOffButton(float right, float mid) {
     const Palette& p = Colours();
     const ImGuiStyle& st = ImGui::GetStyle();
+    float h = ImGui::GetFrameHeight();
     float w = ImGui::CalcTextSize(icon::Monitor).x + st.FramePadding.x * 2;
     ImVec2 origin = ImGui::GetWindowPos();
-    ImGui::SetCursorPos(ImVec2(right - w - origin.x, mid - ImGui::GetFrameHeight() / 2));
+    ImGui::SetCursorPos(ImVec2(right - w - origin.x, mid - h / 2));
     ImVec2 at = ImGui::GetCursorScreenPos();
-    bool lit = ImGui::IsMouseHoveringRect(at, ImVec2(at.x + w, at.y + ImGui::GetFrameHeight()));
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
-    ImGui::PushStyleColor(ImGuiCol_Text, lit ? p.text : p.muted);
-    bool clicked = ImGui::Button(icon::Monitor);
-    ImGui::PopStyleColor(2);
+    bool clicked = ImGui::InvisibleButton("##displaysOff", ImVec2(w, h));
+    bool hovered = ImGui::IsItemHovered();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    if (hovered)
+        dl->AddRectFilled(at, ImVec2(at.x + w, at.y + h),
+                          ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
+                          st.FrameRounding);
+    // A monitor in lines like the moon and eye beside it: the screen (taller
+    // than the font's, which looked squat), its neck and foot, on whole
+    // pixels so the lines stay sharp.
+    ImU32 ink = u32(hovered ? p.text : p.muted);
+    float line = std::max(1.0f, std::round(scale_));
+    float sw = std::round(h * 0.64f), sh = std::round(h * 0.46f);
+    float neck = std::round(h * 0.09f), footW = std::round(h * 0.34f);
+    float total = sh + neck + line;
+    float x0 = std::round(at.x + (w - sw) / 2), y0 = std::round(at.y + (h - total) / 2);
+    dl->AddRect(ImVec2(x0, y0), ImVec2(x0 + sw, y0 + sh), ink, 1.5f * scale_, 0, line);
+    float cx = std::round(x0 + sw / 2);
+    dl->AddRectFilled(ImVec2(cx - std::floor(line / 2), y0 + sh), ImVec2(cx - std::floor(line / 2) + line, y0 + sh + neck), ink);
+    float footY = y0 + sh + neck;
+    dl->AddRectFilled(ImVec2(std::round(cx - footW / 2), footY), ImVec2(std::round(cx + footW / 2), footY + line), ink);
     noDrag_.push_back(ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()));
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Turn the displays off");
+    if (hovered) ImGui::SetTooltip("Turn the displays off");
     if (clicked) DisplaysOff();
     return ImGui::GetItemRectMin().x;
 }
@@ -4494,8 +4511,8 @@ bool App::NoActivate(float x, float y) const {
 }
 
 // pinButtons draws the title bar's pinned apps as the taskbar would: grey
-// until hovered (like the buttons beside them), fainter while not running,
-// with a short bar under those that are. A click brings the app's window up
+// until hovered (like the buttons beside them), fainter while not running.
+// A click brings the app's window up
 // (the next one, if one's in front already; minimises it if it's the only
 // one), or starts it; a middle click starts another. Windows Terminal is
 // drawn, like Mango beside it; the rest are their own icons.
@@ -4519,11 +4536,9 @@ float App::pinButtons(float right, float mid) {
         noDrag_.push_back(ImRect(min, max));
         noActivateNext_.push_back(ImRect(min, max));
         std::vector<uintptr_t> mine;
-        bool inFront = false;
         for (const auto& w : wins)
             if (PinMatches(pin.kind, pin.target, w.match)) {
                 mine.push_back(w.id);
-                inFront = inFront || w.id == front;
             }
         if (pressed) {
             if (ImGui::GetIO().MouseReleased[ImGuiMouseButton_Middle] || mine.empty()) {
@@ -4545,12 +4560,6 @@ float App::pinButtons(float right, float mid) {
             ImVec4 tint = hovered || !mine.empty() ? ImVec4(1, 1, 1, 1) : ImVec4(1, 1, 1, 0.5f);
             dl->AddImage((ImTextureID)(intptr_t)t->srv, a, ImVec2(a.x + icon, a.y + icon), ImVec2(0, 0), ImVec2(1, 1),
                          u32(tint));
-        }
-        if (!mine.empty()) {
-            float bw = std::round(size * (inFront ? 0.42f : 0.26f)), bh = std::max(1.0f, std::round(2 * scale_));
-            float cx = std::round(min.x + size / 2);
-            dl->AddRectFilled(ImVec2(cx - bw / 2, max.y - bh - std::round(1 * scale_)), ImVec2(cx + bw / 2, max.y - std::round(1 * scale_)),
-                              u32(inFront ? p.accent : p.muted), bh / 2);
         }
         if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
             if (mine.empty()) ImGui::SetTooltip("%s", pin.name.c_str());
