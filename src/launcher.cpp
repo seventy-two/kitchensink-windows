@@ -13,6 +13,7 @@
 #include <cwctype>
 
 #include "images.h"
+#include "winicon.h"
 
 using Microsoft::WRL::ComPtr;
 
@@ -186,6 +187,80 @@ void Launcher::Open(const LaunchApp& app) const {
     // already running (e.g. from the tray) instead.
     std::wstring dir = app.path.substr(0, app.path.find_last_of(L"\\/"));
     ShellExecuteW(nullptr, L"open", app.path.c_str(), nullptr, dir.c_str(), SW_SHOWNORMAL);
+}
+
+void Launcher::SetPins(const std::vector<std::string>& specs) {
+    pins_.clear();
+    const wchar_t* appdata = _wgetenv(L"APPDATA");
+    std::wstring pinned = std::wstring(appdata ? appdata : L"") +
+                          L"\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\";
+    wchar_t windir[MAX_PATH] = L"C:\\Windows";
+    GetWindowsDirectoryW(windir, MAX_PATH);
+    for (const auto& spec : specs) {
+        PinnedApp p;
+        p.spec = spec;
+        p.kind = PinKindOf(spec);
+        std::wstring iconFrom;
+        if (p.kind == PinKind::Explorer) {
+            p.name = "File Explorer";
+            p.open = std::wstring(windir) + L"\\explorer.exe";
+            p.args = L"::{20D04FE0-3AEA-1069-A2D8-08002B30309D}";  // This PC
+            iconFrom = p.open;
+        } else if (p.kind == PinKind::AppID) {
+            p.target = spec;
+            p.open = L"shell:AppsFolder\\" + widen(spec);
+            ComPtr<IShellItem> item;
+            if (FAILED(SHCreateItemFromParsingName(p.open.c_str(), nullptr, IID_PPV_ARGS(&item)))) continue;
+            PWSTR name = nullptr;
+            if (SUCCEEDED(item->GetDisplayName(SIGDN_NORMALDISPLAY, &name)) && name) {
+                p.name = narrow(name);
+                CoTaskMemFree(name);
+            }
+            iconFrom = widen(spec);
+        } else {
+            std::wstring w = widen(spec);
+            std::wstring path = w.find(L'\\') != std::wstring::npos || w.find(L':') != std::wstring::npos ? w : pinned + w;
+            if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) continue;
+            size_t slash = path.find_last_of(L"\\/");
+            std::wstring file = path.substr(slash + 1);
+            if (file.size() > 4) file.resize(file.size() - 4);
+            p.name = narrow(file);
+            p.open = path;
+            ComPtr<IShellLinkW> link;
+            ComPtr<IPersistFile> persist;
+            wchar_t target[MAX_PATH * 2] = L"";
+            if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) &&
+                SUCCEEDED(link.As(&persist)) && SUCCEEDED(persist->Load(path.c_str(), STGM_READ)))
+                link->GetPath(target, int(std::size(target)), nullptr, 0);
+            p.target = narrow(lower(target));
+            iconFrom = target[0] ? std::wstring(target) : path;
+        }
+        // The pinned shortcut's icon would carry the shortcut arrow; the
+        // target's doesn't.
+        p.icon = "pin-icon:" + spec;
+        if (!pinIcons_.Holds(p.icon)) {
+            IconPNGs png = p.kind == PinKind::AppID ? IconFromAppID(iconFrom, 64) : IconFromShell(iconFrom, 64);
+            pinIcons_.Put(p.icon, png.colour);
+            pinIcons_.Put(p.icon + ":grey", png.grey);
+        }
+        pins_.push_back(std::move(p));
+    }
+}
+
+const Texture* Launcher::PinIcon(const PinnedApp& pin, bool grey, ImageCache& images) {
+    return pinIcons_.Get(grey ? pin.icon + ":grey" : pin.icon, images);
+}
+
+void Launcher::Start(const PinnedApp& pin) const {
+    // The dashboard had the click, so it may hand the front on.
+    AllowSetForegroundWindow(ASFW_ANY);
+    std::wstring dir;
+    if (pin.kind == PinKind::Shortcut && !pin.target.empty()) {
+        std::wstring t = widen(pin.target);
+        dir = t.substr(0, t.find_last_of(L"\\/"));
+    }
+    ShellExecuteW(nullptr, L"open", pin.open.c_str(), pin.args.empty() ? nullptr : pin.args.c_str(),
+                  dir.empty() ? nullptr : dir.c_str(), SW_SHOWNORMAL);
 }
 
 }  // namespace ks

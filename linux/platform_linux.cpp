@@ -28,6 +28,12 @@ void CloseMainWindow(NativeWindow w) {
 bool MouseOverWindow(NativeWindow w) { return SDL_GetMouseFocus() == w; }
 
 // The displays are the laptop's own business here.
+void ScreenCursor(int* x, int* y) {
+    float fx = 0, fy = 0;
+    SDL_GetGlobalMouseState(&fx, &fy);
+    *x = int(fx), *y = int(fy);
+}
+
 void DisplaysOff() {}
 bool CanTurnDisplaysOff() { return false; }
 

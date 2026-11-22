@@ -29,4 +29,10 @@ void DisplaysOff() {
 
 bool CanTurnDisplaysOff() { return true; }
 
+void ScreenCursor(int* x, int* y) {
+    POINT p{};
+    GetCursorPos(&p);
+    *x = p.x, *y = p.y;
+}
+
 }  // namespace ks

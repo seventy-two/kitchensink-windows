@@ -174,6 +174,41 @@ result is a single `kitchensink.exe` with nothing to install.
   Apps named in `"privateApps"` can be hidden from the menu with **Hide
   private apps** in the eye's right-click menu (the eye shows whenever
   there are private apps), and it's remembered.
+- **Instead of the Windows taskbar** (Windows only): the dashboard can stand in
+  for it, and **Hide the Windows taskbar** in Settings hides it on every
+  monitor while the dashboard runs (set to auto-hide, so windows get the
+  whole screen, and hidden so it doesn't slide up at the edge). It comes
+  back as it was when the dashboard quits or Windows signs out, and is
+  hidden again if Explorer restarts. The Start menu and Windows' shortcuts
+  still work.
+  - **Pinned apps** sit in the title bar between the apps flag and Mango,
+    grey like the buttons beside them and in colour when hovered; fainter
+    while not running, with a short bar under them while they are (in the
+    accent colour when one of its windows is in front). A click brings up
+    the app's window, the next one if one's in front already, minimises it
+    if it's the only one, or starts the app; a middle click starts another.
+    List them in `config.json` as `"pins"`, in order: a shortcut's file name
+    among the taskbar's pinned ones (`Firefox.lnk`), a full path to a
+    `.lnk`, a Store app's ID (`Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App`,
+    shown with its unplated logo as the taskbar does), or `explorer` for
+    File Explorer (opens This PC).
+  - **Windows**: the open windows the taskbar would show, a slim line each,
+    sit above the lights in the side column, in the order they opened. The
+    one in front is marked; one asking for attention is tinted. A click
+    brings a window up, or minimises it if it's in front; a middle click
+    closes it; right-click for Restore, Minimise, Maximise and Close. More
+    than ten and the card scrolls.
+  - **Tray**: the notification area's icons, read from Explorer's own (hidden)
+    tray, sit above the brightness slider. Clicks go to each icon's app
+    just as Explorer sends them (in its icon version's format), so menus and
+    windows open as from the tray, beside the pointer. The chevron cuts it
+    to one slim line, "Tray (n)", and it's remembered.
+  - Clicks on these leave whatever was in front where it is (as the
+    taskbar does), so the dashboard doesn't take the front from the window
+    you're minimising or the tray app you're opening.
+- Scripts can quit the dashboard cleanly (as the tray's Quit, taking its tray
+  icon with it and putting the taskbar back) by posting it the registered
+  window message `kitchensink-quit`.
 - There are no scrollbars: the Recent column, the panels under it, the
   and the panels column scroll with the mouse wheel.
 - In the bottom-right corner, under Recent, a strip of countryside shows the sky as it is now: the
@@ -269,7 +304,12 @@ make -f linux/Makefile -j4        # build/kitchensink, then the tests
 | `src/battery.cpp` | runs Squeak for the battery monitor's readings |
 | `src/brightness.cpp` | reads and sets the monitor's brightness over DDC/CI, on a thread of its own |
 | `src/lick.cpp` | starts Lick of the Day with the dashboard, and hides and shows it |
-| `src/launcher.cpp` | the apps menu: finding, starting and bringing up the apps, and their icons |
+| `src/launcher.cpp` | the apps menu and pinned apps: finding, starting and bringing up the apps, and their icons |
+| `src/openwindows.cpp` | the open windows the taskbar would show, on a thread of its own, with the shell's window events |
+| `src/tray.cpp` | reads the tray's icons from Explorer and sends them clicks |
+| `src/taskbar.cpp` | hides the Windows taskbar and puts it back |
+| `src/shell.h` | the rules behind those (which windows show, the tray's message formats, pins), tested anywhere |
+| `src/winicon.cpp` | icons as PNGs from icon handles, the shell and Store apps' packages |
 | `src/images.cpp` | thumbnail download, WIC decoding and textures |
 | `src/config.cpp` | settings and start-with-Windows |
 | `src/theme.cpp` | palettes, fonts and ImGui style |

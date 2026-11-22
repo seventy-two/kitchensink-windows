@@ -12,6 +12,7 @@
 #include "../src/local.h"
 #include "../src/model.h"
 #include "../src/retro.h"
+#include "../src/shell.h"
 #include "../src/sky.h"
 #include "../src/sse.h"
 #include "../src/weather_icon.h"
@@ -1248,7 +1249,83 @@ static void testSky() {
     CHECK_EQ(FormatPlace(Place{51.5, -0.12}), std::string("51.5000, -0.1200"));
 }
 
+// The taskbar's stand-ins: which windows get a line, the tray's callback
+// formats, and pins.
+static void testShell() {
+    ks::WindowTraits plain;
+    plain.visible = plain.hasTitle = true;
+    CHECK(ks::ShowsOnTaskbar(plain));
+    auto with = [&](auto f) {
+        ks::WindowTraits t = plain;
+        f(t);
+        return ks::ShowsOnTaskbar(t);
+    };
+    CHECK(!with([](auto& t) { t.visible = false; }));
+    CHECK(!with([](auto& t) { t.cloaked = true; }));
+    CHECK(!with([](auto& t) { t.hasTitle = false; }));
+    CHECK(!with([](auto& t) { t.ours = true; }));
+    CHECK(!with([](auto& t) { t.toolWindow = true; }));
+    CHECK(!with([](auto& t) { t.owned = true; }));
+    CHECK(with([](auto& t) { t.owned = true, t.appWindow = true; }));
+    CHECK(with([](auto& t) { t.toolWindow = true, t.appWindow = true; }));
+    CHECK(!with([](auto& t) { t.appWindow = true, t.cloaked = true; }));
+
+    // Old-style icons: ID in wParam, message in lParam, nothing after.
+    auto up = ks::TrayMessages(0, 7, ks::TrayButton::Left, ks::TrayPress::Up, 100, 200);
+    CHECK_EQ(up.size(), size_t(1));
+    CHECK_EQ(up[0].wParam, uint64_t(7));
+    CHECK_EQ(up[0].lParam, int64_t(0x202));
+    auto down = ks::TrayMessages(3, 7, ks::TrayButton::Right, ks::TrayPress::Down, 0, 0);
+    CHECK_EQ(down.size(), size_t(2));
+    CHECK_EQ(down[0].lParam, int64_t(0x200));
+    CHECK_EQ(down[1].lParam, int64_t(0x204));
+    // Version 4: message low, ID high, position in wParam, then NIN_SELECT
+    // or WM_CONTEXTMENU (as seen from Explorer).
+    auto v4 = ks::TrayMessages(4, 2, ks::TrayButton::Left, ks::TrayPress::Up, 0x10fc, 0x0861);
+    CHECK_EQ(v4.size(), size_t(2));
+    CHECK_EQ(v4[0].lParam, int64_t(0x20202));
+    CHECK_EQ(v4[0].wParam, uint64_t(0x086110fc));
+    CHECK_EQ(v4[1].lParam, int64_t(0x20400));
+    auto v4r = ks::TrayMessages(4, 2, ks::TrayButton::Right, ks::TrayPress::Up, 5, 6);
+    CHECK_EQ(v4r[1].lParam, int64_t(0x2007b));
+    // Off the left of the main screen, x is negative: kept in 16 bits.
+    auto neg = ks::TrayMessages(4, 1, ks::TrayButton::Left, ks::TrayPress::Double, -10, 20);
+    CHECK_EQ(neg.size(), size_t(1));
+    CHECK_EQ(neg[0].wParam, uint64_t(0x0014fff6));
+    CHECK_EQ(neg[0].lParam, int64_t(0x10203));
+
+    CHECK(ks::PinKindOf("explorer") == ks::PinKind::Explorer);
+    CHECK(ks::PinKindOf("File Explorer.lnk") == ks::PinKind::Explorer);
+    CHECK(ks::PinKindOf("Firefox.lnk") == ks::PinKind::Shortcut);
+    CHECK(ks::PinKindOf("Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App") == ks::PinKind::AppID);
+    CHECK(ks::PinKindOf("Wow!.lnk") == ks::PinKind::Shortcut);
+    CHECK_EQ(ks::PinFamily("Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App"),
+             std::string("Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe"));
+
+    ks::PinWindow ff{"c:\\program files\\mozilla firefox\\firefox.exe", "", "MozillaWindowClass"};
+    ks::PinWindow term{"c:\\program files\\windowsapps\\x\\windowsterminal.exe", "Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe",
+                       "CASCADIA_HOSTING_WINDOW_CLASS"};
+    ks::PinWindow folder{"c:\\windows\\explorer.exe", "", "CabinetWClass"};
+    CHECK(ks::PinMatches(ks::PinKind::Shortcut, "c:\\program files\\mozilla firefox\\firefox.exe", ff));
+    CHECK(!ks::PinMatches(ks::PinKind::Shortcut, "", ff));
+    CHECK(!ks::PinMatches(ks::PinKind::Shortcut, "c:\\other.exe", ff));
+    CHECK(ks::PinMatches(ks::PinKind::AppID, "microsoft.windowsterminalpreview_8wekyb3d8bbwe!App", term));
+    CHECK(!ks::PinMatches(ks::PinKind::AppID, "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", term));
+    CHECK(!ks::PinMatches(ks::PinKind::AppID, "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", ff));
+    CHECK(ks::PinMatches(ks::PinKind::Explorer, "", folder));
+    CHECK(!ks::PinMatches(ks::PinKind::Explorer, "", ff));
+
+    std::map<uintptr_t, double> last{{1, 10}, {2, 30}, {3, 20}};
+    CHECK_EQ(ks::PinTarget({}, 0, last), uintptr_t(0));
+    CHECK_EQ(ks::PinTarget({1, 2, 3}, 0, last), uintptr_t(2));  // none in front: the one used last
+    CHECK_EQ(ks::PinTarget({1, 2, 3}, 2, last), uintptr_t(3));  // in front: the next along
+    CHECK_EQ(ks::PinTarget({1, 2, 3}, 3, last), uintptr_t(1));  // ... round to the first
+    CHECK_EQ(ks::PinTarget({4}, 4, last), uintptr_t(0));        // the only one, in front: minimise
+    CHECK_EQ(ks::PinTarget({4, 5}, 0, {}), uintptr_t(4));       // never active: the first
+}
+
 int main() {
+    testShell();
     testGrab();
     testSky();
     testRetro();

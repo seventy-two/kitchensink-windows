@@ -312,10 +312,17 @@ App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
     if (config_.url.empty() || config_.token.empty()) openSettings();
     lick_.Start();
     launcher_.Set(config_.apps);
+    launcher_.SetPins(config_.pins);
+    windows_ = std::make_unique<OpenWindows>(hwnd, wake);
+    tray_ = std::make_unique<Tray>(hwnd, wake);
+    applyTaskbar();
 }
 
 App::~App() {
+    taskbar_.Restore(config_.taskbarAutoHide);
     if (newsDirty_) SaveConfig(config_);
+    windows_.reset();
+    tray_.reset();
     media_.reset();  // before images_, which it feeds
     battery_.reset();
     brightness_.reset();
@@ -459,6 +466,10 @@ void App::bevel(ImVec2 min, ImVec2 max) {
 }
 
 void App::Pump() {
+    if (double t = TickMs() / 1000.0; config_.hideTaskbar && t - taskbarChecked_ > 5) {
+        taskbarChecked_ = t;
+        taskbar_.Check();
+    }
     std::vector<Inbound> in;
     client_->Drain(in);
     for (auto& m : in) {
@@ -550,6 +561,8 @@ bool App::NotificationClicked() {
 
 void App::Frame() {
     catInterval_ = 0;  // until he's drawn
+    noActivate_.swap(noActivateNext_);
+    noActivateNext_.clear();
     // The wheel goes back to the dashboard once no scrolling chips held it
     // last frame.
     if (ImGui::GetKeyOwner(ImGuiKey_MouseWheelY) == ChipsWheel && wheelHeld_ < ImGui::GetFrameCount() - 1)
@@ -619,12 +632,14 @@ void App::Frame() {
             // same height so Recent doesn't move.
             float skyH = skyHeight(), barH = mediaBarHeight();
             float gap = 10 * scale_, tight = 4 * scale_;
-            // The lights' card sits above Now playing, at its height last frame.
+            // The lights' card sits above Now playing, at its height last frame,
+            // and the open windows above that; the tray over the brightness.
             const Snapshot* sw = switchesPanel();
             float swH = sw ? switchesH_ : 0;
             float lightH = brightnessBarHeight();
             float below = (barH > 0 ? barH + gap : 0) + (skyH > 0 ? skyH + tight : 0) + (sw ? swH + gap : 0) +
-                          (lightH > 0 ? lightH + tight : 0);
+                          (lightH > 0 ? lightH + tight : 0) + (windowsH_ > 0 ? windowsH_ + gap : 0) +
+                          (trayH_ > 0 ? trayH_ + tight : 0);
             // Scrolled with the wheel; no scrollbar, which would take width
             // and get in the way.
             ImGui::BeginChild("##feed", ImVec2(feedW, -below), ImGuiChildFlags_None,
@@ -633,6 +648,8 @@ void App::Frame() {
             ImGui::EndChild();
             float spacing = ImGui::GetStyle().ItemSpacing.y;
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
+            windowsBar(feedW);
+            if (windowsH_ > 0) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
             if (sw) {
                 switchesBar(*sw, feedW);
                 switchesH_ = ImGui::GetItemRectSize().y;
@@ -643,6 +660,7 @@ void App::Frame() {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
                 sky(feedW, t);
             }
+            trayBar(feedW);
             if (lightH > 0) {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
                 brightnessBar(feedW);
@@ -920,6 +938,7 @@ void App::header() {
     if (CanTurnDisplaysOff()) buttonsLeft = displayOffButton(buttonsLeft, mid);
     if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
     if (mango_.Installed()) buttonsLeft = mangoButton(buttonsLeft, mid);
+    if (!launcher_.Pins().empty()) buttonsLeft = pinButtons(buttonsLeft - 4 * scale_, mid);
     if (!shownApps().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -4204,6 +4223,7 @@ void App::openSettings() {
     priorityChoice_ = int(std::find(std::begin(kPriorities), std::end(kPriorities), config_.minPriority) - std::begin(kPriorities));
     notifyChoice_ = config_.notify;
     startChoice_ = StartsWithWindows();
+    hideTaskbarChoice_ = config_.hideTaskbar;
     oledChoice_ = config_.oled;
     catChoice_ = config_.cat;
     snprintf(placeBuf_, sizeof(placeBuf_), "%s", config_.place.c_str());
@@ -4265,6 +4285,14 @@ void App::settings() {
     ImGui::Combo("##priority", &priorityChoice_, kPriorityNames, IM_ARRAYSIZE(kPriorityNames));
     ImGui::EndDisabled();
     ImGui::Checkbox(kStartLabel, &startChoice_);
+#ifdef _WIN32
+    ImGui::Checkbox("Hide the Windows taskbar", &hideTaskbarChoice_);
+    ImGui::SameLine();
+    ImGui::PushFont(fonts_.caption);
+    ImGui::AlignTextToFramePadding();
+    mutedText("open windows, pins and the tray are here instead");
+    ImGui::PopFont();
+#endif
     ImGui::Dummy(ImVec2(0, 4 * scale_));
     mutedText("Theme");
     static const char* kThemes[] = {kSystemThemeLabel, "Retro (the 90s Weather Channel)"};
@@ -4342,11 +4370,13 @@ void App::settings() {
         c.theme = themeChoice_ == 1 ? "retro" : "";
         c.layout = layoutChoice_ == 1 ? "ultra" : "";
         c.relevance = relevanceChoice_;
+        c.hideTaskbar = hideTaskbarChoice_;
         c.minPriority = kPriorities[std::clamp(priorityChoice_, 0, 2)];
         bool reconnect = c.url != config_.url || c.token != config_.token;
         config_ = c;
         SaveConfig(config_);
         SetStartWithWindows(startChoice_);
+        applyTaskbar();
         bool wasRetro = Colours().retro;
         ApplyTheme(theme(), scale_, compact_);
         if (Colours().retro != wasRetro) fontsDirty_ = true;
@@ -4359,6 +4389,308 @@ void App::settings() {
     }
     ImGui::PopStyleColor(3);
     ImGui::EndPopup();
+}
+
+// ShellEvent: a window came, went or changed; draw again to show it.
+void App::ShellEvent(unsigned code, uintptr_t window) { windows_->ShellEvent(code, window); }
+
+void App::TaskbarCreated() {
+    tray_->Refresh();
+    if (config_.hideTaskbar) taskbar_.Hide(nullptr);
+}
+
+void App::RestoreTaskbar() { taskbar_.Restore(config_.taskbarAutoHide); }
+
+void App::applyTaskbar() {
+    if (config_.hideTaskbar) {
+        bool was = config_.taskbarAutoHide;
+        taskbar_.Hide(&was);
+        if (was != config_.taskbarAutoHide) {
+            config_.taskbarAutoHide = was;
+            SaveConfig(config_);
+        }
+    } else {
+        taskbar_.Restore(config_.taskbarAutoHide);
+    }
+}
+
+bool App::NoActivate(float x, float y) const {
+    for (const ImRect& r : noActivate_)
+        if (r.Contains(ImVec2(x, y))) return true;
+    return false;
+}
+
+// pinButtons draws the pinned apps as the taskbar would: grey until
+// hovered (like the buttons beside them), fainter while not running, with
+// a short bar under those that are. A click brings the app's window up
+// (the next one, if one's in front already; minimises it if it's the only
+// one), or starts it; a middle click starts another.
+float App::pinButtons(float right, float mid) {
+    const Palette& p = Colours();
+    const auto& pins = launcher_.Pins();
+    float size = ImGui::GetFrameHeight(), icon = std::round(size * 0.64f);
+    ImVec2 origin = ImGui::GetWindowPos();
+    float left = right - size * float(pins.size());
+    std::vector<OpenWindow> wins = windows_->List();
+    uintptr_t front = windows_->Front();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    for (size_t i = 0; i < pins.size(); i++) {
+        const PinnedApp& pin = pins[i];
+        ImGui::PushID(int(i));
+        ImGui::SetCursorPos(ImVec2(left + size * float(i) - origin.x, mid - size / 2));
+        ImVec2 min = ImGui::GetCursorScreenPos(), max(min.x + size, min.y + size);
+        bool pressed = ImGui::InvisibleButton("##pin", ImVec2(size, size),
+                                              ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonMiddle);
+        bool hovered = ImGui::IsItemHovered();
+        noDrag_.push_back(ImRect(min, max));
+        noActivateNext_.push_back(ImRect(min, max));
+        std::vector<uintptr_t> mine;
+        bool inFront = false;
+        for (const auto& w : wins)
+            if (PinMatches(pin.kind, pin.target, w.match)) {
+                mine.push_back(w.id);
+                inFront = inFront || w.id == front;
+            }
+        if (pressed) {
+            if (ImGui::GetIO().MouseReleased[ImGuiMouseButton_Middle] || mine.empty()) {
+                launcher_.Start(pin);
+            } else if (uintptr_t t = PinTarget(mine, front, windows_->LastActive())) {
+                windows_->Show(t);
+            } else {
+                windows_->Minimise(front);
+            }
+        }
+        if (hovered)
+            dl->AddRectFilled(min, max, ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
+                              ImGui::GetStyle().FrameRounding);
+        if (const Texture* t = launcher_.PinIcon(pin, !hovered, *images_)) {
+            ImVec2 a(std::round(min.x + (size - icon) / 2), std::round(min.y + (size - icon) / 2));
+            ImVec4 tint = hovered || !mine.empty() ? ImVec4(1, 1, 1, 1) : ImVec4(1, 1, 1, 0.5f);
+            dl->AddImage((ImTextureID)(intptr_t)t->srv, a, ImVec2(a.x + icon, a.y + icon), ImVec2(0, 0), ImVec2(1, 1),
+                         u32(tint));
+        }
+        if (!mine.empty()) {
+            float bw = std::round(size * (inFront ? 0.42f : 0.26f)), bh = std::max(1.0f, std::round(2 * scale_));
+            float cx = std::round(min.x + size / 2);
+            dl->AddRectFilled(ImVec2(cx - bw / 2, max.y - bh - std::round(1 * scale_)), ImVec2(cx + bw / 2, max.y - std::round(1 * scale_)),
+                              u32(inFront ? p.accent : p.muted), bh / 2);
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) {
+            if (mine.empty()) ImGui::SetTooltip("%s", pin.name.c_str());
+            else ImGui::SetTooltip("%s\nMiddle-click for a new window", pin.name.c_str());
+        }
+        ImGui::PopID();
+    }
+    return left;
+}
+
+// drawable drops the characters the current font hasn't (e.g. the symbols
+// apps put at the start of titles), and the spaces they leave at the start.
+static std::string drawable(const std::string& s) {
+    ImFont* font = ImGui::GetFont();
+    std::string out;
+    for (const char* p = s.c_str(); *p;) {
+        unsigned int c = 0;
+        int n = ImTextCharFromUtf8(&c, p, nullptr);
+        if (n <= 0) break;
+        if (c < 0x80 || font->FindGlyphNoFallback(ImWchar(c))) out.append(p, size_t(n));
+        p += n;
+    }
+    size_t start = out.find_first_not_of(' ');
+    return start == std::string::npos ? "" : out.substr(start);
+}
+
+// windowsBar lists the open windows, as the taskbar's buttons were: a slim
+// line each with its icon and title, the one in front marked, flashing ones
+// in the warning colour. A click brings a window up, or minimises it if
+// it's in front; a middle click closes it; right-click for the rest. Ten
+// lines at most, then it scrolls.
+void App::windowsBar(float width) {
+    std::vector<OpenWindow> list = windows_->List();
+    if (list.empty()) {
+        windowsH_ = 0;
+        return;
+    }
+    const Palette& p = Colours();
+    float s = scale_;
+    ImGui::PushFont(fonts_.caption);
+    float lineH = ImGui::GetTextLineHeight();
+    float rowH = std::round(lineH + (compact_ ? 7 : 9) * s), pad = (compact_ ? 6 : 8) * s;
+    float iconSize = std::round(16 * s), inset = std::round(3 * s);
+    int shown = std::min<int>(int(list.size()), 10);
+    float h = rowH * shown + inset * 2;
+    uintptr_t front = windows_->Front();
+
+    ImGui::PushID("##windows");
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, inset));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    ImGui::BeginChild("##list", ImVec2(width, h), ImGuiChildFlags_Borders | ImGuiChildFlags_AlwaysUseWindowPadding,
+                      ImGuiWindowFlags_NoScrollbar);
+    ImVec2 cardMin = ImGui::GetWindowPos();
+    noActivateNext_.push_back(ImRect(cardMin, ImVec2(cardMin.x + width, cardMin.y + h)));
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float rowW = width - inset * 2;
+    bool menuOpen = ImGui::IsPopupOpen("##windowMenu"), openMenu = false;
+    for (const OpenWindow& w : list) {
+        ImGui::PushID((void*)w.id);
+        ImGui::SetCursorPosX(inset);
+        ImVec2 at = ImGui::GetCursorScreenPos();
+        bool pressed = ImGui::InvisibleButton("##row", ImVec2(rowW, rowH),
+                                              ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
+                                                  ImGuiButtonFlags_MouseButtonMiddle);
+        bool hovered = ImGui::IsItemHovered();
+        bool isFront = w.id == front, flashing = windows_->Flashing(w.id);
+        ImVec2 end(at.x + rowW, at.y + rowH);
+        float round = 3 * s;
+        if (flashing) dl->AddRectFilled(at, end, u32(mix(p.card, p.warn, hovered ? 0.4f : 0.3f)), round);
+        else if (isFront) dl->AddRectFilled(at, end, u32(mix(p.card, p.accent, hovered ? 0.3f : 0.2f)), round);
+        else if (hovered) dl->AddRectFilled(at, end, ImGui::GetColorU32(ImGuiCol_ButtonHovered), round);
+        if (isFront)
+            dl->AddRectFilled(ImVec2(at.x, at.y + rowH * 0.25f), ImVec2(at.x + std::round(2 * s), at.y + rowH * 0.75f),
+                              u32(p.accent), s);
+        float x = at.x + pad;
+        if (const Texture* t = windows_->Icons().Get(w.icon, *images_)) {
+            ImVec2 a(x, std::round(at.y + (rowH - iconSize) / 2));
+            dl->AddImage((ImTextureID)(intptr_t)t->srv, a, ImVec2(a.x + iconSize, a.y + iconSize), ImVec2(0, 0),
+                         ImVec2(1, 1), w.minimised && !hovered ? u32(ImVec4(1, 1, 1, 0.55f)) : IM_COL32_WHITE);
+        }
+        x += iconSize + pad;
+        std::string title = fit(drawable(w.title), end.x - pad - x);
+        ImVec4 col = flashing ? p.text : w.minimised ? p.muted : p.text;
+        dl->AddText(ImVec2(x, std::round(at.y + (rowH - lineH) / 2)), u32(col), title.c_str());
+        if (pressed) {
+            const ImGuiIO& io = ImGui::GetIO();
+            if (io.MouseReleased[ImGuiMouseButton_Middle]) windows_->Close(w.id);
+            else if (io.MouseReleased[ImGuiMouseButton_Right]) windowMenu_ = w.id, openMenu = true;
+            else windows_->Click(w.id);
+        }
+        if (hovered && !menuOpen && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal) &&
+            title != drawable(w.title))
+            ImGui::SetTooltip("%s", w.title.c_str());
+        ImGui::PopID();
+    }
+    if (openMenu) ImGui::OpenPopup("##windowMenu");
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6 * s, 6 * s));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8 * s, 4 * s));
+    if (ImGui::BeginPopup("##windowMenu")) {
+        auto it = std::find_if(list.begin(), list.end(), [&](const OpenWindow& w) { return w.id == windowMenu_; });
+        if (it == list.end()) {
+            ImGui::CloseCurrentPopup();
+        } else {
+            ImGui::TextColored(p.muted, "%s", fit(it->title, 260 * s).c_str());
+            ImGui::Separator();
+            if (ImGui::MenuItem(it->minimised ? "Restore" : "Bring to front")) windows_->Show(it->id);
+            if (ImGui::MenuItem("Minimise", nullptr, false, !it->minimised)) windows_->Minimise(it->id);
+            if (ImGui::MenuItem("Maximise")) windows_->Maximise(it->id);
+            ImGui::Separator();
+            if (ImGui::MenuItem("Close", "middle-click")) windows_->Close(it->id);
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar(2);
+    ImGui::EndChild();
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
+    bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
+    windowsH_ = ImGui::GetItemRectSize().y;
+    ImGui::PopID();
+    ImGui::PopFont();
+}
+
+// trayBar shows the tray's icons in a card above the brightness slider:
+// clicks go to each icon's app as Explorer would send them, so their menus
+// and windows open as from the tray. The chevron cuts it to one slim line.
+void App::trayBar(float width) {
+    std::vector<TrayIcon> icons = tray_->Icons();
+    if (icons.empty()) {
+        trayH_ = 0;
+        return;
+    }
+    const Palette& p = Colours();
+    float s = scale_;
+    float spacing = ImGui::GetStyle().ItemSpacing.y, tight = 4 * s;
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
+    ImGui::PushID("##tray");
+    ImGui::PushFont(fonts_.caption);
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float lineH = ImGui::GetTextLineHeight();
+    float slimH = std::round(fonts_.caption->FontSize + (compact_ ? 8 : 10) * s);
+    float pad = (compact_ ? 6 : 8) * s;
+    float cell = std::round(26 * s), iconSize = std::round(16 * s);
+    float chevW = std::round(cell);
+    bool collapsed = config_.trayCollapsed;
+    // Icons wrap in rows beside the chevron.
+    int perRow = std::max(1, int((width - pad - chevW) / cell));
+    int rows = collapsed ? 0 : (int(icons.size()) + perRow - 1) / perRow;
+    float rowsH = rows * cell, inset = std::round(3 * s);
+    float h = collapsed ? slimH : std::max(slimH, rowsH + inset * 2);
+    ImVec2 start = ImGui::GetCursorScreenPos(), end(start.x + width, start.y + h);
+    dl->AddRectFilled(start, end, u32(p.card));
+    noActivateNext_.push_back(ImRect(start, end));
+
+    // The chevron, at the top right.
+    ImVec2 cMin(end.x - chevW, start.y), cMax(end.x, start.y + slimH);
+    ImGui::SetCursorScreenPos(cMin);
+    bool toggle = ImGui::InvisibleButton("##chevron", ImVec2(chevW, slimH));
+    bool chevHover = ImGui::IsItemHovered();
+    if (collapsed) {
+        // The whole line opens it.
+        ImGui::SetCursorScreenPos(start);
+        toggle = ImGui::InvisibleButton("##line", ImVec2(width - chevW, h)) || toggle;
+        chevHover = chevHover || ImGui::IsItemHovered();
+        char label[32];
+        std::snprintf(label, sizeof label, "Tray (%d)", int(icons.size()));
+        dl->AddText(ImVec2(start.x + pad, std::round(start.y + (h - lineH) / 2)), u32(chevHover ? p.text : p.muted), label);
+    }
+    const char* glyph = collapsed ? icon::ChevronUp : icon::ChevronDown;
+    ImVec2 gs = ImGui::CalcTextSize(glyph);
+    dl->AddText(ImVec2(std::round(cMin.x + (chevW - gs.x) / 2), std::round(cMin.y + (slimH - gs.y) / 2)),
+                u32(chevHover ? p.text : p.muted), glyph);
+    if (chevHover && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+        ImGui::SetTooltip(collapsed ? "Show the tray" : "Collapse the tray");
+    if (toggle) {
+        config_.trayCollapsed = !collapsed;
+        SaveConfig(config_);
+    }
+
+    if (!collapsed) {
+        const ImGuiIO& io = ImGui::GetIO();
+        for (size_t i = 0; i < icons.size(); i++) {
+            const TrayIcon& t = icons[i];
+            int r = int(i) / perRow, c = int(i) % perRow;
+            ImVec2 a(start.x + std::round(pad / 2) + c * cell, start.y + inset + r * cell);
+            ImGui::PushID(int(i));
+            ImGui::SetCursorScreenPos(a);
+            ImGui::InvisibleButton("##icon", ImVec2(cell, cell),
+                                   ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+            bool hovered = ImGui::IsItemHovered();
+            if (hovered) {
+                dl->AddRectFilled(a, ImVec2(a.x + cell, a.y + cell), ImGui::GetColorU32(ImGuiCol_ButtonHovered), 3 * s);
+                int px = 0, py = 0;
+                ScreenCursor(&px, &py);
+                for (int b = 0; b < 2; b++) {
+                    TrayButton button = b == 0 ? TrayButton::Left : TrayButton::Right;
+                    if (ImGui::IsMouseClicked(b))
+                        tray_->Press(t, button, ImGui::IsMouseDoubleClicked(b) ? TrayPress::Double : TrayPress::Down, px, py);
+                    if (ImGui::IsMouseReleased(b) && ImGui::IsItemDeactivated()) tray_->Press(t, button, TrayPress::Up, px, py);
+                }
+                if (!t.tip.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal) && !io.MouseDown[0] && !io.MouseDown[1])
+                    ImGui::SetTooltip("%s", t.tip.c_str());
+            }
+            if (const Texture* tex = tray_->Store().Get(t.icon, *images_)) {
+                ImVec2 ia(std::round(a.x + (cell - iconSize) / 2), std::round(a.y + (cell - iconSize) / 2));
+                dl->AddImage((ImTextureID)(intptr_t)tex->srv, ia, ImVec2(ia.x + iconSize, ia.y + iconSize));
+            }
+            ImGui::PopID();
+        }
+    }
+    ImGui::SetCursorScreenPos(start);
+    ImGui::Dummy(ImVec2(width, h));
+    bevel(start, end);
+    trayH_ = h;
+    ImGui::PopFont();
+    ImGui::PopID();
 }
 
 }  // namespace ks

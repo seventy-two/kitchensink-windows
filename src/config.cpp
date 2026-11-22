@@ -150,6 +150,12 @@ Config LoadConfig() {
     c.forceDim = j.value("forceDim", false);
     c.layout = j.value("layout", "");
     c.relevance = j.value("relevance", true);
+    if (auto it = j.find("pins"); it != j.end() && it->is_array())
+        for (const auto& a : *it)
+            if (a.is_string()) c.pins.push_back(a.get<std::string>());
+    c.trayCollapsed = j.value("trayCollapsed", false);
+    c.hideTaskbar = j.value("hideTaskbar", false);
+    c.taskbarAutoHide = j.value("taskbarAutoHide", false);
     if (auto it = j.find("rowStyle"); it != j.end() && it->is_object())
         for (const auto& [id, v] : it->items())
             if (v.is_string()) c.rowStyle[id] = v.get<std::string>();
@@ -188,6 +194,10 @@ bool SaveConfig(const Config& c) {
         {"layout", c.layout},
         {"relevance", c.relevance},
         {"rowStyle", c.rowStyle},
+        {"pins", c.pins},
+        {"trayCollapsed", c.trayCollapsed},
+        {"hideTaskbar", c.hideTaskbar},
+        {"taskbarAutoHide", c.taskbarAutoHide},
     };
     nlohmann::json news = nlohmann::json::object();
     for (const auto& [id, n] : c.news) {

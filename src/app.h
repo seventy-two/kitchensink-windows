@@ -22,10 +22,13 @@
 #include "model.h"
 #include "net.h"
 #include "media.h"
+#include "openwindows.h"
 #include "platform.h"
 #include "sky.h"
 #include "sysinfo.h"
+#include "taskbar.h"
 #include "theme.h"
+#include "tray.h"
 #include "upload.h"
 
 namespace ks {
@@ -61,6 +64,19 @@ public:
     // InCaption reports whether a point in client pixels is on the title
     // bar but not on one of its buttons, so dragging there moves the window.
     bool InCaption(float x, float y) const;
+
+    // ShellEvent passes on the shell's word that a window came, went,
+    // changed or was activated (RegisterShellHookWindow's messages).
+    void ShellEvent(unsigned code, uintptr_t window);
+    // TaskbarCreated is for Explorer having (re)started: the tray is read
+    // again and the taskbar hidden again if it should be.
+    void TaskbarCreated();
+    // RestoreTaskbar puts the Windows taskbar back, e.g. at sign-out.
+    void RestoreTaskbar();
+    // NoActivate reports whether a click at a point in client pixels should
+    // leave the window in front where it is, as the taskbar does: on the
+    // open windows, the pins and the tray.
+    bool NoActivate(float x, float y) const;
 
     // Busy reports whether the UI needs frames drawn continuously, e.g.
     // while typing.
@@ -173,6 +189,16 @@ private:
     float dimButton(float right, float mid);
     float displayOffButton(float right, float mid);
     float appsButton(float right, float mid);
+    // pinButtons draws the pinned apps' icons, ending at right, and returns
+    // where they start.
+    float pinButtons(float right, float mid);
+    // windowsBar lists the open windows, a slim line each, above the
+    // lights; trayBar the tray's icons above the brightness slider. Each
+    // draws nothing if it has nothing to show.
+    void windowsBar(float width);
+    void trayBar(float width);
+    // applyTaskbar hides or shows the Windows taskbar as config_ says.
+    void applyTaskbar();
     std::vector<LaunchApp> shownApps();
     void empty(const char* message, bool settingsButton);
     void settings();
@@ -225,7 +251,14 @@ private:
     HiddenApp mango_{L"mango", L"-docked"};  // Mango (Spotify), docked to the right, shown by the mango
     double mangoClicked_ = -1;
     bool mangoRaised_ = false;          // raised since the last click
-    Launcher launcher_;                 // the apps menu's apps
+    Launcher launcher_;                 // the apps menu's apps, and the pins
+    std::unique_ptr<OpenWindows> windows_;  // the open windows, for the Windows card and pins
+    std::unique_ptr<Tray> tray_;        // the notification area's icons
+    Taskbar taskbar_;                   // hides the Windows taskbar while it's wanted
+    double taskbarChecked_ = -1e9;
+    float windowsH_ = 0, trayH_ = 0;    // the side column's Windows and Tray cards, last frame
+    std::vector<ImRect> noActivate_, noActivateNext_;  // see NoActivate: last frame's, and this one's
+    uintptr_t windowMenu_ = 0;          // the window whose right-click menu is open
     // While drawing a short table: the full ones it's cut from (a panel
     // can have several of the same shape), for column widths.
     std::vector<const Block*> measure_;
@@ -297,6 +330,7 @@ private:
     int priorityChoice_ = 1;
     bool notifyChoice_ = true;
     bool startChoice_ = false;
+    bool hideTaskbarChoice_ = false;
     OledCare oledChoice_;
     bool catChoice_ = false;
     char placeBuf_[64] = {};

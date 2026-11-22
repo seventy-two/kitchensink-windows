@@ -41,6 +41,9 @@ void CloseMainWindow(NativeWindow w);
 // another window in front of it.
 bool MouseOverWindow(NativeWindow w);
 
+// ScreenCursor is the pointer's position on screen, in physical pixels.
+void ScreenCursor(int* x, int* y);
+
 // DisplaysOff turns the displays off after a short wait (letting go of the
 // mouse would wake them at once). It returns at once.
 void DisplaysOff();

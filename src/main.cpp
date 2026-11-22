@@ -34,6 +34,8 @@ UINT resizeW = 0, resizeH = 0;
 
 HWND hwnd = nullptr;
 UINT taskbarCreated = 0;
+UINT shellHook = 0;  // RegisterShellHookWindow's message
+UINT quitMessage = 0;  // "kitchensink-quit": quits as the tray menu's Quit does, for scripts
 std::unique_ptr<ks::App> app;
 bool quitting = false;
 int framesWanted = 2;
@@ -220,6 +222,16 @@ LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (ImGui_ImplWin32_WndProcHandler(h, msg, wParam, lParam)) return true;
     if (msg == taskbarCreated && taskbarCreated) {
         addTrayIcon();  // Explorer restarted
+        if (app) app->TaskbarCreated();
+        return 0;
+    }
+    if (msg == quitMessage && quitMessage) {
+        quitting = true;
+        DestroyWindow(h);
+        return 0;
+    }
+    if (msg == shellHook && shellHook) {
+        if (app) app->ShellEvent(UINT(wParam), uintptr_t(lParam));
         return 0;
     }
     switch (msg) {
@@ -240,6 +252,17 @@ LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         break;
     case WM_NCHITTEST: return hitTest(h, lParam);
+    case WM_MOUSEACTIVATE:
+        // Clicks on the open windows, pins and tray leave whatever's in
+        // front there, as the taskbar does, so a click on the window in
+        // front can minimise it and the tray's apps get the front.
+        if (app && LOWORD(lParam) == HTCLIENT) {
+            POINT pt;
+            GetCursorPos(&pt);
+            ScreenToClient(h, &pt);
+            if (app->NoActivate(float(pt.x), float(pt.y))) return MA_NOACTIVATE;
+        }
+        break;
     case WM_SIZE:
         if (wParam != SIZE_MINIMIZED) {
             resizeW = LOWORD(lParam);
@@ -291,7 +314,12 @@ LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         return 0;
     case WM_ENDSESSION:
-        if (wParam) removeTrayIcon();  // Windows is shutting down or signing out
+        if (wParam) {
+            // Windows is shutting down or signing out: put the taskbar back
+            // as it was, as its auto-hide setting outlives the session.
+            if (app) app->RestoreTaskbar();
+            removeTrayIcon();
+        }
         return 0;
     case WM_DESTROY:
         removeTrayIcon();
@@ -340,6 +368,10 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmdLine, int) {
     // Recalculate the frame now WM_NCCALCSIZE has removed it.
     SetWindowPos(hwnd, nullptr, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
     taskbarCreated = RegisterWindowMessageW(L"TaskbarCreated");
+    shellHook = RegisterWindowMessageW(L"SHELLHOOK");
+    quitMessage = RegisterWindowMessageW(L"kitchensink-quit");
+    // Let scripts send it from a lower integrity level too.
+    ChangeWindowMessageFilterEx(hwnd, quitMessage, MSGFLT_ALLOW, nullptr);
     if (!createDevice()) {
         MessageBoxW(nullptr, L"Couldn't start Direct3D 11.", L"kitchensink", MB_ICONERROR);
         return 1;

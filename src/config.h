@@ -64,6 +64,15 @@ struct Config {
     bool relevance = true;
     // When each monitor last had something new, for the above.
     std::map<std::string, News> news;
+    // The title bar's pinned apps, in order: see Launcher::SetPins.
+    std::vector<std::string> pins;
+    // The side column's Tray card, cut to one line.
+    bool trayCollapsed = false;
+    // Hides the Windows taskbar while the dashboard runs (it has the open
+    // windows, pins and tray instead), and whether the taskbar auto-hid
+    // before, to put it back as it was.
+    bool hideTaskbar = false;
+    bool taskbarAutoHide = false;
 };
 
 // LoadConfig reads the settings, leaving defaults for anything missing.
