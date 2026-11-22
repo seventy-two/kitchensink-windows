@@ -466,7 +466,7 @@ void App::bevel(ImVec2 min, ImVec2 max) {
 }
 
 void App::Pump() {
-    if (double t = TickMs() / 1000.0; config_.hideTaskbar && t - taskbarChecked_ > 5) {
+    if (double t = TickMs() / 1000.0; config_.hideTaskbar && (t - taskbarChecked_ > 5 || t < taskbarWatchUntil_)) {
         taskbarChecked_ = t;
         taskbar_.Check();
     }
@@ -4396,7 +4396,10 @@ void App::ShellEvent(unsigned code, uintptr_t window) { windows_->ShellEvent(cod
 
 void App::TaskbarCreated() {
     tray_->Refresh();
-    if (config_.hideTaskbar) taskbar_.Hide(nullptr);
+    if (config_.hideTaskbar) {
+        taskbar_.Hide(nullptr);
+        taskbarWatchUntil_ = TickMs() / 1000.0 + 5;
+    }
 }
 
 void App::RestoreTaskbar() { taskbar_.Restore(config_.taskbarAutoHide); }
@@ -4405,6 +4408,7 @@ void App::applyTaskbar() {
     if (config_.hideTaskbar) {
         bool was = config_.taskbarAutoHide;
         taskbar_.Hide(&was);
+        taskbarWatchUntil_ = TickMs() / 1000.0 + 5;
         if (was != config_.taskbarAutoHide) {
             config_.taskbarAutoHide = was;
             SaveConfig(config_);

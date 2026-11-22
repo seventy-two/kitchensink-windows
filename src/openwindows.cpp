@@ -127,11 +127,23 @@ void OpenWindows::ShellEvent(unsigned code, uintptr_t w) {
     cv_.notify_all();
 }
 
-uintptr_t OpenWindows::Front() const { return uintptr_t(GetForegroundWindow()); }
+uintptr_t OpenWindows::Front() const {
+    if (HWND fg = GetForegroundWindow()) return uintptr_t(fg);
+    // A click on the dashboard can leave no window in front for a moment
+    // (it doesn't take the front itself), so then it's the one activated
+    // last, as the taskbar remembers it, unless that's since been
+    // minimised or hidden.
+    uintptr_t best = 0;
+    double when = -1;
+    for (const auto& [w, t] : lastActive_)
+        if (t > when) when = t, best = w;
+    if (best && IsWindow(HWND(best)) && IsWindowVisible(HWND(best)) && !IsIconic(HWND(best))) return best;
+    return 0;
+}
 
 void OpenWindows::Click(uintptr_t w) {
     HWND h = HWND(w);
-    if (h == GetForegroundWindow() && !IsIconic(h)) Minimise(w);
+    if (w == Front() && !IsIconic(h)) Minimise(w);
     else Show(w);
 }
 
