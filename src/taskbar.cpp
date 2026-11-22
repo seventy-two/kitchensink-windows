@@ -32,6 +32,23 @@ void setState(UINT_PTR s) {
     SHAppBarMessage(ABM_SETSTATE, &ab);
 }
 
+// shape gives a taskbar no shape at all (an empty window region) or, with
+// on, its own back. Explorer still shows the hidden taskbar for a moment
+// when some apps take the front (MSI Afterburner, from its tray icon),
+// before it can be hidden again; with no shape there's nothing to see.
+void shape(HWND h, bool on) {
+    if (on) SetWindowRgn(h, nullptr, TRUE);
+    else SetWindowRgn(h, CreateRectRgn(0, 0, 0, 0), FALSE);  // the window owns the region now
+}
+
+// shapeless says whether a taskbar still has the empty region.
+bool shapeless(HWND h) {
+    HRGN r = CreateRectRgn(0, 0, 0, 0);
+    bool empty = GetWindowRgn(h, r) == NULLREGION;
+    DeleteObject(r);
+    return empty;
+}
+
 bool isBar(HWND h) {
     wchar_t cls[32];
     if (!GetClassNameW(h, cls, 32)) return false;
@@ -70,25 +87,40 @@ void Taskbar::Hide(bool* wasAutoHide) {
     // isn't taken as the user's choice.
     if (wasAutoHide && IsWindowVisible(all[0])) *wasAutoHide = (s & ABS_AUTOHIDE) != 0;
     if (!(s & ABS_AUTOHIDE)) setState(s | ABS_AUTOHIDE);
-    for (HWND h : all) ShowWindow(h, SW_HIDE);
+    for (HWND h : all) {
+        ShowWindow(h, SW_HIDE);
+        if (!shapeless(h)) shape(h, false);
+    }
     hidden_ = true;
     watch();
 }
 
 void Taskbar::Restore(bool autoHide) {
-    if (!hidden_) return;
+    if (!hidden_) {
+        // A crash can leave the taskbar hidden and shapeless: put that
+        // right, leaving auto-hide alone (the user's choice is unknown).
+        for (HWND h : bars())
+            if (shapeless(h) || !IsWindowVisible(h)) {
+                shape(h, true);
+                ShowWindow(h, SW_SHOWNA);
+            }
+        return;
+    }
     unwatch();
     std::vector<HWND> all = bars();
     UINT_PTR s = state();
     setState(autoHide ? (s | ABS_AUTOHIDE) : (s & ~UINT_PTR(ABS_AUTOHIDE)));
-    for (HWND h : all) ShowWindow(h, SW_SHOWNA);
+    for (HWND h : all) {
+        shape(h, true);
+        ShowWindow(h, SW_SHOWNA);
+    }
     hidden_ = false;
 }
 
 void Taskbar::Check() {
     if (!hidden_) return;
     for (HWND h : bars())
-        if (IsWindowVisible(h)) {
+        if (IsWindowVisible(h) || !shapeless(h)) {
             Hide(nullptr);
             return;
         }

@@ -10,7 +10,10 @@ public:
     // and hides it on every monitor, so it doesn't slide up at the edge.
     // wasAutoHide is set to whether it auto-hid before, the first time.
     void Hide(bool* wasAutoHide);
-    // Restore shows it again, auto-hiding only if it did before.
+    // Hide also takes away its shape (an empty window region), so it can't
+    // be seen when Explorer shows it for a moment.
+    // Restore shows it again, auto-hiding only if it did before; if it
+    // wasn't hidden by this run, it mends one a crash left hidden.
     void Restore(bool autoHide);
     // Check hides it again if Explorer has shown it (or restarted). Cheap
     // enough to call every few seconds.
