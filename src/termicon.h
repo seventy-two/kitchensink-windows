@@ -1,12 +1,12 @@
 // The title bar's Windows Terminal icon, drawn rather than loaded: a little
-// terminal window with a prompt, to sit beside the guitar and the mango.
+// terminal window, to sit beside the guitar and the mango.
 #pragma once
 
 #include "imgui.h"
 
 namespace ks {
 
-// DrawTerminalIcon draws a terminal window with a ">_" prompt in the square
+// DrawTerminalIcon draws a plain terminal window in the square
 // button at min, size across. Hovered, it's in Windows Terminal Preview's
 // own colours. Otherwise it's in the muted grey, its parts kept apart as
 // light and shade between that grey and bg (the title bar behind it), and
