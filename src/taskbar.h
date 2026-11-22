@@ -18,7 +18,11 @@ public:
     bool Hidden() const { return hidden_; }
 
 private:
+    void watch();
+    void unwatch();
     bool hidden_ = false;
+    void* hook_ = nullptr;    // the WinEvent hook on Explorer's windows being shown
+    unsigned long hookPid_ = 0;  // Explorer's process, which changes when it restarts
 };
 
 }  // namespace ks

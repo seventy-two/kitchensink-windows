@@ -3,6 +3,8 @@
 #include <windows.h>
 #include <shellapi.h>
 
+#include <cwchar>
+
 #include <vector>
 
 namespace ks {
@@ -30,7 +32,35 @@ void setState(UINT_PTR s) {
     SHAppBarMessage(ABM_SETSTATE, &ab);
 }
 
+bool isBar(HWND h) {
+    wchar_t cls[32];
+    if (!GetClassNameW(h, cls, 32)) return false;
+    return wcscmp(cls, L"Shell_TrayWnd") == 0 || wcscmp(cls, L"Shell_SecondaryTrayWnd") == 0;
+}
+
+// Explorer shows the auto-hidden taskbar again when some apps take the
+// front from their tray icons (MSI Afterburner, for one); this hides it
+// the moment it's shown rather than at the next check.
+void CALLBACK onShow(HWINEVENTHOOK, DWORD, HWND h, LONG obj, LONG child, DWORD, DWORD) {
+    if (obj == OBJID_WINDOW && child == CHILDID_SELF && h && isBar(h)) ShowWindowAsync(h, SW_HIDE);
+}
+
 }  // namespace
+
+void Taskbar::watch() {
+    DWORD pid = 0;
+    if (HWND bar = FindWindowW(L"Shell_TrayWnd", nullptr)) GetWindowThreadProcessId(bar, &pid);
+    if (!pid || (hook_ && pid == hookPid_)) return;
+    unwatch();
+    hook_ = SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, nullptr, onShow, pid, 0, WINEVENT_OUTOFCONTEXT);
+    hookPid_ = pid;
+}
+
+void Taskbar::unwatch() {
+    if (hook_) UnhookWinEvent(HWINEVENTHOOK(hook_));
+    hook_ = nullptr;
+    hookPid_ = 0;
+}
 
 void Taskbar::Hide(bool* wasAutoHide) {
     std::vector<HWND> all = bars();
@@ -42,10 +72,12 @@ void Taskbar::Hide(bool* wasAutoHide) {
     if (!(s & ABS_AUTOHIDE)) setState(s | ABS_AUTOHIDE);
     for (HWND h : all) ShowWindow(h, SW_HIDE);
     hidden_ = true;
+    watch();
 }
 
 void Taskbar::Restore(bool autoHide) {
     if (!hidden_) return;
+    unwatch();
     std::vector<HWND> all = bars();
     UINT_PTR s = state();
     setState(autoHide ? (s | ABS_AUTOHIDE) : (s & ~UINT_PTR(ABS_AUTOHIDE)));
