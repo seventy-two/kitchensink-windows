@@ -173,7 +173,9 @@ result is a single `kitchensink.exe` with nothing to install.
   Ones that aren't there are left out, and with none the flag doesn't show.
   `"appGroups"` sorts some of them under headings, in order, e.g.
   `[{"name": "System", "apps": ["cooler", "squeak"]}]`; the rest go under
-  "Apps" above them. The pinned apps (`"pins"`, below) sit at the top.
+  "Apps" above them. Private apps (below) in no group go under "Private",
+  after the groups, or where a `{"name": "Private"}` group stands. The
+  pinned apps (`"pins"`, below) sit at the top.
   Apps named in `"privateApps"` can be hidden from the menu with **Hide
   private apps** in the eye's right-click menu (the eye shows whenever
   there are private apps), and it's remembered.

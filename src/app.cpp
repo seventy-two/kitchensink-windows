@@ -3645,11 +3645,18 @@ float App::appsButton(float right, float mid) {
                 if (std::find(g.apps.begin(), g.apps.end(), name) != g.apps.end()) return true;
             return false;
         };
-        std::vector<const LaunchApp*> loose;
+        auto isPrivate = [&](const std::string& name) {
+            return std::find(config_.privateApps.begin(), config_.privateApps.end(), name) != config_.privateApps.end();
+        };
+        // Private apps in no group of their own go under "Private": where a
+        // group of that name stands in "appGroups", else after them all.
+        std::vector<const LaunchApp*> loose, privates;
         for (const auto& a : apps)
-            if (!inGroup(a.name)) loose.push_back(&a);
+            if (!inGroup(a.name)) (isPrivate(a.name) ? privates : loose).push_back(&a);
+        bool privateGroup = std::any_of(config_.appGroups.begin(), config_.appGroups.end(),
+                                        [](const Config::AppGroup& g) { return g.name == "Private"; });
         if (!loose.empty()) {
-            if (!pins.empty() || !config_.appGroups.empty()) heading("Apps");
+            if (!pins.empty() || !config_.appGroups.empty() || !privates.empty()) heading("Apps");
             for (const LaunchApp* a : loose) appRow(*a);
         }
         for (const auto& g : config_.appGroups) {
@@ -3657,9 +3664,14 @@ float App::appsButton(float right, float mid) {
             for (const auto& name : g.apps)
                 for (const auto& a : apps)
                     if (a.name == name) in.push_back(&a);
+            if (g.name == "Private") in.insert(in.end(), privates.begin(), privates.end());
             if (in.empty()) continue;
             heading(g.name.c_str());
             for (const LaunchApp* a : in) appRow(*a);
+        }
+        if (!privateGroup && !privates.empty()) {
+            heading("Private");
+            for (const LaunchApp* a : privates) appRow(*a);
         }
         ImGui::EndPopup();
     }
