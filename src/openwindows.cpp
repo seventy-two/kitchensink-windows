@@ -9,55 +9,32 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cwctype>
+#include <set>
 
+#include "net.h"
+#include "platform.h"
 #include "winicon.h"
+#include "winutil.h"
 
 namespace ks {
 
 namespace {
 
-std::string narrow(const std::wstring& w) {
-    if (w.empty()) return {};
-    int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), int(w.size()), nullptr, 0, nullptr, nullptr);
-    std::string s(n, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), int(w.size()), s.data(), n, nullptr, nullptr);
-    return s;
-}
-
-std::wstring widen(const std::string& s) {
-    if (s.empty()) return {};
-    int n = MultiByteToWideChar(CP_UTF8, 0, s.c_str(), int(s.size()), nullptr, 0);
-    std::wstring w(n, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, s.c_str(), int(s.size()), w.data(), n);
-    return w;
-}
-
-// lowerW lower-cases a path as the launcher does, so pins match.
-std::wstring lowerW(std::wstring s) {
-    for (auto& c : s) c = wchar_t(std::towlower(c));
-    return s;
-}
-
-double seconds() {
-    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
-}
+double seconds() { return TickMs() / 1000.0; }
 
 // process gives a window's exe (lower case) and package family.
 void process(HWND h, PinWindow& m) {
     DWORD pid = 0;
     GetWindowThreadProcessId(h, &pid);
+    m.exe = Narrow(LowerPath(ExePath(pid)));  // lower case, as the launcher's pins
     HANDLE p = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
     if (!p) return;
-    wchar_t buf[MAX_PATH];
-    DWORD n = MAX_PATH;
-    if (QueryFullProcessImageNameW(p, 0, buf, &n)) m.exe = narrow(lowerW(std::wstring(buf, n)));
     UINT32 len = 0;
     if (GetPackageFamilyName(p, &len, nullptr) == ERROR_INSUFFICIENT_BUFFER && len) {
         std::wstring fam(len, L'\0');
         if (GetPackageFamilyName(p, &len, fam.data()) == ERROR_SUCCESS) {
             fam.resize(len ? len - 1 : 0);
-            m.family = narrow(fam);
+            m.family = Narrow(fam);
         }
     }
     CloseHandle(p);
@@ -167,16 +144,30 @@ void OpenWindows::Close(uintptr_t w) { PostMessageW(HWND(w), WM_SYSCOMMAND, SC_C
 
 void OpenWindows::run() {
     CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
-    std::vector<uintptr_t> order;            // first seen first
-    std::map<uintptr_t, std::string> icons;  // each window's icon key
-    std::map<std::string, bool> made;        // icon keys tried
+    std::vector<uintptr_t> order;  // first seen first
+    // What doesn't change about a window (its process and class), and its
+    // icon key, looked for again every few seconds.
+    struct Known {
+        PinWindow match;
+        std::wstring aumid;
+        std::string icon;
+        double iconAt = -1e9;
+    };
+    std::map<uintptr_t, Known> known;
+    std::map<std::string, bool> made;  // icon keys tried
+    double scanned = -1e9;
     std::unique_lock<std::mutex> lock(mu_);
     while (!stop_) {
         // Titles change without the shell saying (or saying late), so look
-        // again every second anyway.
+        // again every second anyway; a burst of shell events makes one look.
         cv_.wait_for(lock, std::chrono::seconds(1), [this] { return stop_ || dirty_; });
         if (stop_) break;
+        if (double wait = 0.25 - (seconds() - scanned); wait > 0) {
+            cv_.wait_for(lock, std::chrono::duration<double>(wait), [this] { return stop_; });
+            if (stop_) break;
+        }
         dirty_ = false;
+        scanned = seconds();
         lock.unlock();
 
         struct Found {
@@ -217,8 +208,8 @@ void OpenWindows::run() {
                     order.end());
         for (uintptr_t w : now)
             if (std::find(order.begin(), order.end(), w) == order.end()) order.push_back(w);
-        for (auto it = icons.begin(); it != icons.end();)
-            it = std::find(order.begin(), order.end(), it->first) == order.end() ? icons.erase(it) : std::next(it);
+        for (auto it = known.begin(); it != known.end();)
+            it = std::find(order.begin(), order.end(), it->first) == order.end() ? known.erase(it) : std::next(it);
 
         std::vector<OpenWindow> list;
         for (uintptr_t w : order) {
@@ -226,32 +217,50 @@ void OpenWindows::run() {
             auto f = std::find_if(found.begin(), found.end(), [&](const Found& x) { return x.h == h; });
             OpenWindow o;
             o.id = w;
-            o.title = narrow(f->title);
+            o.title = Narrow(f->title);
             o.minimised = IsIconic(h);
-            wchar_t cls[128] = L"";
-            GetClassNameW(h, cls, 128);
-            o.match.cls = narrow(cls);
-            process(h, o.match);
-            // A Store app's frame belongs to ApplicationFrameHost: its app ID
-            // says which app it is, for the icon and pins.
-            std::wstring aumid = o.match.cls == "ApplicationFrameWindow" ? appID(h) : L"";
-            if (!aumid.empty() && o.match.family.empty()) o.match.family = narrow(aumid.substr(0, aumid.find(L'!')));
+            auto [it, fresh] = known.try_emplace(w);
+            Known& k = it->second;
+            if (fresh) {
+                wchar_t cls[128] = L"";
+                GetClassNameW(h, cls, 128);
+                k.match.cls = Narrow(cls);
+                process(h, k.match);
+                // A Store app's frame belongs to ApplicationFrameHost: its
+                // app ID says which app it is, for the icon and pins.
+                if (k.match.cls == "ApplicationFrameWindow") k.aumid = appID(h);
+                if (!k.aumid.empty() && k.match.family.empty()) k.match.family = PinFamily(Narrow(k.aumid));
+            }
+            o.match = k.match;
 
             // The icon: the window's own, else the Store app's or exe's.
-            HICON hi = aumid.empty() ? windowIcon(h) : nullptr;
-            char key[64];
-            std::snprintf(key, sizeof key, "win-icon:%llx:%llx", (unsigned long long)w, (unsigned long long)uintptr_t(hi));
-            std::string k = hi ? key : !aumid.empty() ? "app-id-icon:" + narrow(aumid) : "exe-icon:" + o.match.exe;
-            if (!made.count(k)) {
-                IconPNGs png = hi ? IconFromHandle(hi, kIconSize)
-                               : !aumid.empty() ? IconFromAppID(aumid, kIconSize)
-                                                : IconFromShell(widen(o.match.exe), kIconSize);
-                made[k] = !png.empty();
-                if (!png.empty()) icons_.Put(k, std::move(png.colour));
+            // Asked again every few seconds, as some apps change it.
+            if (scanned - k.iconAt >= 5) {
+                k.iconAt = scanned;
+                HICON hi = k.aumid.empty() ? windowIcon(h) : nullptr;
+                char key[64];
+                std::snprintf(key, sizeof key, "win-icon:%llx:%llx", (unsigned long long)w, (unsigned long long)uintptr_t(hi));
+                std::string ik = hi ? key : !k.aumid.empty() ? "app-id-icon:" + Narrow(k.aumid) : "exe-icon:" + k.match.exe;
+                if (!made.count(ik)) {
+                    std::string png = hi ? IconFromHandle(hi, kIconSize)
+                                     : !k.aumid.empty() ? IconFromAppID(k.aumid, kIconSize)
+                                                        : IconFromShell(Widen(k.match.exe), kIconSize);
+                    made[ik] = !png.empty();
+                    if (!png.empty()) icons_.Put(ik, std::move(png));
+                }
+                k.icon = made[ik] ? ik : "";
             }
-            if (made[k]) o.icon = k;
+            o.icon = k.icon;
             list.push_back(std::move(o));
         }
+
+        // Icons no window shows any more go, so the store doesn't grow
+        // with every window ever opened.
+        std::set<std::string> used;
+        for (const auto& [w, k] : known) used.insert(k.icon);
+        for (auto it = made.begin(); it != made.end();)
+            it = used.count(it->first) ? std::next(it) : made.erase(it);
+        icons_.Keep(used);
 
         lock.lock();
         bool changed = list.size() != list_.size();

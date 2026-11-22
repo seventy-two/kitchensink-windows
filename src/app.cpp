@@ -468,8 +468,9 @@ void App::bevel(ImVec2 min, ImVec2 max) {
 }
 
 void App::Pump() {
-    net_.Sample(TickMs() / 1000.0);
-    if (double t = TickMs() / 1000.0; config_.hideTaskbar && (t - taskbarChecked_ > 5 || t < taskbarWatchUntil_)) {
+    double t = TickMs() / 1000.0;
+    net_.Sample(t);
+    if (config_.hideTaskbar && t - taskbarChecked_ > 5) {
         taskbarChecked_ = t;
         taskbar_.Check();
     }
@@ -563,6 +564,9 @@ bool App::NotificationClicked() {
 }
 
 void App::Frame() {
+    // One copy of the open windows for the frame: the title bar's pins,
+    // the apps menu and the side column all look at it.
+    openWindows_ = windows_->List();
     catInterval_ = 0;  // until he's drawn
     noActivate_.swap(noActivateNext_);
     noActivateNext_.clear();
@@ -639,14 +643,13 @@ void App::Frame() {
             // and the open windows above that; the tray over the brightness.
             const Snapshot* sw = switchesPanel();
             float swH = sw ? switchesH_ : 0;
-            std::vector<OpenWindow> openWindows = windows_->List();
             std::vector<TrayIcon> trayIcons = tray_->Icons();
-            windowsH_ = windowsBarHeight(openWindows.size());
-            trayH_ = trayBarHeight(trayIcons.size(), feedW);
+            float windowsH = windowsBarHeight(openWindows_.size());
+            float trayH = trayBarHeight(trayIcons.size(), feedW);
             float lightH = brightnessBarHeight(), volH = volumeBarHeight(), netH = netBarHeight();
             float below = (barH > 0 ? barH + gap : 0) + (skyH > 0 ? skyH + tight : 0) + (sw ? swH + gap : 0) +
-                          (lightH > 0 ? lightH + tight : 0) + (windowsH_ > 0 ? windowsH_ + gap : 0) +
-                          (trayH_ > 0 ? trayH_ + tight : 0) + (netH > 0 ? netH + tight : 0) +
+                          (lightH > 0 ? lightH + tight : 0) + (windowsH > 0 ? windowsH + gap : 0) +
+                          (trayH > 0 ? trayH + tight : 0) + (netH > 0 ? netH + tight : 0) +
                           (volH > 0 ? volH + tight : 0);
             // Scrolled with the wheel; no scrollbar, which would take width
             // and get in the way.
@@ -656,8 +659,8 @@ void App::Frame() {
             ImGui::EndChild();
             float spacing = ImGui::GetStyle().ItemSpacing.y;
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
-            windowsBar(openWindows, feedW);
-            if (windowsH_ > 0) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
+            windowsBar(openWindows_, feedW);
+            if (windowsH > 0) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
             if (sw) {
                 switchesBar(*sw, feedW);
                 switchesH_ = ImGui::GetItemRectSize().y;
@@ -668,7 +671,10 @@ void App::Frame() {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
                 sky(feedW, t);
             }
-            trayBar(trayIcons, feedW);
+            if (trayH > 0) {
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
+                trayBar(trayIcons, feedW);
+            }
             if (netH > 0) {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
                 netBar(feedW);
@@ -3610,13 +3616,10 @@ float App::appsButton(float right, float mid) {
         // The pinned apps first, as the taskbar had them: a click brings
         // up the window used last, or starts the app; a middle click starts
         // another.
-        std::vector<OpenWindow> wins = windows_->List();
         for (size_t i = 0; i < pins.size(); i++) {
             const PinnedApp& pin = pins[i];
             ImGui::PushID(int(i));
-            std::vector<uintptr_t> mine;
-            for (const auto& w : wins)
-                if (PinMatches(pin.kind, pin.target, w.match)) mine.push_back(w.id);
+            std::vector<uintptr_t> mine = PinWindows(pin.kind, pin.target, openWindows_);
             ImVec2 at = ImGui::GetCursorScreenPos();
             bool picked = ImGui::Selectable("##pin", false, 0, ImVec2(rw, selH));
             bool middle = ImGui::IsItemHovered() && ImGui::IsMouseReleased(ImGuiMouseButton_Middle);
@@ -3626,14 +3629,14 @@ float App::appsButton(float right, float mid) {
                 windows_->Show(PinTarget(mine, 0, windows_->LastActive()));
             }
             if (middle) ImGui::CloseCurrentPopup();
-            row(at, launcher_.PinIcon(pin, false, *images_), pin.name, !mine.empty());
+            row(at, launcher_.PinIcon(pin, *images_), pin.name, !mine.empty());
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
                 ImGui::SetTooltip("%s", mine.empty() ? "Start" : "Running: bring to the front\nMiddle-click for a new window");
             ImGui::PopID();
         }
 
-        // Then the user's own apps: those in no group under "Apps" (A-Z),
-        // then each group in turn, under its heading.
+        // Then the user's own apps, under their headings (see
+        // MenuSections).
         auto heading = [&](const char* name) {
             ImGui::Dummy(ImVec2(0, 2 * scale_));
             ImGui::PushFont(fonts_.caption);
@@ -3651,38 +3654,13 @@ float App::appsButton(float right, float mid) {
                 ImGui::SetTooltip("%s", running ? "Running: bring to the front" : "Start");
             ImGui::PopID();
         };
-        auto inGroup = [&](const std::string& name) {
-            for (const auto& g : config_.appGroups)
-                if (std::find(g.apps.begin(), g.apps.end(), name) != g.apps.end()) return true;
-            return false;
-        };
-        auto isPrivate = [&](const std::string& name) {
-            return std::find(config_.privateApps.begin(), config_.privateApps.end(), name) != config_.privateApps.end();
-        };
-        // Private apps in no group of their own go under "Private": where a
-        // group of that name stands in "appGroups", else after them all.
-        std::vector<const LaunchApp*> loose, privates;
-        for (const auto& a : apps)
-            if (!inGroup(a.name)) (isPrivate(a.name) ? privates : loose).push_back(&a);
-        bool privateGroup = std::any_of(config_.appGroups.begin(), config_.appGroups.end(),
-                                        [](const Config::AppGroup& g) { return g.name == "Private"; });
-        if (!loose.empty()) {
-            if (!pins.empty() || !config_.appGroups.empty() || !privates.empty()) heading("Apps");
-            for (const LaunchApp* a : loose) appRow(*a);
-        }
-        for (const auto& g : config_.appGroups) {
-            std::vector<const LaunchApp*> in;
-            for (const auto& name : g.apps)
+        std::vector<std::string> names;
+        for (const auto& a : apps) names.push_back(a.name);
+        for (const auto& section : MenuSections(names, config_.appGroups, config_.privateApps, !pins.empty())) {
+            if (!section.name.empty()) heading(section.name.c_str());
+            for (const auto& name : section.apps)
                 for (const auto& a : apps)
-                    if (a.name == name) in.push_back(&a);
-            if (g.name == "Private") in.insert(in.end(), privates.begin(), privates.end());
-            if (in.empty()) continue;
-            heading(g.name.c_str());
-            for (const LaunchApp* a : in) appRow(*a);
-        }
-        if (!privateGroup && !privates.empty()) {
-            heading("Private");
-            for (const LaunchApp* a : privates) appRow(*a);
+                    if (a.name == name) appRow(a);
         }
         ImGui::EndPopup();
     }
@@ -4690,10 +4668,7 @@ void App::ShellEvent(unsigned code, uintptr_t window) { windows_->ShellEvent(cod
 
 void App::TaskbarCreated() {
     tray_->Refresh();
-    if (config_.hideTaskbar) {
-        taskbar_.Hide(nullptr);
-        taskbarWatchUntil_ = TickMs() / 1000.0 + 5;
-    }
+    if (config_.hideTaskbar) taskbar_.Hide(nullptr);
 }
 
 void App::RestoreTaskbar() { taskbar_.Restore(config_.taskbarAutoHide); }
@@ -4702,7 +4677,6 @@ void App::applyTaskbar() {
     if (config_.hideTaskbar) {
         bool was = config_.taskbarAutoHide;
         taskbar_.Hide(&was);
-        taskbarWatchUntil_ = TickMs() / 1000.0 + 5;
         if (was != config_.taskbarAutoHide) {
             config_.taskbarAutoHide = was;
             SaveConfig(config_);
@@ -4718,8 +4692,8 @@ bool App::NoActivate(float x, float y) const {
     return false;
 }
 
-// pinButtons draws the title bar's pinned apps as the taskbar would: grey
-// until hovered (like the buttons beside them), fainter while not running.
+// pinButtons draws the title bar's pinned apps as the taskbar would,
+// fainter while not running.
 // A click brings the app's window up
 // (the next one, if one's in front already; minimises it if it's the only
 // one), or starts it; a middle click starts another. Windows Terminal is
@@ -4730,7 +4704,6 @@ float App::pinButtons(float right, float mid) {
     float size = ImGui::GetFrameHeight(), icon = std::round(size * 0.64f);
     ImVec2 origin = ImGui::GetWindowPos();
     float left = right - size * float(pins.size());
-    std::vector<OpenWindow> wins = windows_->List();
     uintptr_t front = windows_->Front();
     ImDrawList* dl = ImGui::GetWindowDrawList();
     for (size_t i = 0; i < pins.size(); i++) {
@@ -4743,11 +4716,7 @@ float App::pinButtons(float right, float mid) {
         bool hovered = ImGui::IsItemHovered();
         noDrag_.push_back(ImRect(min, max));
         noActivateNext_.push_back(ImRect(min, max));
-        std::vector<uintptr_t> mine;
-        for (const auto& w : wins)
-            if (PinMatches(pin.kind, pin.target, w.match)) {
-                mine.push_back(w.id);
-            }
+        std::vector<uintptr_t> mine = PinWindows(pin.kind, pin.target, openWindows_);
         if (pressed) {
             if (ImGui::GetIO().MouseReleased[ImGuiMouseButton_Middle] || mine.empty()) {
                 launcher_.Start(pin);
@@ -4760,10 +4729,9 @@ float App::pinButtons(float right, float mid) {
         if (hovered)
             dl->AddRectFilled(min, max, ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
                               ImGui::GetStyle().FrameRounding);
-        bool terminal = pin.kind == PinKind::AppID && pin.target.find("WindowsTerminal") != std::string::npos;
-        if (terminal) {
+        if (pin.terminal) {
             DrawTerminalIcon(dl, min, size, hovered, p.muted, p.bg, mine.empty());
-        } else if (const Texture* t = launcher_.PinIcon(pin, !hovered, *images_)) {
+        } else if (const Texture* t = launcher_.PinIcon(pin, *images_)) {
             ImVec2 a(std::round(min.x + (size - icon) / 2), std::round(min.y + (size - icon) / 2));
             ImVec4 tint = hovered || !mine.empty() ? ImVec4(1, 1, 1, 1) : ImVec4(1, 1, 1, 0.5f);
             dl->AddImage((ImTextureID)(intptr_t)t->srv, a, ImVec2(a.x + icon, a.y + icon), ImVec2(0, 0), ImVec2(1, 1),
@@ -4853,7 +4821,7 @@ void App::windowsBar(const std::vector<OpenWindow>& list, float width) {
                          ImVec2(1, 1), w.minimised && !hovered ? u32(ImVec4(1, 1, 1, 0.55f)) : IM_COL32_WHITE);
         }
         x += iconSize + pad;
-        std::string title = fit(drawable(w.title), end.x - pad - x);
+        std::string clean = drawable(w.title), title = fit(clean, end.x - pad - x);
         ImVec4 col = flashing ? p.text : w.minimised ? p.muted : p.text;
         dl->AddText(ImVec2(x, std::round(at.y + (rowH - lineH) / 2)), u32(col), title.c_str());
         if (pressed) {
@@ -4863,8 +4831,8 @@ void App::windowsBar(const std::vector<OpenWindow>& list, float width) {
             else windows_->Click(w.id);
         }
         if (hovered && !menuOpen && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal) &&
-            title != drawable(w.title))
-            ImGui::SetTooltip("%s", w.title.c_str());
+            title != clean)
+            ImGui::SetTooltip("%s", clean.c_str());
         ImGui::PopID();
     }
     if (openMenu) ImGui::OpenPopup("##windowMenu");
@@ -4875,7 +4843,7 @@ void App::windowsBar(const std::vector<OpenWindow>& list, float width) {
         if (it == list.end()) {
             ImGui::CloseCurrentPopup();
         } else {
-            ImGui::TextColored(p.muted, "%s", fit(it->title, 260 * s).c_str());
+            ImGui::TextColored(p.muted, "%s", fit(drawable(it->title), 260 * s).c_str());
             ImGui::Separator();
             if (ImGui::MenuItem(it->minimised ? "Restore" : "Bring to front")) windows_->Show(it->id);
             if (ImGui::MenuItem("Minimise", nullptr, false, !it->minimised)) windows_->Minimise(it->id);
@@ -4912,8 +4880,6 @@ void App::trayBar(const std::vector<TrayIcon>& icons, float width) {
     if (icons.empty()) return;
     const Palette& p = Colours();
     float s = scale_;
-    float spacing = ImGui::GetStyle().ItemSpacing.y, tight = 4 * s;
-    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
     ImGui::PushID("##tray");
     ImGui::PushFont(fonts_.caption);
     ImDrawList* dl = ImGui::GetWindowDrawList();

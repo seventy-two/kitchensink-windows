@@ -412,8 +412,13 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR cmdLine, int) {
             if (msg.message == WM_QUIT) running = false;
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
-            // ImGui needs a couple of frames to settle after input.
-            framesWanted = 2;
+            // ImGui needs a couple of frames to settle after input. The
+            // shell's window events come with every title change anywhere:
+            // only activations and flashes change what's drawn here at once
+            // (the window list wakes the dashboard itself when it changes).
+            bool quietShell = shellHook && msg.message == shellHook && msg.wParam != HSHELL_WINDOWACTIVATED &&
+                              msg.wParam != HSHELL_RUDEAPPACTIVATED && msg.wParam != (HSHELL_REDRAW | HSHELL_HIGHBIT);
+            if (!quietShell) framesWanted = 2;
         }
         if (!running) break;
         app->Pump();

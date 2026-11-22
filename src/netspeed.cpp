@@ -5,19 +5,9 @@
 #include <windows.h>
 #include <iphlpapi.h>
 
+#include "net.h"
+
 namespace ks {
-
-namespace {
-
-std::string narrow(const wchar_t* w) {
-    if (!w || !*w) return {};
-    int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
-    std::string s(n > 0 ? n - 1 : 0, '\0');
-    if (n > 1) WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), n, nullptr, nullptr);
-    return s;
-}
-
-}  // namespace
 
 void NetSpeed::Sample(double t) {
     if (t - sampled_ < 1) return;
@@ -40,7 +30,7 @@ void NetSpeed::Sample(double t) {
         in += r.InOctets;
         out += r.OutOctets;
         if (!names.empty()) names += ", ";
-        names += narrow(r.Alias);
+        names += Narrow(r.Alias);
         any = true;
     }
     FreeMibTable(table);

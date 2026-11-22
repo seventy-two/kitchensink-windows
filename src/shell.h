@@ -3,6 +3,7 @@
 // can be tested anywhere.
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <cstdint>
 #include <map>
@@ -112,6 +113,12 @@ inline PinKind PinKindOf(const std::string& spec) {
 // its "!".
 inline std::string PinFamily(const std::string& appID) { return appID.substr(0, appID.find('!')); }
 
+// IsTerminalApp says whether an app ID is Windows Terminal (or its
+// Preview), which the title bar draws rather than showing its logo.
+inline bool IsTerminalApp(const std::string& appID) {
+    return appID.compare(0, 25, "Microsoft.WindowsTerminal") == 0 && appID.find('!') != std::string::npos;
+}
+
 // PinWindow is what a window is matched to a pin by.
 struct PinWindow {
     std::string exe;     // the process's path, lower case
@@ -126,16 +133,68 @@ inline bool PinMatches(PinKind kind, const std::string& target, const PinWindow&
     switch (kind) {
     case PinKind::Explorer: return w.cls == "CabinetWClass";
     case PinKind::AppID: {
-        if (w.family.empty()) return false;
-        std::string a = PinFamily(target), b = w.family;
-        if (a.size() != b.size()) return false;
-        for (size_t i = 0; i < a.size(); i++)
-            if (std::tolower((unsigned char)a[i]) != std::tolower((unsigned char)b[i])) return false;
+        // The family is the app ID up to its "!", compared in place: this
+        // runs for every pin and window each frame.
+        size_t n = std::min(target.find('!'), target.size());
+        if (w.family.empty() || w.family.size() != n) return false;
+        for (size_t i = 0; i < n; i++)
+            if (std::tolower((unsigned char)target[i]) != std::tolower((unsigned char)w.family[i])) return false;
         return true;
     }
     case PinKind::Shortcut: return !target.empty() && w.exe == target;
     }
     return false;
+}
+
+// MenuGroup is one of the apps menu's groups: a heading over some apps.
+struct MenuGroup {
+    std::string name;
+    std::vector<std::string> apps;
+};
+
+// MenuSections lays out the apps menu's own apps (names, in the order
+// shown, private ones already left out if they're hidden) under headings:
+// those in no group first, under "Apps" (no heading if they're all there
+// is), then each group in turn with its apps in its own order. Private
+// apps in no group go under "Private": where a group of that name stands,
+// else after the rest.
+inline std::vector<MenuGroup> MenuSections(const std::vector<std::string>& names, const std::vector<MenuGroup>& groups,
+                                           const std::vector<std::string>& privates, bool pinsAbove) {
+    auto has = [](const std::vector<std::string>& v, const std::string& s) {
+        return std::find(v.begin(), v.end(), s) != v.end();
+    };
+    auto grouped = [&](const std::string& n) {
+        for (const auto& g : groups)
+            if (has(g.apps, n)) return true;
+        return false;
+    };
+    std::vector<std::string> loose, priv;
+    for (const auto& n : names)
+        if (!grouped(n)) (has(privates, n) ? priv : loose).push_back(n);
+    std::vector<MenuGroup> out;
+    bool privateGroup = false;
+    if (!loose.empty()) out.push_back({pinsAbove || !groups.empty() || !priv.empty() ? "Apps" : "", loose});
+    for (const auto& g : groups) {
+        MenuGroup s{g.name, {}};
+        for (const auto& n : g.apps)
+            if (has(names, n)) s.apps.push_back(n);
+        if (g.name == "Private") {
+            privateGroup = true;
+            s.apps.insert(s.apps.end(), priv.begin(), priv.end());
+        }
+        if (!s.apps.empty()) out.push_back(std::move(s));
+    }
+    if (!privateGroup && !priv.empty()) out.push_back({"Private", priv});
+    return out;
+}
+
+// PinWindows lists the windows that belong to a pin, in list order.
+template <typename Windows>
+std::vector<uintptr_t> PinWindows(PinKind kind, const std::string& target, const Windows& windows) {
+    std::vector<uintptr_t> out;
+    for (const auto& w : windows)
+        if (PinMatches(kind, target, w.match)) out.push_back(w.id);
+    return out;
 }
 
 // PinTarget picks which of a pin's windows a click brings up, given them

@@ -135,37 +135,33 @@ Config LoadConfig() {
             for (const auto& id : *it)
                 if (id.is_string()) out.insert(id.get<std::string>());
     };
+    // strings reads a JSON array of strings (anything else in it skipped).
+    auto strings = [](const nlohmann::json& in, const char* key) {
+        std::vector<std::string> out;
+        if (auto it = in.find(key); it != in.end() && it->is_array())
+            for (const auto& v : *it)
+                if (v.is_string()) out.push_back(v.get<std::string>());
+        return out;
+    };
     ids("expanded", c.expanded);
     ids("collapsed", c.collapsed);
-    if (auto it = j.find("order"); it != j.end() && it->is_array())
-        for (const auto& id : *it)
-            if (id.is_string()) c.order.push_back(id.get<std::string>());
-    if (auto it = j.find("apps"); it != j.end() && it->is_array())
-        for (const auto& a : *it)
-            if (a.is_string()) c.apps.push_back(a.get<std::string>());
-    if (auto it = j.find("privateApps"); it != j.end() && it->is_array())
-        for (const auto& a : *it)
-            if (a.is_string()) c.privateApps.push_back(a.get<std::string>());
+    c.order = strings(j, "order");
+    c.apps = strings(j, "apps");
+    c.privateApps = strings(j, "privateApps");
     c.hideApps = j.value("hideApps", false);
     c.forceDim = j.value("forceDim", false);
     c.layout = j.value("layout", "");
     c.relevance = j.value("relevance", true);
-    if (auto it = j.find("pins"); it != j.end() && it->is_array())
-        for (const auto& a : *it)
-            if (a.is_string()) c.pins.push_back(a.get<std::string>());
+    c.pins = strings(j, "pins");
     c.trayCollapsed = j.value("trayCollapsed", false);
     c.netExpanded = j.value("netExpanded", false);
-    if (auto it = j.find("barPins"); it != j.end() && it->is_array())
-        for (const auto& a : *it)
-            if (a.is_string()) c.barPins.push_back(a.get<std::string>());
+    c.barPins = strings(j, "barPins");
     if (auto it = j.find("appGroups"); it != j.end() && it->is_array())
         for (const auto& g : *it) {
             if (!g.is_object()) continue;
-            Config::AppGroup group;
+            MenuGroup group;
             group.name = g.value("name", "");
-            if (auto a = g.find("apps"); a != g.end() && a->is_array())
-                for (const auto& n : *a)
-                    if (n.is_string()) group.apps.push_back(n.get<std::string>());
+            group.apps = strings(g, "apps");
             if (!group.name.empty()) c.appGroups.push_back(std::move(group));
         }
     c.hideTaskbar = j.value("hideTaskbar", false);

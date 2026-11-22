@@ -27,7 +27,8 @@ struct PinnedApp {
     std::string target;  // exe (lower case) for a shortcut, app ID for a Store app
     std::wstring open;   // what starts it: the shortcut, shell:AppsFolder\<app ID>, or explorer.exe
     std::wstring args;
-    std::string icon;    // its key in the pin icons; "<key>:grey" for the grey one
+    std::string icon;    // its key in the pin icons
+    bool terminal = false;  // Windows Terminal, which the title bar draws itself
 };
 
 class Launcher {
@@ -57,8 +58,8 @@ public:
     void SetPins(const std::vector<std::string>& menu, const std::vector<std::string>& bar);
     const std::vector<PinnedApp>& Pins() const { return pins_; }
     const std::vector<PinnedApp>& BarPins() const { return barPins_; }
-    // PinIcon is the pin's icon, in colour or grey, or null.
-    const Texture* PinIcon(const PinnedApp& pin, bool grey, ImageCache& images);
+    // PinIcon is the pin's icon, or null.
+    const Texture* PinIcon(const PinnedApp& pin, ImageCache& images);
     // Start starts a new copy of the pin's app (letting it to the front).
     void Start(const PinnedApp& pin) const;
 

@@ -274,10 +274,7 @@ private:
     std::unique_ptr<Tray> tray_;        // the notification area's icons
     Taskbar taskbar_;                   // hides the Windows taskbar while it's wanted
     double taskbarChecked_ = -1e9;
-    // Explorer shows the taskbar again as it starts auto-hiding, so for a
-    // few seconds after hiding it, it's checked every frame, not every 5 s.
-    double taskbarWatchUntil_ = 0;
-    float windowsH_ = 0, trayH_ = 0;    // the side column's Windows and Tray cards, last frame
+    std::vector<OpenWindow> openWindows_;  // this frame's open windows
     std::vector<ImRect> noActivate_, noActivateNext_;  // see NoActivate: last frame's, and this one's
     uintptr_t windowMenu_ = 0;          // the window whose right-click menu is open
     // While drawing a short table: the full ones it's cut from (a panel

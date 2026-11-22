@@ -1353,6 +1353,28 @@ static void testShell() {
     CHECK(ks::PinMatches(ks::PinKind::AppID, "microsoft.windowsterminalpreview_8wekyb3d8bbwe!App", term));
     CHECK(!ks::PinMatches(ks::PinKind::AppID, "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", term));
     CHECK(!ks::PinMatches(ks::PinKind::AppID, "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", ff));
+    CHECK(ks::IsTerminalApp("Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App"));
+    CHECK(ks::IsTerminalApp("Microsoft.WindowsTerminal_8wekyb3d8bbwe!App"));
+    CHECK(!ks::IsTerminalApp("Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"));
+    CHECK(!ks::IsTerminalApp("Microsoft.WindowsTerminal.lnk"));
+
+    // The apps menu's sections.
+    std::vector<ks::MenuGroup> groups = {{"System", {"squeak", "cooler"}}, {"Private", {}}, {"Other", {"marble"}}};
+    auto secs = ks::MenuSections({"cbwatch", "cooler", "marble", "squeak", "vodwatcher"}, groups, {"cbwatch"}, true);
+    CHECK_EQ(secs.size(), size_t(4));
+    CHECK_EQ(secs[0].name, std::string("Apps"));
+    CHECK_EQ(secs[0].apps.size(), size_t(1));  // vodwatcher
+    CHECK_EQ(secs[1].apps[0], std::string("squeak"));  // the group's own order
+    CHECK_EQ(secs[2].name, std::string("Private"));
+    CHECK_EQ(secs[2].apps[0], std::string("cbwatch"));
+    CHECK_EQ(secs[3].name, std::string("Other"));
+    // Without a Private group, private apps go last; with nothing else,
+    // the loose apps have no heading.
+    auto privLast = ks::MenuSections({"cbwatch", "marble"}, {{"Other", {"marble"}}}, {"cbwatch"}, false);
+    CHECK_EQ(privLast.back().name, std::string("Private"));
+    auto onlyLoose = ks::MenuSections({"a", "b"}, {}, {}, false);
+    CHECK_EQ(onlyLoose.size(), size_t(1));
+    CHECK_EQ(onlyLoose[0].name, std::string(""));
     CHECK(ks::PinMatches(ks::PinKind::Explorer, "", folder));
     CHECK(!ks::PinMatches(ks::PinKind::Explorer, "", ff));
 

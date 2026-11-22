@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "model.h"
+#include "shell.h"
 
 namespace ks {
 
@@ -69,11 +70,7 @@ struct Config {
     std::vector<std::string> pins, barPins;
     // The apps menu's groups, in order, each a heading over some of
     // "apps" (in its own order); the rest go under "Apps" above them.
-    struct AppGroup {
-        std::string name;
-        std::vector<std::string> apps;
-    };
-    std::vector<AppGroup> appGroups;
+    std::vector<MenuGroup> appGroups;
     // The side column's Tray card, cut to one line.
     bool trayCollapsed = false;
     // The Network card, opened to show its graph.

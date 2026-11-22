@@ -3,6 +3,7 @@
 
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 
 #include "images.h"
@@ -21,6 +22,11 @@ public:
     bool Holds(const std::string& key) {
         std::lock_guard<std::mutex> l(mu_);
         return png_.count(key) > 0;
+    }
+    // Keep drops every icon but those named.
+    void Keep(const std::set<std::string>& keys) {
+        std::lock_guard<std::mutex> l(mu_);
+        for (auto it = png_.begin(); it != png_.end();) it = keys.count(it->first) ? std::next(it) : png_.erase(it);
     }
     const Texture* Get(const std::string& key, ImageCache& images) {
         if (key.empty()) return nullptr;

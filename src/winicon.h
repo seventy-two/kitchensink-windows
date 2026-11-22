@@ -9,21 +9,16 @@
 
 namespace ks {
 
-// IconPNGs is an icon in colour, and in grey for buttons drawn muted until
-// hovered.
-struct IconPNGs {
-    std::string colour, grey;
-    bool empty() const { return colour.empty(); }
-};
+// Each returns the icon as a PNG, or empty.
 
 // IconFromHandle draws an icon handle at size pixels.
-IconPNGs IconFromHandle(HICON icon, int size);
+std::string IconFromHandle(HICON icon, int size);
 // IconFromShell asks the shell for the icon of a path or parsing name,
 // e.g. "shell:AppsFolder\<app ID>". Needs COM on the calling thread.
-IconPNGs IconFromShell(const std::wstring& name, int size);
+std::string IconFromShell(const std::wstring& name, int size);
 // IconFromAppID is a Store app's icon as the taskbar shows it: the
 // package's unplated logo, nearest size at or above size, else the
 // shell's (which sits on a coloured tile).
-IconPNGs IconFromAppID(const std::wstring& appID, int size);
+std::string IconFromAppID(const std::wstring& appID, int size);
 
 }  // namespace ks

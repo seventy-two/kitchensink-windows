@@ -7,6 +7,9 @@
 #include <mmdeviceapi.h>
 #include <wrl/client.h>
 
+#include "net.h"
+#include "winutil.h"
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -22,14 +25,6 @@ namespace {
 // PKEY_Device_FriendlyName, spelled out: its header wants more of the
 // SDK than the lean build includes.
 const PROPERTYKEY kFriendlyName = {{0xa45c254e, 0xdf1c, 0x4efd, {0x80, 0x20, 0x67, 0xd1, 0x46, 0xa8, 0x50, 0xe0}}, 14};
-
-std::string narrow(const wchar_t* w) {
-    if (!w || !*w) return {};
-    int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
-    std::string s(n > 0 ? n - 1 : 0, '\0');
-    if (n > 1) WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), n, nullptr, nullptr);
-    return s;
-}
 
 // Listener hears of changes from elsewhere (the volume keys, the flyout,
 // another default device), on Windows' threads: it only raises a flag and
@@ -79,14 +74,8 @@ private:
 // appName is what the mixer calls a process: its exe's description
 // ("Firefox", "Spotify"), else the exe's name without ".exe".
 std::string appName(DWORD pid) {
-    std::wstring path(MAX_PATH * 2, L'\0');
-    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!h) return {};
-    DWORD n = DWORD(path.size());
-    bool ok = QueryFullProcessImageNameW(h, 0, path.data(), &n);
-    CloseHandle(h);
-    if (!ok) return {};
-    path.resize(n);
+    std::wstring path = ExePath(pid);
+    if (path.empty()) return {};
     DWORD dummy = 0, size = GetFileVersionInfoSizeW(path.c_str(), &dummy);
     if (size) {
         std::vector<char> info(size);
@@ -100,13 +89,13 @@ std::string appName(DWORD pid) {
             swprintf(key, 64, L"\\StringFileInfo\\%04x%04x\\FileDescription", langs[0].lang, langs[0].page);
             wchar_t* desc = nullptr;
             if (VerQueryValueW(info.data(), key, reinterpret_cast<void**>(&desc), &len) && len > 1 && desc[0])
-                return narrow(desc);
+                return Narrow(desc);
         }
     }
     size_t slash = path.find_last_of(L"\\/");
     std::wstring file = path.substr(slash + 1);
     if (file.size() > 4 && _wcsicmp(file.c_str() + file.size() - 4, L".exe") == 0) file.resize(file.size() - 4);
-    return narrow(file.c_str());
+    return Narrow(file);
 }
 
 }  // namespace
@@ -115,13 +104,13 @@ struct Volume::Impl {
     ComPtr<IMMDevice> device;
     // The mixer's apps, each with the volume controls of its sessions.
     std::vector<std::pair<std::string, std::vector<ComPtr<ISimpleAudioVolume>>>> apps;
-    DWORD appsRead = 0;
-    bool appsEver = false;
+    DWORD appsRead = 0;  // when, in ticks; 0 for never (or the device changed)
+    std::map<DWORD, std::string> names;  // apps' names by process, as they don't change
 
     void readApps() {
         DWORD now = GetTickCount();
-        if (appsEver && now - appsRead < 500) return;
-        appsRead = now, appsEver = true;
+        if (appsRead && now - appsRead < 500) return;
+        appsRead = now ? now : 1;
         apps.clear();
         ComPtr<IAudioSessionManager2> manager;
         ComPtr<IAudioSessionEnumerator> sessions;
@@ -144,7 +133,9 @@ struct Volume::Impl {
             } else {
                 DWORD pid = 0;
                 c2->GetProcessId(&pid);
-                name = appName(pid);
+                auto known = names.find(pid);
+                if (known == names.end()) known = names.emplace(pid, appName(pid)).first;
+                name = known->second;
             }
             if (name.empty()) continue;
             auto it = at.find(name);
@@ -173,7 +164,7 @@ struct Volume::Impl {
         tried = now;
         listener->deviceChanged = false;
         close();
-        appsEver = false;
+        appsRead = 0;
         if (FAILED(devices->GetDefaultAudioEndpoint(eRender, eConsole, &device))) return;
         if (FAILED(device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, &endpoint))) return;
         endpoint->RegisterControlChangeNotify(listener);
@@ -181,7 +172,7 @@ struct Volume::Impl {
         if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &props))) {
             PROPVARIANT v;
             PropVariantInit(&v);
-            if (SUCCEEDED(props->GetValue(kFriendlyName, &v)) && v.vt == VT_LPWSTR) name = narrow(v.pwszVal);
+            if (SUCCEEDED(props->GetValue(kFriendlyName, &v)) && v.vt == VT_LPWSTR && v.pwszVal) name = Narrow(v.pwszVal);
             PropVariantClear(&v);
         }
     }
@@ -190,6 +181,7 @@ struct Volume::Impl {
         endpoint.Reset();
         device.Reset();
         apps.clear();
+        names.clear();
         name.clear();
     }
 };

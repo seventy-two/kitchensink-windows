@@ -5,20 +5,15 @@
 #include <chrono>
 #include <iterator>
 #include <cstring>
+#include <set>
 
+#include "net.h"
 #include "winicon.h"
+#include "winutil.h"
 
 namespace ks {
 
 namespace {
-
-std::string narrow(const std::wstring& w) {
-    if (w.empty()) return {};
-    int n = WideCharToMultiByte(CP_UTF8, 0, w.c_str(), int(w.size()), nullptr, 0, nullptr, nullptr);
-    std::string s(n, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w.c_str(), int(w.size()), s.data(), n, nullptr, nullptr);
-    return s;
-}
 
 // Explorer's record of an icon, which a tray button's dwData points to (as
 // Windows 10 lays it out, 64-bit).
@@ -46,7 +41,7 @@ bool ask(HWND tb, UINT msg, WPARAM w, LPARAM l, DWORD_PTR* r) {
 }
 
 // read lists a tray toolbar's icons, reading Explorer's memory.
-void read(HWND tb, bool overflow, DWORD self, std::vector<TrayIcon>& out, std::vector<uint64_t>& handles) {
+void read(HWND tb, DWORD self, std::vector<TrayIcon>& out, std::vector<uint64_t>& handles) {
     if (!tb) return;
     DWORD pid = 0;
     GetWindowThreadProcessId(tb, &pid);
@@ -69,23 +64,22 @@ void read(HWND tb, bool overflow, DWORD self, std::vector<TrayIcon>& out, std::v
             t.id = d.id;
             t.message = d.message;
             t.version = int(d.version);
-            t.overflow = overflow;
             DWORD owner = 0;
             GetWindowThreadProcessId(HWND(t.window), &owner);
             t.pid = owner;
             if (!t.window || !IsWindow(HWND(t.window)) || owner == self) continue;
-            if (owner == pid) {
-                wchar_t cls[64] = L"", title[64] = L"";
+            wchar_t cls[64] = L"", title[64] = L"";
+            if (owner == pid) {  // only Explorer's own icons are looked at
                 GetClassNameW(HWND(t.window), cls, 64);
                 GetWindowTextW(HWND(t.window), title, 64);
-                if (HiddenTrayIcon(true, t.id, narrow(cls), narrow(title))) continue;
             }
+            if (HiddenTrayIcon(owner == pid, t.id, Narrow(cls), Narrow(title))) continue;
             DWORD_PTR len = 0;
             if (ask(tb, TB_GETBUTTONTEXTW, b.idCommand, LPARAM(mem), &len) && len > 0 && len < kBuf / 2 - 1) {
                 std::wstring tip(len + 1, L'\0');
                 if (ReadProcessMemory(p, mem, tip.data(), (len + 1) * 2, nullptr)) {
                     tip.resize(len);
-                    t.tip = narrow(tip);
+                    t.tip = Narrow(tip);
                 }
             }
             handles.push_back(d.icon);
@@ -94,18 +88,6 @@ void read(HWND tb, bool overflow, DWORD self, std::vector<TrayIcon>& out, std::v
     }
     if (mem) VirtualFreeEx(p, mem, 0, MEM_RELEASE);
     CloseHandle(p);
-}
-
-// exeOf is a process's exe path.
-std::wstring exeOf(DWORD pid) {
-    std::wstring out;
-    if (HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid)) {
-        wchar_t buf[MAX_PATH * 2];
-        DWORD n = DWORD(std::size(buf));
-        if (QueryFullProcessImageNameW(h, 0, buf, &n)) out.assign(buf, n);
-        CloseHandle(h);
-    }
-    return out;
 }
 
 constexpr int kIconSize = 32;
@@ -159,25 +141,30 @@ void Tray::run() {
 
         std::vector<TrayIcon> list;
         std::vector<uint64_t> handles;
-        read(shownToolbar(), false, self, list, handles);
-        read(overflowToolbar(), true, self, list, handles);
+        read(shownToolbar(), self, list, handles);
+        read(overflowToolbar(), self, list, handles);
         for (size_t i = 0; i < list.size(); i++) {
             // Keyed by handle: an app changing its icon (a new badge) sets a
             // new one.
             char key[48];
             std::snprintf(key, sizeof key, "tray-icon:%llx", (unsigned long long)handles[i]);
             if (!icons_.Holds(key)) {
-                IconPNGs png = IconFromHandle(HICON(uintptr_t(handles[i])), kIconSize);
+                std::string png = IconFromHandle(HICON(uintptr_t(handles[i])), kIconSize);
                 // Some apps free their icon once the tray has its own copy,
                 // leaving a dead handle here: their exe's icon will do.
                 if (png.empty()) {
-                    std::wstring exe = exeOf(list[i].pid);
+                    std::wstring exe = ExePath(list[i].pid);
                     if (!exe.empty()) png = IconFromShell(exe, kIconSize);
                 }
-                icons_.Put(key, std::move(png.colour));
+                icons_.Put(key, std::move(png));
             }
             list[i].icon = key;
         }
+        // Old handles' icons go (a badge or meter makes a new one each
+        // change), so the store doesn't grow.
+        std::set<std::string> used;
+        for (const auto& t : list) used.insert(t.icon);
+        icons_.Keep(used);
 
         lock.lock();
         bool changed = list.size() != list_.size();

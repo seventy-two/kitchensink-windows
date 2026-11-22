@@ -25,7 +25,6 @@ struct TrayIcon {
     unsigned pid = 0;      // the app's process
     std::string tip;       // the tooltip
     std::string icon;      // its key in the icon store
-    bool overflow = false; // among Windows' hidden icons
 };
 
 class Tray {

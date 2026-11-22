@@ -50,19 +50,21 @@ std::string png(const std::vector<BYTE>& bgra, int w, int h) {
     return out;
 }
 
-// both makes the colour PNG and a grey one, the grey keeping a little of
-// the icon's light and shade.
-IconPNGs both(std::vector<BYTE>& bgra, int w, int h) {
-    IconPNGs out;
-    out.colour = png(bgra, w, h);
-    for (size_t i = 0; i + 3 < bgra.size(); i += 4) {
-        int lum = (bgra[i] * 11 + bgra[i + 1] * 59 + bgra[i + 2] * 30) / 100;
-        // Squeezed towards the middle so dark and light icons look alike.
-        BYTE g = BYTE(std::clamp(128 + (lum - 128) * 6 / 10, 0, 255));
-        bgra[i] = bgra[i + 1] = bgra[i + 2] = g;
+// hasAlpha says whether BGRA pixels use their alpha channel at all (old
+// icons leave it zero).
+bool hasAlpha(const std::vector<BYTE>& px) {
+    for (size_t i = 3; i < px.size(); i += 4)
+        if (px[i]) return true;
+    return false;
+}
+
+// unpremultiply turns premultiplied BGRA pixels into straight alpha.
+void unpremultiply(std::vector<BYTE>& px) {
+    for (size_t i = 0; i < px.size(); i += 4) {
+        BYTE a = px[i + 3];
+        if (a && a < 255)
+            for (int k = 0; k < 3; k++) px[i + k] = BYTE(std::min(255, px[i + k] * 255 / a));
     }
-    out.grey = png(bgra, w, h);
-    return out;
 }
 
 // pixels reads a 32-bit bitmap top-down. Without an alpha channel (all
@@ -82,22 +84,14 @@ bool pixels(HBITMAP colour, HBITMAP mask, int& w, int& h, std::vector<BYTE>& out
     out.assign(size_t(w) * h * 4, 0);
     HDC dc = GetDC(nullptr);
     bool ok = GetDIBits(dc, colour, 0, h, out.data(), &bi, DIB_RGB_COLORS) == h;
-    bool alpha = false;
-    for (size_t i = 3; i < out.size(); i += 4)
-        if (out[i]) alpha = true;
-    if (ok && !alpha) {
+    if (ok && !hasAlpha(out)) {
         std::vector<BYTE> m(size_t(w) * h * 4, 0);
         bool haveMask = mask && GetDIBits(dc, mask, 0, h, m.data(), &bi, DIB_RGB_COLORS) == h;
         for (size_t i = 0; i < out.size(); i += 4) out[i + 3] = haveMask && m[i] ? 0 : 255;
         premultiplied = false;
     }
     ReleaseDC(nullptr, dc);
-    if (ok && premultiplied)
-        for (size_t i = 0; i < out.size(); i += 4) {
-            BYTE a = out[i + 3];
-            if (a && a < 255)
-                for (int k = 0; k < 3; k++) out[i + k] = BYTE(std::min(255, out[i + k] * 255 / a));
-        }
+    if (ok && premultiplied) unpremultiply(out);
     return ok;
 }
 
@@ -180,18 +174,18 @@ std::wstring unplatedLogo(const std::wstring& dir, int size) {
 
 }  // namespace
 
-IconPNGs IconFromAppID(const std::wstring& appID, int size) {
-    std::wstring family = appID.substr(0, appID.find(L'!'));
+std::string IconFromAppID(const std::wstring& appID, int size) {
+    std::wstring family = appID.substr(0, appID.find(L'!'));  // as PinFamily
     for (const auto& dir : packageDirs(family)) {
         std::wstring logo = unplatedLogo(dir, size);
         int w = 0, h = 0;
         std::vector<BYTE> px;
-        if (!logo.empty() && pngFile(logo, w, h, px)) return both(px, w, h);
+        if (!logo.empty() && pngFile(logo, w, h, px)) return png(px, w, h);
     }
     return IconFromShell(L"shell:AppsFolder\\" + appID, size);
 }
 
-IconPNGs IconFromHandle(HICON icon, int size) {
+std::string IconFromHandle(HICON icon, int size) {
     if (!icon) return {};
     // Drawn at the size wanted, so Windows picks the best of its images.
     BITMAPINFO bi{};
@@ -212,26 +206,18 @@ IconPNGs IconFromHandle(HICON icon, int size) {
     bool drawn = DrawIconEx(dc, 0, 0, icon, size, size, 0, nullptr, DI_NORMAL);
     SelectObject(dc, old);
     DeleteDC(dc);
-    IconPNGs out;
+    std::string out;
     if (drawn) {
         std::vector<BYTE> px(static_cast<BYTE*>(bits), static_cast<BYTE*>(bits) + size_t(size) * size * 4);
-        bool alpha = false;
-        for (size_t i = 3; i < px.size(); i += 4)
-            if (px[i]) alpha = true;
-        if (alpha) {
-            // DrawIconEx leaves premultiplied pixels.
-            for (size_t i = 0; i < px.size(); i += 4) {
-                BYTE a = px[i + 3];
-                if (a && a < 255)
-                    for (int k = 0; k < 3; k++) px[i + k] = BYTE(std::min(255, px[i + k] * 255 / a));
-            }
-            out = both(px, size, size);
+        if (hasAlpha(px)) {
+            unpremultiply(px);  // DrawIconEx leaves premultiplied pixels
+            out = png(px, size, size);
         } else {
             // An old icon without alpha: read its own bitmaps and mask.
             ICONINFO ii{};
             if (GetIconInfo(icon, &ii)) {
                 int w = 0, h = 0;
-                if (ii.hbmColor && pixels(ii.hbmColor, ii.hbmMask, w, h, px, false)) out = both(px, w, h);
+                if (ii.hbmColor && pixels(ii.hbmColor, ii.hbmMask, w, h, px, false)) out = png(px, w, h);
                 if (ii.hbmColor) DeleteObject(ii.hbmColor);
                 if (ii.hbmMask) DeleteObject(ii.hbmMask);
             }
@@ -241,16 +227,16 @@ IconPNGs IconFromHandle(HICON icon, int size) {
     return out;
 }
 
-IconPNGs IconFromShell(const std::wstring& name, int size) {
+std::string IconFromShell(const std::wstring& name, int size) {
     ComPtr<IShellItemImageFactory> factory;
     if (FAILED(SHCreateItemFromParsingName(name.c_str(), nullptr, IID_PPV_ARGS(&factory)))) return {};
     HBITMAP bmp = nullptr;
     if (FAILED(factory->GetImage(SIZE{size, size}, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, &bmp)) || !bmp) return {};
     int w = 0, h = 0;
     std::vector<BYTE> px;
-    IconPNGs out;
+    std::string out;
     // The shell's images come premultiplied.
-    if (pixels(bmp, nullptr, w, h, px, true)) out = both(px, w, h);
+    if (pixels(bmp, nullptr, w, h, px, true)) out = png(px, w, h);
     DeleteObject(bmp);
     return out;
 }

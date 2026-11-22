@@ -18,7 +18,6 @@ public:
     // Check hides it again if Explorer has shown it (or restarted). Cheap
     // enough to call every few seconds.
     void Check();
-    bool Hidden() const { return hidden_; }
 
 private:
     void watch();
