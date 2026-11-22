@@ -13,7 +13,7 @@ OUT := build/linux
 # (main.cpp, media.cpp, sysinfo.cpp, launcher.cpp, lick.cpp, grabber.cpp,
 # upload.cpp, platform_win.cpp) are left out.
 SRC := src/app.cpp src/cat.cpp src/config.cpp src/grab.cpp src/images.cpp src/local.cpp src/model.cpp \
-	src/net.cpp src/retro.cpp src/sky.cpp src/sse.cpp src/theme.cpp src/weather_icon.cpp \
+	src/net.cpp src/retro.cpp src/sky.cpp src/sse.cpp src/termicon.cpp src/theme.cpp src/weather_icon.cpp \
 	linux/main_linux.cpp linux/http_curl.cpp linux/platform_linux.cpp linux/stubs.cpp \
 	third_party/imgui/imgui.cpp third_party/imgui/imgui_draw.cpp third_party/imgui/imgui_tables.cpp \
 	third_party/imgui/imgui_widgets.cpp \
