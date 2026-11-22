@@ -4424,13 +4424,44 @@ bool App::NoActivate(float x, float y) const {
 // hovered (like the buttons beside them), fainter while not running, with
 // a short bar under those that are. A click brings the app's window up
 // (the next one, if one's in front already; minimises it if it's the only
-// one), or starts it; a middle click starts another.
+// one), or starts it; a middle click starts another. A chevron on their
+// left folds them away, and back.
 float App::pinButtons(float right, float mid) {
     const Palette& p = Colours();
-    const auto& pins = launcher_.Pins();
+    const auto& all = launcher_.Pins();
     float size = ImGui::GetFrameHeight(), icon = std::round(size * 0.64f);
     ImVec2 origin = ImGui::GetWindowPos();
+    bool collapsed = config_.pinsCollapsed;
+    static const std::vector<PinnedApp> none;
+    const auto& pins = collapsed ? none : all;
     float left = right - size * float(pins.size());
+
+    // The chevron: pointing right (fold them away) while they show, left
+    // (bring them back) while folded.
+    float chevW = std::round(size * 0.6f);
+    ImGui::SetCursorPos(ImVec2(left - chevW - origin.x, mid - size / 2));
+    if (ImGui::InvisibleButton("##pinsChevron", ImVec2(chevW, size))) {
+        config_.pinsCollapsed = !collapsed;
+        SaveConfig(config_);
+    }
+    {
+        ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+        bool hovered = ImGui::IsItemHovered();
+        noDrag_.push_back(ImRect(min, max));
+        noActivateNext_.push_back(ImRect(min, max));
+        ImDrawList* bar = ImGui::GetWindowDrawList();
+        if (hovered)
+            bar->AddRectFilled(min, max, ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
+                               ImGui::GetStyle().FrameRounding);
+        const char* glyph = collapsed ? icon::ChevronLeft : icon::ChevronRight;
+        ImGui::PushFont(fonts_.caption);
+        ImVec2 gs = ImGui::CalcTextSize(glyph);
+        bar->AddText(ImVec2(std::round(min.x + (chevW - gs.x) / 2), std::round(min.y + (size - gs.y) / 2)),
+                     u32(hovered ? p.text : p.muted), glyph);
+        ImGui::PopFont();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal))
+            ImGui::SetTooltip(collapsed ? "Show the pinned apps" : "Fold the pinned apps away");
+    }
     std::vector<OpenWindow> wins = windows_->List();
     uintptr_t front = windows_->Front();
     ImDrawList* dl = ImGui::GetWindowDrawList();
@@ -4481,7 +4512,7 @@ float App::pinButtons(float right, float mid) {
         }
         ImGui::PopID();
     }
-    return left;
+    return left - chevW;
 }
 
 // drawable drops the characters the current font hasn't (e.g. the symbols

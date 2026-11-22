@@ -68,6 +68,8 @@ struct Config {
     std::vector<std::string> pins;
     // The side column's Tray card, cut to one line.
     bool trayCollapsed = false;
+    // The title bar's pinned apps, folded away behind their chevron.
+    bool pinsCollapsed = false;
     // Hides the Windows taskbar while the dashboard runs (it has the open
     // windows, pins and tray instead), and whether the taskbar auto-hid
     // before, to put it back as it was.

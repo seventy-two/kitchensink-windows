@@ -187,6 +187,8 @@ result is a single `kitchensink.exe` with nothing to install.
     accent colour when one of its windows is in front). A click brings up
     the app's window, the next one if one's in front already, minimises it
     if it's the only one, or starts the app; a middle click starts another.
+    The chevron on their left folds them away to just itself, and back
+    (remembered as `"pinsCollapsed"`).
     List them in `config.json` as `"pins"`, in order: a shortcut's file name
     among the taskbar's pinned ones (`Firefox.lnk`), a full path to a
     `.lnk`, a Store app's ID (`Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe!App`,

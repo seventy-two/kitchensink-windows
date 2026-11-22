@@ -154,6 +154,7 @@ Config LoadConfig() {
         for (const auto& a : *it)
             if (a.is_string()) c.pins.push_back(a.get<std::string>());
     c.trayCollapsed = j.value("trayCollapsed", false);
+    c.pinsCollapsed = j.value("pinsCollapsed", false);
     c.hideTaskbar = j.value("hideTaskbar", false);
     c.taskbarAutoHide = j.value("taskbarAutoHide", false);
     if (auto it = j.find("rowStyle"); it != j.end() && it->is_object())
@@ -196,6 +197,7 @@ bool SaveConfig(const Config& c) {
         {"rowStyle", c.rowStyle},
         {"pins", c.pins},
         {"trayCollapsed", c.trayCollapsed},
+        {"pinsCollapsed", c.pinsCollapsed},
         {"hideTaskbar", c.hideTaskbar},
         {"taskbarAutoHide", c.taskbarAutoHide},
     };
