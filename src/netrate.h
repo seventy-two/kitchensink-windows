@@ -53,27 +53,30 @@ private:
     std::deque<NetRate> rates_;
 };
 
-// FormatRate writes bytes a second as "0 B/s", "512 B/s", "12.3 KB/s",
-// "123 MB/s": three figures at most, in 1024s as Windows counts.
+// kMB is a megabyte, in 1024s as Windows counts.
+constexpr double kMB = 1024.0 * 1024.0;
+
+// FormatRate writes bytes a second in MB/s, always, so the line stays
+// still while little's moving: "0 MB/s" for nothing much, "0.1 MB/s",
+// "12.3 MB/s", "123 MB/s".
 inline std::string FormatRate(double bytes) {
-    static const char* units[] = {"B/s", "KB/s", "MB/s", "GB/s"};
-    int u = 0;
-    while (bytes >= 999.5 && u < 3) bytes /= 1024, u++;
+    double mb = bytes / kMB;
     char buf[32];
-    if (u == 0 || bytes >= 99.95) std::snprintf(buf, sizeof buf, "%.0f %s", bytes, units[u]);
-    else std::snprintf(buf, sizeof buf, "%.1f %s", bytes, units[u]);
+    if (mb < 0.05) std::snprintf(buf, sizeof buf, "0 MB/s");
+    else if (mb < 99.95) std::snprintf(buf, sizeof buf, "%.1f MB/s", mb);
+    else std::snprintf(buf, sizeof buf, "%.0f MB/s", mb);
     return buf;
 }
 
 // GraphTop is the rate the graph's top stands for: the next 1, 2 or 5
-// times a power of ten at or above peak, and at least 10 KB/s so a quiet
-// line doesn't fill it with noise.
+// times a power of ten MB/s at or above peak, and at least 1 MB/s so a
+// quiet line stays flat rather than filling it with noise.
 inline double GraphTop(double peak) {
-    double top = std::max(peak, 10.0 * 1024);
+    double top = std::max(peak / kMB, 1.0);
     double p = std::pow(10.0, std::floor(std::log10(top)));
     for (double m : {1.0, 2.0, 5.0, 10.0})
-        if (m * p >= top) return m * p;
-    return 10 * p;
+        if (m * p >= top * (1 - 1e-9)) return m * p * kMB;
+    return 10 * p * kMB;
 }
 
 }  // namespace ks

@@ -78,7 +78,8 @@ result is a single `kitchensink.exe` with nothing to install.
   mutes or unmutes, and the tooltip names the speakers. It follows changes
   made elsewhere (the volume keys, the flyout, a new default device).
 - **Network**: above the volume, the network's speeds down and up (the
-  physical adapters that are up, read every second; Windows only). A click
+  physical adapters that are up, read every second, always in MB/s so it
+  sits at 0 or 0.1 while little is moving; Windows only). A click
   opens it to a graph of the last two minutes, down filled in the accent
   and up as a green line, scaled to the busiest moment; another closes it,
   and that's remembered (`"netExpanded"`).

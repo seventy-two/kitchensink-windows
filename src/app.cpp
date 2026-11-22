@@ -4103,7 +4103,7 @@ void App::netBar(float width) {
     }
     // Down then up, each an arrow in its graph colour and the speed, in
     // columns wide enough that the line doesn't shuffle as they change.
-    float x = start.x + pad, col = ImGui::CalcTextSize("999 KB/s").x + pad * 2;
+    float x = start.x + pad, col = ImGui::CalcTextSize("99.9 MB/s").x + pad * 2;
     auto speed = [&](const char* arrow, ImVec4 c, double rate) {
         dl->AddText(ImVec2(x, ty), u32(c), arrow);
         float ax = ImGui::CalcTextSize(arrow).x + std::round(4 * s);

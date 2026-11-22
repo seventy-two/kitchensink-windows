@@ -1273,17 +1273,18 @@ static void testNetRate() {
     for (int i = 0; i < 300; i++) h.Push(5 + i, 2000 + uint64_t(i) * 10, 10);
     CHECK_EQ(h.Rates().size(), ks::NetHistory::kKeep);
 
-    CHECK_EQ(ks::FormatRate(0), std::string("0 B/s"));
-    CHECK_EQ(ks::FormatRate(512), std::string("512 B/s"));
-    CHECK_EQ(ks::FormatRate(1000), std::string("1.0 KB/s"));
-    CHECK_EQ(ks::FormatRate(12.34 * 1024), std::string("12.3 KB/s"));
-    CHECK_EQ(ks::FormatRate(123.4 * 1024 * 1024), std::string("123 MB/s"));
-    CHECK_EQ(ks::FormatRate(1.5 * 1024 * 1024 * 1024), std::string("1.5 GB/s"));
+    const double mb = ks::kMB;
+    CHECK_EQ(ks::FormatRate(0), std::string("0 MB/s"));
+    CHECK_EQ(ks::FormatRate(40 * 1024), std::string("0 MB/s"));  // the odd KB doesn't show
+    CHECK_EQ(ks::FormatRate(0.1 * mb), std::string("0.1 MB/s"));
+    CHECK_EQ(ks::FormatRate(12.34 * mb), std::string("12.3 MB/s"));
+    CHECK_EQ(ks::FormatRate(123.4 * mb), std::string("123 MB/s"));
 
-    CHECK_EQ(ks::GraphTop(0), 20000.0);  // at least 10 KB/s, rounded up
-    CHECK_EQ(ks::GraphTop(30000), 50000.0);
-    CHECK_EQ(ks::GraphTop(1e6), 1e6);
-    CHECK_EQ(ks::GraphTop(1.2e7), 2e7);
+    CHECK_EQ(ks::GraphTop(0), 1 * mb);  // at least 1 MB/s
+    CHECK_EQ(ks::GraphTop(1 * mb), 1 * mb);
+    CHECK_EQ(ks::GraphTop(1.5 * mb), 2 * mb);
+    CHECK_EQ(ks::GraphTop(30 * mb), 50 * mb);
+    CHECK_EQ(ks::GraphTop(120 * mb), 200 * mb);
 
     CHECK(ks::HiddenTrayIcon(true, 100, "ATL:00007FF89E668280", ""));
     CHECK(ks::HiddenTrayIcon(true, 49560, "ATL:00007FF8CE25B210", "Network Flyout"));
