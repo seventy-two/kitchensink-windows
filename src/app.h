@@ -12,6 +12,8 @@
 
 #include "battery.h"
 #include "brightness.h"
+#include "netspeed.h"
+#include "volume.h"
 #include "cat.h"
 #include "config.h"
 #include "grabber.h"
@@ -175,6 +177,15 @@ private:
     // landscape; nothing if the monitor can't be set (or on Linux).
     void brightnessBar(float width);
     float brightnessBarHeight();
+    bool sliderCard(const char* id, float width, float h, const char* glyph, bool glyphButton, int& value, int step,
+                    bool off, const std::string& tip, bool* glyphClicked);
+    // volumeBar is the same for the speakers' volume, over brightness; a
+    // click on the speaker mutes. netBar is the network's speeds above it,
+    // a slim line that opens to a graph of the last two minutes.
+    void volumeBar(float width);
+    float volumeBarHeight();
+    void netBar(float width);
+    float netBarHeight();
     float landHeight() const;
     bool eventCard(const Event& e, int64_t t, float left);
     void temporaries();
@@ -251,6 +262,8 @@ private:
     Uploader uploader_;                 // local files monitors ask for
     std::unique_ptr<BatteryWatcher> battery_;  // Squeak's readings, for the battery monitor
     std::unique_ptr<Brightness> brightness_;  // the monitor's brightness, over DDC/CI
+    std::unique_ptr<Volume> volume_;    // the default speakers' volume
+    NetSpeed net_;                      // the network's speeds, for the Network card
     HiddenApp lick_{L"dailylick"};      // Lick of the Day, hidden and shown by the guitar
     double lickClicked_ = -1;           // when its button was last clicked
     HiddenApp mango_{L"mango", L"-docked"};  // Mango (Spotify), docked to the right, shown by the mango

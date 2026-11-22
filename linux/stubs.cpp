@@ -2,7 +2,8 @@
 // and "Now playing" panels, the apps menu and pins, the open windows, tray
 // and taskbar, Lick of the Day, watchgrab's
 // download buttons, uploading RuneLite's files, Squeak's battery
-// readings and the monitor's brightness. Each is here as the
+// readings, the monitor's brightness, the volume and network speeds. Each
+// is here as the
 // do-nothing version the dashboard treats as absent.
 #include "battery.h"
 #include "brightness.h"
@@ -10,11 +11,13 @@
 #include "launcher.h"
 #include "lick.h"
 #include "media.h"
+#include "netspeed.h"
 #include "openwindows.h"
 #include "taskbar.h"
 #include "tray.h"
 #include "sysinfo.h"
 #include "upload.h"
+#include "volume.h"
 
 namespace ks {
 
@@ -82,6 +85,18 @@ bool Brightness::Available() { return false; }
 int Brightness::Value() { return 0; }
 void Brightness::Set(int) {}
 void Brightness::run() {}
+
+struct Volume::Impl {};
+Volume::Volume(std::function<void()>) {}
+Volume::~Volume() = default;
+bool Volume::Available() { return false; }
+int Volume::Value() { return 0; }
+bool Volume::Muted() { return false; }
+std::string Volume::Device() { return {}; }
+void Volume::Set(int) {}
+void Volume::SetMuted(bool) {}
+
+void NetSpeed::Sample(double) {}
 
 struct Grabber::Shared {};
 Grabber::Grabber(std::function<void()>) {}

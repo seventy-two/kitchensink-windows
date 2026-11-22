@@ -73,6 +73,15 @@ result is a single `kitchensink.exe` with nothing to install.
   monitor's own buttons would (VCP 0x10). Drag along it, or turn the wheel
   over it for steps of 5. It reads the monitor again every minute, and
   doesn't show at all if the monitor doesn't answer DDC/CI.
+- **Volume**: the same slider above it for the default speakers' volume
+  (Windows only): drag, or the wheel for steps of 2; a click on the speaker
+  mutes or unmutes, and the tooltip names the speakers. It follows changes
+  made elsewhere (the volume keys, the flyout, a new default device).
+- **Network**: above the volume, the network's speeds down and up (the
+  physical adapters that are up, read every second; Windows only). A click
+  opens it to a graph of the last two minutes, down filled in the accent
+  and up as a green line, scaled to the busiest moment; another closes it,
+  and that's remembered (`"netExpanded"`).
 - **Now playing**: what's playing on this PC, from Windows' media
   sessions (the same source as the volume keys' media pop-up), so Spotify,
   browsers and other players all show. A slim bar at the bottom of the
@@ -205,7 +214,9 @@ result is a single `kitchensink.exe` with nothing to install.
     closes it; right-click for Restore, Minimise, Maximise and Close. More
     than ten and the card scrolls.
   - **Tray**: the notification area's icons, read from Explorer's own (hidden)
-    tray, sit above the brightness slider. Clicks go to each icon's app
+    tray, sit above the network, volume and brightness. Explorer's own
+    volume and network icons are left out, as those cards stand in for
+    them. Clicks go to each icon's app
     just as Explorer sends them (in its icon version's format), so menus and
     windows open as from the tray, beside the pointer. The chevron cuts it
     to one slim line, "Tray (n)", and it's remembered.
@@ -309,6 +320,8 @@ make -f linux/Makefile -j4        # build/kitchensink, then the tests
 | `src/upload.cpp` | sends monitors the local files they ask for |
 | `src/battery.cpp` | runs Squeak for the battery monitor's readings |
 | `src/brightness.cpp` | reads and sets the monitor's brightness over DDC/CI, on a thread of its own |
+| `src/volume.cpp` | reads and sets the default speakers' volume and mute (Core Audio) |
+| `src/netspeed.cpp` | reads the network adapters' byte counters; `src/netrate.h` turns them into speeds, tested anywhere |
 | `src/lick.cpp` | starts Lick of the Day with the dashboard, and hides and shows it |
 | `src/launcher.cpp` | the apps menu and pinned apps: finding, starting and bringing up the apps, and their icons |
 | `src/openwindows.cpp` | the open windows the taskbar would show, on a thread of its own, with the shell's window events |

@@ -76,6 +76,8 @@ struct Config {
     std::vector<AppGroup> appGroups;
     // The side column's Tray card, cut to one line.
     bool trayCollapsed = false;
+    // The Network card, opened to show its graph.
+    bool netExpanded = false;
     // Hides the Windows taskbar while the dashboard runs (it has the open
     // windows, pins and tray instead), and whether the taskbar auto-hid
     // before, to put it back as it was.

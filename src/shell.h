@@ -33,6 +33,16 @@ inline bool ShowsOnTaskbar(const WindowTraits& w) {
     return !w.toolWindow && !w.owned;
 }
 
+// HiddenTrayIcon says whether an icon is one of Explorer's own that the
+// dashboard shows its own way instead, so leaves out of the Tray card:
+// the volume (ID 100 on one of Explorer's ATL windows) and the network
+// (its "Network Flyout" window).
+inline bool HiddenTrayIcon(bool explorers, unsigned id, const std::string& ownerClass, const std::string& ownerTitle) {
+    if (!explorers) return false;
+    if (ownerTitle == "Network Flyout") return true;
+    return id == 100 && ownerClass.compare(0, 4, "ATL:") == 0;
+}
+
 // Mouse messages, as Windows numbers them, for the tray's callbacks.
 namespace mouse {
 constexpr unsigned Move = 0x0200, LeftDown = 0x0201, LeftUp = 0x0202, LeftDouble = 0x0203;

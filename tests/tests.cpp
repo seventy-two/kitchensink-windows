@@ -11,6 +11,7 @@
 #include "../src/grab.h"
 #include "../src/local.h"
 #include "../src/model.h"
+#include "../src/netrate.h"
 #include "../src/retro.h"
 #include "../src/shell.h"
 #include "../src/sky.h"
@@ -1251,6 +1252,45 @@ static void testSky() {
 
 // The taskbar's stand-ins: which windows get a line, the tray's callback
 // formats, and pins.
+static void testNetRate() {
+    ks::NetHistory h;
+    h.Push(0, 1000, 500);
+    CHECK(h.Rates().empty());  // a baseline only
+    h.Push(1, 3048, 1524);
+    CHECK_EQ(h.Rates().size(), size_t(1));
+    CHECK(std::abs(h.Latest().down - 2048) < 1e-9);
+    CHECK(std::abs(h.Latest().up - 1024) < 1e-9);
+    h.Push(1.1, 9999, 9999);  // too soon: ignored, baseline kept
+    CHECK_EQ(h.Rates().size(), size_t(1));
+    h.Push(2, 4048, 1524);
+    CHECK(std::abs(h.Latest().down - 1000) < 1e-9);
+    CHECK(std::abs(h.Latest().up) < 1e-9);
+    h.Push(3, 10, 10);  // counters went back: a new baseline
+    CHECK_EQ(h.Rates().size(), size_t(2));
+    h.Push(4, 1034, 10);
+    CHECK(std::abs(h.Latest().down - 1024) < 1e-9);
+    CHECK(std::abs(h.Peak() - 2048) < 1e-9);
+    for (int i = 0; i < 300; i++) h.Push(5 + i, 2000 + uint64_t(i) * 10, 10);
+    CHECK_EQ(h.Rates().size(), ks::NetHistory::kKeep);
+
+    CHECK_EQ(ks::FormatRate(0), std::string("0 B/s"));
+    CHECK_EQ(ks::FormatRate(512), std::string("512 B/s"));
+    CHECK_EQ(ks::FormatRate(1000), std::string("1.0 KB/s"));
+    CHECK_EQ(ks::FormatRate(12.34 * 1024), std::string("12.3 KB/s"));
+    CHECK_EQ(ks::FormatRate(123.4 * 1024 * 1024), std::string("123 MB/s"));
+    CHECK_EQ(ks::FormatRate(1.5 * 1024 * 1024 * 1024), std::string("1.5 GB/s"));
+
+    CHECK_EQ(ks::GraphTop(0), 20000.0);  // at least 10 KB/s, rounded up
+    CHECK_EQ(ks::GraphTop(30000), 50000.0);
+    CHECK_EQ(ks::GraphTop(1e6), 1e6);
+    CHECK_EQ(ks::GraphTop(1.2e7), 2e7);
+
+    CHECK(ks::HiddenTrayIcon(true, 100, "ATL:00007FF89E668280", ""));
+    CHECK(ks::HiddenTrayIcon(true, 49560, "ATL:00007FF8CE25B210", "Network Flyout"));
+    CHECK(!ks::HiddenTrayIcon(true, 1226, "SystemTray_Main", "Battery Meter"));  // Safely Remove stays
+    CHECK(!ks::HiddenTrayIcon(false, 100, "ATL:1234", ""));  // an app's own icon
+}
+
 static void testShell() {
     ks::WindowTraits plain;
     plain.visible = plain.hasTitle = true;
@@ -1325,6 +1365,7 @@ static void testShell() {
 }
 
 int main() {
+    testNetRate();
     testShell();
     testGrab();
     testSky();

@@ -154,6 +154,7 @@ Config LoadConfig() {
         for (const auto& a : *it)
             if (a.is_string()) c.pins.push_back(a.get<std::string>());
     c.trayCollapsed = j.value("trayCollapsed", false);
+    c.netExpanded = j.value("netExpanded", false);
     if (auto it = j.find("barPins"); it != j.end() && it->is_array())
         for (const auto& a : *it)
             if (a.is_string()) c.barPins.push_back(a.get<std::string>());
@@ -211,6 +212,7 @@ bool SaveConfig(const Config& c) {
         {"rowStyle", c.rowStyle},
         {"pins", c.pins},
         {"trayCollapsed", c.trayCollapsed},
+        {"netExpanded", c.netExpanded},
         {"barPins", c.barPins},
         {"appGroups", groups},
         {"hideTaskbar", c.hideTaskbar},

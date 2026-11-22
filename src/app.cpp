@@ -305,6 +305,7 @@ App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
       grabber_(std::make_unique<Grabber>(wake)),
       battery_(std::make_unique<BatteryWatcher>(wake)),
       brightness_(std::make_unique<Brightness>(hwnd, wake)),
+      volume_(std::make_unique<Volume>(wake)),
       notify_(std::move(notify)) {
     // Idle dimming counts from launch, not from 1970.
     lastActivity_ = now();
@@ -467,6 +468,7 @@ void App::bevel(ImVec2 min, ImVec2 max) {
 }
 
 void App::Pump() {
+    net_.Sample(TickMs() / 1000.0);
     if (double t = TickMs() / 1000.0; config_.hideTaskbar && (t - taskbarChecked_ > 5 || t < taskbarWatchUntil_)) {
         taskbarChecked_ = t;
         taskbar_.Check();
@@ -641,10 +643,11 @@ void App::Frame() {
             std::vector<TrayIcon> trayIcons = tray_->Icons();
             windowsH_ = windowsBarHeight(openWindows.size());
             trayH_ = trayBarHeight(trayIcons.size(), feedW);
-            float lightH = brightnessBarHeight();
+            float lightH = brightnessBarHeight(), volH = volumeBarHeight(), netH = netBarHeight();
             float below = (barH > 0 ? barH + gap : 0) + (skyH > 0 ? skyH + tight : 0) + (sw ? swH + gap : 0) +
                           (lightH > 0 ? lightH + tight : 0) + (windowsH_ > 0 ? windowsH_ + gap : 0) +
-                          (trayH_ > 0 ? trayH_ + tight : 0);
+                          (trayH_ > 0 ? trayH_ + tight : 0) + (netH > 0 ? netH + tight : 0) +
+                          (volH > 0 ? volH + tight : 0);
             // Scrolled with the wheel; no scrollbar, which would take width
             // and get in the way.
             ImGui::BeginChild("##feed", ImVec2(feedW, -below), ImGuiChildFlags_None,
@@ -666,6 +669,14 @@ void App::Frame() {
                 sky(feedW, t);
             }
             trayBar(trayIcons, feedW);
+            if (netH > 0) {
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
+                netBar(feedW);
+            }
+            if (volH > 0) {
+                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
+                volumeBar(feedW);
+            }
             if (lightH > 0) {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
                 brightnessBar(feedW);
@@ -3946,55 +3957,59 @@ void App::mediaLine(float width, const Block* b) {
     ImGui::PopID();
 }
 
-float App::brightnessBarHeight() {
-    if (!brightness_->Available()) return 0;
-    return mediaLineHeight();
-}
-
-// brightnessBar draws the monitor's brightness as a slider in a slim card
-// like Now playing's: a sun, the track and the percentage. Dragging along
-// it sets the brightness as it goes; the wheel nudges it by 5.
-void App::brightnessBar(float width) {
+// sliderCard draws a level, 0 to 100, as a slider in a slim card like Now
+// playing's: a glyph, the track and the percentage. Dragging along it sets
+// value as it goes; the wheel nudges it by step. off greys the track (e.g.
+// muted). It returns whether value changed, and sets glyphClicked when
+// the glyph was clicked (if it's a button).
+bool App::sliderCard(const char* id, float width, float h, const char* glyph, bool glyphButton, int& value, int step,
+                     bool off, const std::string& tip, bool* glyphClicked) {
     const Palette& p = Colours();
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    float s = scale_, h = brightnessBarHeight();
-    if (h <= 0) return;
+    float s = scale_;
     float pad = (compact_ ? 6 : 8) * s;
     ImVec2 start = ImGui::GetCursorScreenPos(), end(start.x + width, start.y + h);
-    int value = brightness_->Value();
+    bool changed = false;
 
-    ImGui::PushID("##brightness");
+    ImGui::PushID(id);
     dl->AddRectFilled(start, end, u32(p.card));
     ImGui::PushFont(fonts_.caption);
     float lineH = ImGui::GetTextLineHeight(), ty = std::round(start.y + (h - lineH) / 2);
 
-    ImGui::SetCursorScreenPos(start);
-    ImGui::InvisibleButton("##level", ImVec2(width, h));
+    float glyphW = ImGui::CalcTextSize(glyph).x + pad * 2;
+    bool glyphHovered = false;
+    if (glyphButton) {
+        ImGui::SetCursorScreenPos(start);
+        if (ImGui::InvisibleButton("##glyph", ImVec2(glyphW, h)) && glyphClicked) *glyphClicked = true;
+        glyphHovered = ImGui::IsItemHovered();
+        if (glyphHovered) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+    ImGui::SetCursorScreenPos(ImVec2(start.x + (glyphButton ? glyphW : 0), start.y));
+    ImGui::InvisibleButton("##level", ImVec2(width - (glyphButton ? glyphW : 0), h));
     bool hovered = ImGui::IsItemHovered(), active = ImGui::IsItemActive();
     float x = start.x + pad;
-    ImVec4 iconCol = hovered || active ? p.text : p.muted;
-    dl->AddText(ImVec2(x, ty), u32(iconCol), icon::Brightness);
-    x += ImGui::CalcTextSize(icon::Brightness).x + pad;
+    ImVec4 iconCol = hovered || active || glyphHovered ? p.text : p.muted;
+    dl->AddText(ImVec2(x, ty), u32(iconCol), glyph);
+    x += ImGui::CalcTextSize(glyph).x + pad;
     // The widest the percentage gets, so the track doesn't move.
     float numW = ImGui::CalcTextSize("100%").x;
     float knob = std::round(5 * s);
     float x0 = x + knob, x1 = end.x - pad - numW - pad - knob;
     if (active) {
         float t = (ImGui::GetIO().MousePos.x - x0) / std::max(1.0f, x1 - x0);
-        value = std::clamp(int(std::lround(t * 100)), 0, 100);
-        brightness_->Set(value);
-    } else if (hovered && ImGui::GetIO().MouseWheel != 0) {
-        int step = ImGui::GetIO().MouseWheel > 0 ? 5 : -5;
-        value = std::clamp((value + step) / 5 * 5, 0, 100);
-        brightness_->Set(value);
+        int v = std::clamp(int(std::lround(t * 100)), 0, 100);
+        changed = v != value;
+        value = v;
+    } else if ((hovered || glyphHovered) && ImGui::GetIO().MouseWheel != 0) {
+        int d = ImGui::GetIO().MouseWheel > 0 ? step : -step;
+        value = std::clamp((value + d) / step * step, 0, 100);
+        changed = true;
     }
-    if (hovered || active) {
-        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-        ImGui::SetTooltip("Monitor brightness %d%%", value);
-    }
+    if ((hovered || active || glyphHovered) && !tip.empty()) ImGui::SetTooltip("%s", tip.c_str());
+    if (hovered || active) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
     float y = std::round(start.y + h / 2), th = std::max(2.0f, std::round(3 * s));
     float kx = x0 + (x1 - x0) * value / 100.0f;
-    ImVec4 fill = hovered || active ? p.accent : mix(p.muted, p.accent, 0.5f);
+    ImVec4 fill = off ? p.muted : hovered || active ? p.accent : mix(p.muted, p.accent, 0.5f);
     dl->AddRectFilled(ImVec2(x0, y - th / 2), ImVec2(x1, y + th / 2), u32(p.frame), th / 2);
     dl->AddRectFilled(ImVec2(x0, y - th / 2), ImVec2(kx, y + th / 2), u32(fill), th / 2);
     dl->AddCircleFilled(ImVec2(kx, y), knob, u32(fill));
@@ -4003,6 +4018,133 @@ void App::brightnessBar(float width) {
     std::snprintf(num, sizeof(num), "%d%%", value);
     float nw = ImGui::CalcTextSize(num).x;
     dl->AddText(ImVec2(end.x - pad - nw, ty), u32(p.muted), num);
+    ImGui::PopFont();
+    bevel(start, end);
+    ImGui::PopID();
+    return changed;
+}
+
+float App::brightnessBarHeight() {
+    if (!brightness_->Available()) return 0;
+    return mediaLineHeight();
+}
+
+// brightnessBar draws the monitor's brightness as a slider; the wheel
+// nudges it by 5.
+void App::brightnessBar(float width) {
+    float h = brightnessBarHeight();
+    if (h <= 0) return;
+    int value = brightness_->Value();
+    char tip[48];
+    std::snprintf(tip, sizeof tip, "Monitor brightness %d%%", value);
+    if (sliderCard("##brightness", width, h, icon::Brightness, false, value, 5, false, tip, nullptr))
+        brightness_->Set(value);
+}
+
+float App::volumeBarHeight() {
+    if (!volume_->Available()) return 0;
+    return mediaLineHeight();
+}
+
+// volumeBar draws the speakers' volume as a slider over the brightness's,
+// as the tray's volume icon would have opened; the wheel nudges it by 2,
+// and a click on the speaker mutes it or brings it back.
+void App::volumeBar(float width) {
+    float h = volumeBarHeight();
+    if (h <= 0) return;
+    int value = volume_->Value();
+    bool muted = volume_->Muted(), clicked = false;
+    std::string tip = volume_->Device();
+    if (tip.empty()) tip = "Volume";
+    tip += muted ? "\nMuted: click the speaker to unmute" : "\nClick the speaker to mute";
+    if (sliderCard("##volume", width, h, muted ? icon::SpeakerMuted : icon::Speaker, true, value, 2, muted, tip, &clicked))
+        volume_->Set(value);
+    if (clicked) volume_->SetMuted(!muted);
+}
+
+float App::netBarHeight() {
+    if (!net_.Available()) return 0;
+    float h = mediaLineHeight();
+    if (config_.netExpanded) h += std::round(64 * scale_);
+    return h;
+}
+
+// netBar shows the network's speeds, down and up, on a slim line in place
+// of the tray's network icon; a click opens it to a graph of the last two
+// minutes (down filled in the accent, up as a line), and closes it again.
+void App::netBar(float width) {
+    float h = netBarHeight();
+    if (h <= 0) return;
+    const Palette& p = Colours();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float s = scale_, lineH0 = mediaLineHeight();
+    float pad = (compact_ ? 6 : 8) * s;
+    ImVec2 start = ImGui::GetCursorScreenPos(), end(start.x + width, start.y + h);
+    const NetHistory& hist = net_.History();
+    NetRate now = hist.Latest();
+    ImVec4 downCol = p.accent, upCol = p.good;
+
+    ImGui::PushID("##net");
+    dl->AddRectFilled(start, end, u32(p.card));
+    ImGui::PushFont(fonts_.caption);
+    float lineH = ImGui::GetTextLineHeight(), ty = std::round(start.y + (lineH0 - lineH) / 2);
+    ImGui::SetCursorScreenPos(start);
+    if (ImGui::InvisibleButton("##line", ImVec2(width, lineH0))) {
+        config_.netExpanded = !config_.netExpanded;
+        SaveConfig(config_);
+    }
+    bool hovered = ImGui::IsItemHovered();
+    if (hovered) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        std::string tip = net_.Adapters();
+        tip += "\nPeak in the last two minutes: " + FormatRate(hist.Peak());
+        tip += config_.netExpanded ? "\nClick to hide the graph" : "\nClick for a graph";
+        ImGui::SetTooltip("%s", tip.c_str());
+    }
+    // Down then up, each an arrow in its graph colour and the speed, in
+    // columns wide enough that the line doesn't shuffle as they change.
+    float x = start.x + pad, col = ImGui::CalcTextSize("999 KB/s").x + pad * 2;
+    auto speed = [&](const char* arrow, ImVec4 c, double rate) {
+        dl->AddText(ImVec2(x, ty), u32(c), arrow);
+        float ax = ImGui::CalcTextSize(arrow).x + std::round(4 * s);
+        dl->AddText(ImVec2(x + ax, ty), u32(hovered ? p.text : p.muted), FormatRate(rate).c_str());
+        x += ax + col;
+    };
+    speed(icon::Down, downCol, now.down);
+    speed(icon::Up, upCol, now.up);
+    const char* glyph = config_.netExpanded ? icon::ChevronUp : icon::ChevronDown;
+    ImVec2 gs = ImGui::CalcTextSize(glyph);
+    dl->AddText(ImVec2(end.x - pad - gs.x, std::round(start.y + (lineH0 - gs.y) / 2)), u32(hovered ? p.text : p.muted), glyph);
+
+    if (config_.netExpanded) {
+        ImVec2 g0(start.x + pad, start.y + lineH0), g1(end.x - pad, end.y - pad);
+        dl->AddLine(ImVec2(g0.x, g1.y), ImVec2(g1.x, g1.y), u32(p.frame), std::max(1.0f, s));
+        const auto& rates = hist.Rates();
+        double top = GraphTop(hist.Peak());
+        float step = (g1.x - g0.x) / float(NetHistory::kKeep - 1);
+        auto at = [&](size_t i, double v) {
+            float px = g1.x - step * float(rates.size() - 1 - i);
+            float py = g1.y - (g1.y - g0.y) * float(std::min(1.0, v / top));
+            return ImVec2(px, py);
+        };
+        ImVec4 area = downCol;
+        area.w *= 0.25f;
+        for (size_t i = 1; i < rates.size(); i++) {
+            ImVec2 a = at(i - 1, rates[i - 1].down), b = at(i, rates[i].down);
+            dl->AddQuadFilled(ImVec2(a.x, g1.y), a, b, ImVec2(b.x, g1.y), u32(area));
+        }
+        for (int dir = 0; dir < 2; dir++) {
+            std::vector<ImVec2> pts;
+            for (size_t i = 0; i < rates.size(); i++) pts.push_back(at(i, dir == 0 ? rates[i].down : rates[i].up));
+            if (pts.size() > 1)
+                dl->AddPolyline(pts.data(), int(pts.size()), u32(dir == 0 ? downCol : upCol), 0, std::max(1.0f, 1.5f * s));
+        }
+        // The top's value, small, in the corner.
+        std::string label = FormatRate(top);
+        dl->AddText(ImVec2(g0.x, g0.y), u32(mix(p.muted, p.card, 0.3f)), label.c_str());
+    }
+    ImGui::SetCursorScreenPos(start);
+    ImGui::Dummy(ImVec2(width, h));
     ImGui::PopFont();
     bevel(start, end);
     ImGui::PopID();

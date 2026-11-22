@@ -74,6 +74,12 @@ void read(HWND tb, bool overflow, DWORD self, std::vector<TrayIcon>& out, std::v
             GetWindowThreadProcessId(HWND(t.window), &owner);
             t.pid = owner;
             if (!t.window || !IsWindow(HWND(t.window)) || owner == self) continue;
+            if (owner == pid) {
+                wchar_t cls[64] = L"", title[64] = L"";
+                GetClassNameW(HWND(t.window), cls, 64);
+                GetWindowTextW(HWND(t.window), title, 64);
+                if (HiddenTrayIcon(true, t.id, narrow(cls), narrow(title))) continue;
+            }
             DWORD_PTR len = 0;
             if (ask(tb, TB_GETBUTTONTEXTW, b.idCommand, LPARAM(mem), &len) && len > 0 && len < kBuf / 2 - 1) {
                 std::wstring tip(len + 1, L'\0');
