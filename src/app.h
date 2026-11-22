@@ -195,8 +195,13 @@ private:
     // windowsBar lists the open windows, a slim line each, above the
     // lights; trayBar the tray's icons above the brightness slider. Each
     // draws nothing if it has nothing to show.
-    void windowsBar(float width);
-    void trayBar(float width);
+    // They're given this frame's lists, and their heights are worked out
+    // before the column is laid out, so a window or icon coming or going
+    // doesn't push the cards below about for a frame.
+    void windowsBar(const std::vector<OpenWindow>& list, float width);
+    void trayBar(const std::vector<TrayIcon>& icons, float width);
+    float windowsBarHeight(size_t windows);
+    float trayBarHeight(size_t icons, float width);
     // applyTaskbar hides or shows the Windows taskbar as config_ says.
     void applyTaskbar();
     std::vector<LaunchApp> shownApps();

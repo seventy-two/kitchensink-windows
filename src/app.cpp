@@ -636,6 +636,10 @@ void App::Frame() {
             // and the open windows above that; the tray over the brightness.
             const Snapshot* sw = switchesPanel();
             float swH = sw ? switchesH_ : 0;
+            std::vector<OpenWindow> openWindows = windows_->List();
+            std::vector<TrayIcon> trayIcons = tray_->Icons();
+            windowsH_ = windowsBarHeight(openWindows.size());
+            trayH_ = trayBarHeight(trayIcons.size(), feedW);
             float lightH = brightnessBarHeight();
             float below = (barH > 0 ? barH + gap : 0) + (skyH > 0 ? skyH + tight : 0) + (sw ? swH + gap : 0) +
                           (lightH > 0 ? lightH + tight : 0) + (windowsH_ > 0 ? windowsH_ + gap : 0) +
@@ -648,7 +652,7 @@ void App::Frame() {
             ImGui::EndChild();
             float spacing = ImGui::GetStyle().ItemSpacing.y;
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
-            windowsBar(feedW);
+            windowsBar(openWindows, feedW);
             if (windowsH_ > 0) ImGui::SetCursorPosY(ImGui::GetCursorPosY() + gap - spacing);
             if (sw) {
                 switchesBar(*sw, feedW);
@@ -660,7 +664,7 @@ void App::Frame() {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
                 sky(feedW, t);
             }
-            trayBar(feedW);
+            trayBar(trayIcons, feedW);
             if (lightH > 0) {
                 ImGui::SetCursorPosY(ImGui::GetCursorPosY() + tight - spacing);
                 brightnessBar(feedW);
@@ -4540,20 +4544,23 @@ static std::string drawable(const std::string& s) {
 // in the warning colour. A click brings a window up, or minimises it if
 // it's in front; a middle click closes it; right-click for the rest. Ten
 // lines at most, then it scrolls.
-void App::windowsBar(float width) {
-    std::vector<OpenWindow> list = windows_->List();
-    if (list.empty()) {
-        windowsH_ = 0;
-        return;
-    }
+float App::windowsBarHeight(size_t windows) {
+    if (windows == 0) return 0;
+    ImGui::PushFont(fonts_.caption);
+    float rowH = std::round(ImGui::GetTextLineHeight() + (compact_ ? 7 : 9) * scale_);
+    ImGui::PopFont();
+    return rowH * float(std::min<size_t>(windows, 10)) + std::round(3 * scale_) * 2;
+}
+
+void App::windowsBar(const std::vector<OpenWindow>& list, float width) {
+    if (list.empty()) return;
     const Palette& p = Colours();
     float s = scale_;
     ImGui::PushFont(fonts_.caption);
     float lineH = ImGui::GetTextLineHeight();
     float rowH = std::round(lineH + (compact_ ? 7 : 9) * s), pad = (compact_ ? 6 : 8) * s;
     float iconSize = std::round(16 * s), inset = std::round(3 * s);
-    int shown = std::min<int>(int(list.size()), 10);
-    float h = rowH * shown + inset * 2;
+    float h = windowsBarHeight(list.size());
     uintptr_t front = windows_->Front();
 
     ImGui::PushID("##windows");
@@ -4628,7 +4635,6 @@ void App::windowsBar(float width) {
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor();
     bevel(ImGui::GetItemRectMin(), ImGui::GetItemRectMax());
-    windowsH_ = ImGui::GetItemRectSize().y;
     ImGui::PopID();
     ImGui::PopFont();
 }
@@ -4636,12 +4642,19 @@ void App::windowsBar(float width) {
 // trayBar shows the tray's icons in a card above the brightness slider:
 // clicks go to each icon's app as Explorer would send them, so their menus
 // and windows open as from the tray. The chevron cuts it to one slim line.
-void App::trayBar(float width) {
-    std::vector<TrayIcon> icons = tray_->Icons();
-    if (icons.empty()) {
-        trayH_ = 0;
-        return;
-    }
+float App::trayBarHeight(size_t icons, float width) {
+    if (icons == 0) return 0;
+    float s = scale_;
+    float slimH = std::round(fonts_.caption->FontSize + (compact_ ? 8 : 10) * s);
+    if (config_.trayCollapsed) return slimH;
+    float pad = (compact_ ? 6 : 8) * s, cell = std::round(26 * s);
+    int perRow = std::max(1, int((width - pad - cell) / cell));  // beside the chevron, a cell wide
+    int rows = (int(icons) + perRow - 1) / perRow;
+    return std::max(slimH, rows * cell + std::round(3 * s) * 2);
+}
+
+void App::trayBar(const std::vector<TrayIcon>& icons, float width) {
+    if (icons.empty()) return;
     const Palette& p = Colours();
     float s = scale_;
     float spacing = ImGui::GetStyle().ItemSpacing.y, tight = 4 * s;
@@ -4657,9 +4670,8 @@ void App::trayBar(float width) {
     bool collapsed = config_.trayCollapsed;
     // Icons wrap in rows beside the chevron.
     int perRow = std::max(1, int((width - pad - chevW) / cell));
-    int rows = collapsed ? 0 : (int(icons.size()) + perRow - 1) / perRow;
-    float rowsH = rows * cell, inset = std::round(3 * s);
-    float h = collapsed ? slimH : std::max(slimH, rowsH + inset * 2);
+    float inset = std::round(3 * s);
+    float h = trayBarHeight(icons.size(), width);
     ImVec2 start = ImGui::GetCursorScreenPos(), end(start.x + width, start.y + h);
     dl->AddRectFilled(start, end, u32(p.card));
     noActivateNext_.push_back(ImRect(start, end));
@@ -4723,7 +4735,6 @@ void App::trayBar(float width) {
     ImGui::SetCursorScreenPos(start);
     ImGui::Dummy(ImVec2(width, h));
     bevel(start, end);
-    trayH_ = h;
     ImGui::PopFont();
     ImGui::PopID();
 }
