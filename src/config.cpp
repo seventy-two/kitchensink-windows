@@ -150,6 +150,8 @@ Config LoadConfig() {
     c.privateApps = strings(j, "privateApps");
     c.hideApps = j.value("hideApps", false);
     c.hiddenGames = strings(j, "hiddenGames");
+    c.gameFolders = strings(j, "gameFolders");
+    c.gameShortcuts = strings(j, "gameShortcuts");
     c.forceDim = j.value("forceDim", false);
     c.layout = j.value("layout", "");
     c.relevance = j.value("relevance", true);
@@ -204,6 +206,8 @@ bool SaveConfig(const Config& c) {
         {"privateApps", c.privateApps},
         {"hideApps", c.hideApps},
         {"hiddenGames", c.hiddenGames},
+        {"gameFolders", c.gameFolders},
+        {"gameShortcuts", c.gameShortcuts},
         {"forceDim", c.forceDim},
         {"layout", c.layout},
         {"relevance", c.relevance},

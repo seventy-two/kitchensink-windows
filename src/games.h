@@ -23,6 +23,11 @@ public:
     ~Games();
     // SetWake gives what to call when a scan has finished.
     void SetWake(std::function<void()> wake) { wake_ = std::move(wake); }
+    // SetSources takes config.json's "gameFolders" (folders of games from
+    // no store, one game to a folder inside) and "gameShortcuts" (each a
+    // shortcut's file name among the taskbar's pinned ones, or a full path
+    // to a .lnk or exe), looking again if they've changed.
+    void SetSources(const std::vector<std::string>& folders, const std::vector<std::string>& shortcuts);
     // Scan looks for the installed games again on a thread of its own,
     // unless it looked within the last minute (or is looking now).
     void Scan(bool force = false);
@@ -38,6 +43,7 @@ private:
     void run();
     std::mutex mu_;
     std::vector<Game> games_;
+    std::vector<std::string> folders_, shortcuts_;
     std::thread thread_;
     std::atomic<bool> busy_{false};
     double scanned_ = -1e9;

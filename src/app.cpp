@@ -316,6 +316,7 @@ App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
     launcher_.Set(config_.apps);
     launcher_.SetPins(config_.pins, config_.barPins);
     games_.SetWake(wake);
+    games_.SetSources(config_.gameFolders, config_.gameShortcuts);
     games_.Scan();
     windows_ = std::make_unique<OpenWindows>(hwnd, wake);
     tray_ = std::make_unique<Tray>(hwnd, wake);
@@ -964,7 +965,7 @@ void App::header() {
     if (mango_.Installed()) buttonsLeft = mangoButton(buttonsLeft, mid);
     if (!launcher_.BarPins().empty()) buttonsLeft = pinButtons(buttonsLeft - 4 * scale_, mid);
     if (!shownApps().empty() || !launcher_.Pins().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
-    if (games_.Count()) buttonsLeft = gamesButton(buttonsLeft, mid);
+    if (games_.Count()) buttonsLeft = gamesButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float x = buttonsLeft - 16 * scale_ - clockW;
@@ -3671,8 +3672,8 @@ float App::appsButton(float right, float mid) {
     return min.x;
 }
 
-// gamesButton draws a game controller in the title bar, ending at right,
-// that opens a menu of the installed games (see Games), A-Z, each with its
+// gamesButton draws a joystick in the title bar, ending at right, that
+// opens a menu of the installed games (see Games), A-Z, each with its
 // icon and a dot while it's running. Picking one brings its window to the
 // front, or starts it through its store; right-clicking one hides it, and
 // hidden ones can be put back from "Hidden" at the bottom. It returns its
@@ -3681,10 +3682,9 @@ float App::gamesButton(float right, float mid) {
     const Palette& p = Colours();
     float size = ImGui::GetFrameHeight();
     ImVec2 origin = ImGui::GetWindowPos();
-    float w = std::round(size * 1.25f);
-    ImGui::SetCursorPos(ImVec2(right - origin.x - w, mid - size / 2));
+    ImGui::SetCursorPos(ImVec2(right - origin.x - size, mid - size / 2));
     bool open = ImGui::IsPopupOpen("##games");
-    if (ImGui::InvisibleButton("##gamesButton", ImVec2(w, size))) {
+    if (ImGui::InvisibleButton("##gamesButton", ImVec2(size, size))) {
         games_.Scan();  // catches what's been installed since (at most once a minute)
         ImGui::OpenPopup("##games");
     }
@@ -3695,27 +3695,21 @@ float App::gamesButton(float right, float mid) {
     if (lit)
         bar->AddRectFilled(min, max, ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
                            ImGui::GetStyle().FrameRounding);
-    // A controller, greyed like the flag beside it: a wide body with two
-    // grips hanging below, a d-pad on the left and four buttons on the
-    // right cut out of it.
-    ImVec4 ink = lit ? p.text : p.muted;
-    // The cut-outs are a dark grey, like the flag's panes.
-    ImU32 inkU = u32(ink), hole = u32(mix(ink, p.bg, 0.75f));
-    ImVec2 c((min.x + max.x) / 2, (min.y + max.y) / 2 + size * 0.02f);
-    float u = size / 20.0f;  // the drawing is 20 units tall
-    float bw = 7.6f * u, bh = 3.4f * u;
-    bar->AddRectFilled(ImVec2(c.x - bw, c.y - bh), ImVec2(c.x + bw, c.y + bh * 0.9f), inkU, 3.4f * u);
-    for (float side : {-1.0f, 1.0f}) {
-        ImVec2 a(c.x + side * 5.2f * u, c.y + 1.0f * u), b(c.x + side * 6.3f * u, c.y + 4.6f * u);
-        bar->AddLine(a, b, inkU, 4.2f * u);
-        bar->AddCircleFilled(b, 2.1f * u, inkU);
-    }
-    ImVec2 pad(c.x - 4.3f * u, c.y - 0.3f * u);
-    bar->AddRectFilled(ImVec2(pad.x - 2.2f * u, pad.y - 0.6f * u), ImVec2(pad.x + 2.2f * u, pad.y + 0.6f * u), hole);
-    bar->AddRectFilled(ImVec2(pad.x - 0.6f * u, pad.y - 2.2f * u), ImVec2(pad.x + 0.6f * u, pad.y + 2.2f * u), hole);
-    ImVec2 btn(c.x + 4.3f * u, c.y - 0.3f * u);
-    for (ImVec2 d : {ImVec2(0, -1.4f), ImVec2(0, 1.4f), ImVec2(-1.4f, 0), ImVec2(1.4f, 0)})
-        bar->AddCircleFilled(ImVec2(btn.x + d.x * u, btn.y + d.y * u), 0.75f * u, hole);
+    // An arcade joystick, solid like the guitar beside it (muted, the text
+    // colour while hovered or open): a ball on a stick leant left, a domed
+    // base and a fire button. Drawn from -1 to 1 and centred in the button
+    // by its bounds, so it sits level with its neighbours.
+    ImU32 ink = u32(lit ? p.text : p.muted);
+    float r = size * 0.5f;
+    const float ballX = -0.2f, ballY = -0.5f, ballR = 0.27f;
+    const ImVec2 lo(-0.64f, ballY - ballR), hi(0.64f, 0.8f);
+    ImVec2 c((min.x + max.x) / 2 - (lo.x + hi.x) / 2 * r, (min.y + max.y) / 2 - (lo.y + hi.y) / 2 * r);
+    auto at = [&](float x, float y) { return ImVec2(c.x + x * r, c.y + y * r); };
+    bar->AddRectFilled(at(-0.64f, 0.46f), at(0.64f, 0.8f), ink, 0.12f * r);    // base
+    bar->AddRectFilled(at(-0.36f, 0.3f), at(0.36f, 0.52f), ink, 0.11f * r);    // dome
+    bar->AddLine(at(0, 0.36f), at(ballX, ballY), ink, 0.19f * r);              // stick
+    bar->AddCircleFilled(at(ballX, ballY), ballR * r, ink);                    // ball
+    bar->AddRectFilled(at(0.36f, 0.3f), at(0.56f, 0.5f), ink, 0.08f * r);      // fire button
     if (!open && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Games");
 
     ImGui::SetNextWindowPos(ImVec2(max.x, max.y + 4 * scale_), ImGuiCond_Always, ImVec2(1, 0));

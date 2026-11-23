@@ -1467,6 +1467,35 @@ static void testGames() {
         CHECK(games[2].store == GameStore::Steam);
     }
 
+    // Games in a folder of their own, as on E: and G:.
+    CHECK_EQ(FolderGameName("Space.Warlord.Baby.Trading.Simulator.Build.22021334"),
+             std::string("Space Warlord Baby Trading Simulator"));
+    CHECK_EQ(FolderGameName("Worms.Armageddon.v3.8-SiMPLEX"), std::string("Worms Armageddon"));
+    CHECK_EQ(FolderGameName("ENDLESS Legend 2"), std::string("ENDLESS Legend 2"));
+    CHECK_EQ(FolderGameName("DW3CE_RE"), std::string("DW3CE RE"));
+    auto pick = [](const char* folder, std::vector<ExeFile> exes) {
+        int i = PickGameExe(folder, exes);
+        return i < 0 ? std::string() : exes[i].path;
+    };
+    CHECK_EQ(pick("Age of Wonders 4 The Silver Seas",
+                  {{"launcher-se\\Paradox Launcher.exe", 205545592, 1}, {"ResourceED.exe", 55395840, 0},
+                   {"LevelEd.exe", 55131648, 0}, {"ResourceBrowser.exe", 53898752, 0}, {"AOW4.exe", 41673288, 0},
+                   {"CLog_UI.exe", 3000000, 0}}),
+             std::string("AOW4.exe"));
+    CHECK_EQ(pick("Madden NFL 27", {{"Madden27_Trial.exe", 253783952, 0}, {"Madden27.exe", 253777296, 0},
+                                    {"__Installer\\EAAntiCheat\\EAAntiCheat.Installer.exe", 251200248, 2},
+                                    {"cracktroa.exe", 900000, 0}}),
+             std::string("Madden27.exe"));
+    CHECK_EQ(pick("Slay The Spire", {{"Slay The Spire\\Win64\\SlayTheSpire.exe", 372736, 2},
+                                     {"Slay The Spire\\Win32\\SlayTheSpire.exe", 44544, 2}}),
+             std::string("Slay The Spire\\Win64\\SlayTheSpire.exe"));
+    CHECK_EQ(pick("ENDLESS Legend 2", {{"unins000.exe", 1567089, 0}, {"crashpad_handler.exe", 962048, 0},
+                                       {"Endless Legend 2.exe", 667648, 0}}),
+             std::string("Endless Legend 2.exe"));
+    CHECK_EQ(pick("Bloodstained", {{"Bloodstained.exe", 900000, 0}}), std::string("Bloodstained.exe"));
+    CHECK_EQ(pick("Worms.Armageddon.v3.8-SiMPLEX", {{"unarc.exe", 214016, 0}, {"SIMPLEX.EXE", 143872, 0}}), std::string());
+    CHECK_EQ(pick("ComfyUI_windows_portable", {{"python_embeded\\Scripts\\normalizer.exe", 108355, 2}}), std::string());
+
     Game w;
     w.dir = "g:\\worms armageddon";
     CHECK(GameOwns(w, "g:\\worms armageddon\\wa.exe", ""));

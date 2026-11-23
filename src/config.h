@@ -54,6 +54,10 @@ struct Config {
     // Games (by name) left out of the games menu, hidden from its
     // right-click menu.
     std::vector<std::string> hiddenGames;
+    // Folders of games from no store, one game to a folder inside
+    // ("E:\\Games"), and shortcuts listed among the games ("Jagex
+    // Launcher.lnk", as in "pins").
+    std::vector<std::string> gameFolders, gameShortcuts;
     // Dims the window whatever the mouse does, until switched off (the
     // moon in the title bar).
     bool forceDim = false;

@@ -4,6 +4,8 @@
 
 #include <windows.h>
 #include <shellapi.h>
+#include <shlobj.h>
+#include <wrl/client.h>
 
 #include <winrt/Windows.ApplicationModel.Core.h>
 #include <winrt/Windows.ApplicationModel.h>
@@ -271,12 +273,116 @@ void xbox(std::vector<Game>& out) {
     }
 }
 
+// exes lists the exes in dir and below it, down to depth folders,
+// passing over folders that hold no game's exe and giving up after a few
+// hundred folders.
+void exes(const std::wstring& dir, const std::wstring& rel, int depth, int& budget, std::vector<ExeFile>& out) {
+    if (--budget < 0) return;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW((dir + L"\\*").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return;
+    std::vector<std::wstring> subdirs;
+    do {
+        std::wstring n = fd.cFileName;
+        if (n == L"." || n == L"..") continue;
+        std::wstring l = n;
+        CharLowerBuffW(l.data(), DWORD(l.size()));
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+            bool skip = l == L"_commonredist" || l == L"__installer" || l == L"redist" || l == L"directx" ||
+                        l == L"monobleedingedge" || (l.size() > 5 && l.compare(l.size() - 5, 5, L"_data") == 0);
+            if (!skip && depth > 0) subdirs.push_back(n);
+        } else if (l.size() > 4 && l.compare(l.size() - 4, 4, L".exe") == 0) {
+            out.push_back({Narrow(rel + n), (uint64_t(fd.nFileSizeHigh) << 32) | fd.nFileSizeLow, 3 - depth});
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    for (const auto& s : subdirs) exes(dir + L"\\" + s, rel + s + L"\\", depth - 1, budget, out);
+}
+
+// folderGames finds a game in each folder inside the game folders, other
+// than those the stores already account for (in have).
+void folderGames(const std::vector<std::string>& folders, const std::vector<Game>& have, std::vector<Game>& out) {
+    for (const auto& folder : folders) {
+        std::wstring root = Widen(folder);
+        while (!root.empty() && (root.back() == L'\\' || root.back() == L'/')) root.pop_back();
+        for (const auto& name : files(root + L"\\*", true)) {
+            std::wstring dir = root + L"\\" + name;
+            DWORD attrs = GetFileAttributesW(dir.c_str());
+            if (attrs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM) || name[0] == L'$') continue;
+            std::string l = lowerUtf8(dir);
+            bool known = false;
+            for (const auto& g : have) {
+                if (g.dir.empty()) continue;
+                if (g.dir == l || g.dir.rfind(l + "\\", 0) == 0 || l.rfind(g.dir + "\\", 0) == 0) known = true;
+            }
+            if (known) continue;
+            std::vector<ExeFile> found;
+            int budget = 300;
+            exes(dir, L"", 3, budget, found);
+            int pick = PickGameExe(Narrow(name), found);
+            if (pick < 0) continue;
+            std::wstring exe = dir + L"\\" + Widen(found[pick].path);
+            Game g;
+            g.name = FolderGameName(Narrow(name));
+            g.store = GameStore::Local;
+            g.id = Narrow(exe);
+            g.dir = l;
+            g.open = Narrow(exe);
+            g.workDir = Narrow(exe.substr(0, exe.find_last_of(L'\\')));
+            g.icon = g.open;
+            out.push_back(std::move(g));
+        }
+    }
+}
+
+// shortcutGames are the shortcuts named in config.json, as games.
+void shortcutGames(const std::vector<std::string>& specs, std::vector<Game>& out) {
+    const wchar_t* appdata = _wgetenv(L"APPDATA");
+    std::wstring pinned = std::wstring(appdata ? appdata : L"") +
+                          L"\\Microsoft\\Internet Explorer\\Quick Launch\\User Pinned\\TaskBar\\";
+    for (const auto& spec : specs) {
+        std::wstring w = Widen(spec);
+        std::wstring path = w.find(L'\\') != std::wstring::npos || w.find(L':') != std::wstring::npos ? w : pinned + w;
+        if (!exists(path)) continue;
+        std::wstring file = path.substr(path.find_last_of(L"\\/") + 1), target = path;
+        if (file.size() > 4) file.resize(file.size() - 4);
+        std::wstring lowerPath = path;
+        CharLowerBuffW(lowerPath.data(), DWORD(lowerPath.size()));
+        if (lowerPath.size() > 4 && lowerPath.compare(lowerPath.size() - 4, 4, L".lnk") == 0) {
+            Microsoft::WRL::ComPtr<IShellLinkW> link;
+            Microsoft::WRL::ComPtr<IPersistFile> persist;
+            wchar_t t[MAX_PATH * 2] = L"";
+            if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&link))) &&
+                SUCCEEDED(link.As(&persist)) && SUCCEEDED(persist->Load(path.c_str(), STGM_READ)))
+                link->GetPath(t, int(std::size(t)), nullptr, 0);
+            if (t[0]) target = t;
+        }
+        Game g;
+        g.name = Narrow(file);
+        g.store = GameStore::Local;
+        g.id = spec;
+        g.dir = lowerUtf8(target.substr(0, target.find_last_of(L"\\/")));
+        g.open = Narrow(path);
+        g.icon = Narrow(target);
+        out.push_back(std::move(g));
+    }
+}
+
 std::string iconKey(const Game& g) { return "game-icon:" + std::string(GameStoreName(g.store)) + ":" + g.id + ":" + g.dir; }
 
 }  // namespace
 
 Games::~Games() {
     if (thread_.joinable()) thread_.join();
+}
+
+void Games::SetSources(const std::vector<std::string>& folders, const std::vector<std::string>& shortcuts) {
+    {
+        std::lock_guard<std::mutex> l(mu_);
+        if (folders == folders_ && shortcuts == shortcuts_) return;
+        folders_ = folders, shortcuts_ = shortcuts;
+    }
+    scanned_ = -1e9;  // look again at the next Scan
 }
 
 void Games::Scan(bool force) {
@@ -298,6 +404,16 @@ void Games::run() {
     ea(found);
     ubisoft(found);
     xbox(found);
+    std::vector<std::string> folders, shortcuts;
+    {
+        std::lock_guard<std::mutex> l(mu_);
+        folders = folders_, shortcuts = shortcuts_;
+    }
+    // After the stores' games, so a store's copy of a game wins.
+    shortcutGames(shortcuts, found);
+    std::vector<Game> local;
+    folderGames(folders, found, local);
+    for (auto& g : local) found.push_back(std::move(g));
     SortGames(found);
     for (const auto& g : found) {
         std::string key = iconKey(g);

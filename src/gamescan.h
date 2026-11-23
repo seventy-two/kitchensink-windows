@@ -9,7 +9,9 @@
 
 namespace ks {
 
-enum class GameStore { Steam, GOG, Epic, EA, Ubisoft, Xbox };
+// Local is a game from no store: found in one of the game folders, or a
+// shortcut named in config.json.
+enum class GameStore { Steam, GOG, Epic, EA, Ubisoft, Xbox, Local };
 
 // GameStoreName is the store's name as the menu shows it.
 const char* GameStoreName(GameStore s);
@@ -54,6 +56,23 @@ std::string EAOffer(const std::vector<std::string>& entries);
 // SortGames puts the games in A-Z order (ignoring case and a leading
 // "The "), dropping a second copy of a game installed from two stores.
 void SortGames(std::vector<Game>& games);
+// FolderGameName makes a game's name from its folder's, tidying a
+// download's dots, build number, version and group away
+// ("Space.Warlord.Baby.Trading.Simulator.Build.22021334").
+std::string FolderGameName(const std::string& folder);
+// ExeFile is an exe found in a game folder: its path from the folder, its
+// size and how many folders down it is.
+struct ExeFile {
+    std::string path;
+    uint64_t size = 0;
+    int depth = 0;
+};
+// PickGameExe picks the folder's game from its exes, or -1 if it has
+// none: helpers (uninstallers, crash reporters, anti-cheat, installers,
+// launchers, editors, trials) and small exes are passed over; one named
+// like the folder ("FortuneMill" in "Fortune Mill", "AOW4" in "Age of
+// Wonders 4") wins, then the one nearest the top, then the biggest.
+int PickGameExe(const std::string& folder, const std::vector<ExeFile>& exes);
 // GameOwns says whether a window's exe (lower case) is one of the game's.
 bool GameOwns(const Game& g, const std::string& exe, const std::string& family);
 

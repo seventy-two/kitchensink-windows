@@ -4,6 +4,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <set>
+#include <tuple>
 
 #include <nlohmann/json.hpp>
 
@@ -103,6 +104,7 @@ const char* GameStoreName(GameStore s) {
         case GameStore::EA: return "EA app";
         case GameStore::Ubisoft: return "Ubisoft Connect";
         case GameStore::Xbox: return "Xbox";
+        case GameStore::Local: return "Not from a store";
     }
     return "";
 }
@@ -197,6 +199,120 @@ void SortGames(std::vector<Game>& games) {
     games.erase(std::remove_if(games.begin(), games.end(),
                                [&](const Game& g) { return g.name.empty() || !seen.insert(sortKey(g.name)).second; }),
                 games.end());
+}
+
+namespace {
+
+// alnum is the letters and digits of s, lower case.
+std::string alnum(const std::string& s) {
+    std::string out;
+    for (char c : s)
+        if (std::isalnum(static_cast<unsigned char>(c))) out += char(std::tolower(static_cast<unsigned char>(c)));
+    return out;
+}
+
+// initials is each word's first letter, or the whole word when it's a
+// number ("Age of Wonders 4" -> "aow4").
+std::string initials(const std::string& s) {
+    std::string out;
+    bool start = true;
+    for (char c : s) {
+        unsigned char u = static_cast<unsigned char>(c);
+        if (std::isdigit(u)) {
+            out += c;
+            start = false;
+        } else if (std::isalpha(u)) {
+            if (start) out += char(std::tolower(u));
+            start = false;
+        } else {
+            start = true;
+        }
+    }
+    return out;
+}
+
+}  // namespace
+
+std::string FolderGameName(const std::string& folder) {
+    std::string s = folder;
+    bool dotted = s.find(' ') == std::string::npos && (s.find('.') != std::string::npos || s.find('_') != std::string::npos);
+    if (!dotted) return cleanName(s);
+    // A download's name: a group after the last hyphen, then words joined
+    // by dots or underscores, ending in a build number or version.
+    size_t dash = s.rfind('-');
+    if (dash != std::string::npos && dash > 0) s.resize(dash);
+    // A version ("v3.8") ends the name.
+    for (size_t i = 1; i + 2 < s.size(); i++)
+        if ((s[i - 1] == '.' || s[i - 1] == '_') && (s[i] == 'v' || s[i] == 'V') &&
+            std::isdigit(static_cast<unsigned char>(s[i + 1]))) {
+            s.resize(i - 1);
+            break;
+        }
+    for (auto& c : s)
+        if (c == '.' || c == '_') c = ' ';
+    std::vector<std::string> words;
+    std::string w;
+    for (char c : s + " ") {
+        if (c == ' ') {
+            if (!w.empty()) words.push_back(w);
+            w.clear();
+        } else {
+            w += c;
+        }
+    }
+    auto number = [](const std::string& x) {
+        return !x.empty() && std::all_of(x.begin(), x.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); });
+    };
+    while (words.size() > 1) {
+        std::string l = lower(words.back());
+        bool version = l.size() > 1 && l[0] == 'v' && std::isdigit(static_cast<unsigned char>(l[1]));
+        if (number(l) && words.size() > 2 && lower(words[words.size() - 2]) == "build") {
+            words.pop_back();
+            words.pop_back();
+        } else if (version || (number(l) && l.size() >= 5)) {
+            words.pop_back();
+        } else {
+            break;
+        }
+    }
+    std::string out;
+    for (const auto& x : words) out += (out.empty() ? "" : " ") + x;
+    return cleanName(out);
+}
+
+int PickGameExe(const std::string& folder, const std::vector<ExeFile>& exes) {
+    std::string f = alnum(folder), fi = initials(folder);
+    int best = -1;
+    auto score = [&](const ExeFile& e) {
+        std::string name = e.path.substr(e.path.find_last_of("\\/") + 1);
+        std::string stem = alnum(name.size() > 4 ? name.substr(0, name.size() - 4) : name);
+        bool named = stem.size() >= 3 && (f.find(stem) != std::string::npos || stem.find(f) != std::string::npos ||
+                                          fi.rfind(stem, 0) == 0);
+        return std::make_tuple(named ? 1 : 0, -e.depth, e.size);
+    };
+    for (size_t i = 0; i < exes.size(); i++) {
+        const ExeFile& e = exes[i];
+        std::string n = lower(e.path.substr(e.path.find_last_of("\\/") + 1));
+        if (e.size < 256 * 1024) continue;
+        bool helper = false;
+        for (const char* h : {"unins", "crash", "createdump", "redist", "anticheat", "installer", "setup", "unarc",
+                              "launcher", "trial", "editor", "crack", "reporter", "vc_", "dxsetup", "ue4prereq",
+                              "browser", "clog"})
+            if (contains(n, h)) helper = true;
+        // Editors named "LevelEd", "ContentEd", "ResourceED" (but not
+        // "Bloodstained").
+        std::string orig = e.path.substr(e.path.find_last_of("\\/") + 1);
+        if (orig.size() > 7 && lower(orig.substr(orig.size() - 4)) == ".exe") {
+            std::string stem = orig.substr(0, orig.size() - 4);
+            size_t k = stem.size();
+            if (stem[k - 2] == 'E' && (stem[k - 1] == 'd' || stem[k - 1] == 'D') &&
+                std::islower(static_cast<unsigned char>(stem[k - 3])))
+                helper = true;
+        }
+        if (helper) continue;
+        if (best < 0 || score(e) > score(exes[best])) best = int(i);
+    }
+    return best;
 }
 
 bool GameOwns(const Game& g, const std::string& exe, const std::string& family) {
