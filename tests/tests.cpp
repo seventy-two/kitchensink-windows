@@ -1496,6 +1496,14 @@ static void testGames() {
     CHECK_EQ(pick("Worms.Armageddon.v3.8-SiMPLEX", {{"unarc.exe", 214016, 0}, {"SIMPLEX.EXE", 143872, 0}}), std::string());
     CHECK_EQ(pick("ComfyUI_windows_portable", {{"python_embeded\\Scripts\\normalizer.exe", 108355, 2}}), std::string());
 
+    std::vector<Game> named(2);
+    named[0].name = "DW3CE RE";
+    named[1].name = "Battlefield™ 6";
+    RenameGames(named, {{"DW3CE RE", "Dynasty Warriors 3 Remaster"}, {"Battlefield 6", ""}});
+    CHECK_EQ(named[0].name, std::string("Dynasty Warriors 3 Remaster"));
+    CHECK_EQ(named[0].found, std::string("DW3CE RE"));
+    CHECK_EQ(named[1].name, std::string("Battlefield 6"));
+
     Game w;
     w.dir = "g:\\worms armageddon";
     CHECK(GameOwns(w, "g:\\worms armageddon\\wa.exe", ""));

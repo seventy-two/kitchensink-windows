@@ -191,6 +191,15 @@ std::string EAOffer(const std::vector<std::string>& entries) {
     return "";
 }
 
+void RenameGames(std::vector<Game>& games, const std::map<std::string, std::string>& names) {
+    for (auto& g : games) {
+        g.name = cleanName(g.name);
+        g.found = g.name;
+        auto it = names.find(g.name);
+        if (it != names.end() && !it->second.empty()) g.name = it->second;
+    }
+}
+
 void SortGames(std::vector<Game>& games) {
     for (auto& g : games) g.name = cleanName(g.name);
     std::stable_sort(games.begin(), games.end(),

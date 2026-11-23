@@ -169,6 +169,9 @@ Config LoadConfig() {
         }
     c.hideTaskbar = j.value("hideTaskbar", false);
     c.taskbarAutoHide = j.value("taskbarAutoHide", false);
+    if (auto it = j.find("gameNames"); it != j.end() && it->is_object())
+        for (const auto& [found, v] : it->items())
+            if (v.is_string()) c.gameNames[found] = v.get<std::string>();
     if (auto it = j.find("rowStyle"); it != j.end() && it->is_object())
         for (const auto& [id, v] : it->items())
             if (v.is_string()) c.rowStyle[id] = v.get<std::string>();
@@ -212,6 +215,7 @@ bool SaveConfig(const Config& c) {
         {"layout", c.layout},
         {"relevance", c.relevance},
         {"rowStyle", c.rowStyle},
+        {"gameNames", c.gameNames},
         {"pins", c.pins},
         {"trayCollapsed", c.trayCollapsed},
         {"netExpanded", c.netExpanded},

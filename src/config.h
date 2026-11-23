@@ -58,6 +58,9 @@ struct Config {
     // ("E:\\Games"), and shortcuts listed among the games ("Jagex
     // Launcher.lnk", as in "pins").
     std::vector<std::string> gameFolders, gameShortcuts;
+    // Names for games, by the name each was found as (right-click,
+    // Rename).
+    std::map<std::string, std::string> gameNames;
     // Dims the window whatever the mouse does, until switched off (the
     // moon in the title bar).
     bool forceDim = false;

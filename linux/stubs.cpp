@@ -37,7 +37,8 @@ void MediaWatcher::run() {}
 
 Games::~Games() = default;
 void Games::Scan(bool) {}
-void Games::SetSources(const std::vector<std::string>&, const std::vector<std::string>&) {}
+void Games::SetSources(const std::vector<std::string>&, const std::vector<std::string>&,
+                       const std::map<std::string, std::string>&) {}
 std::vector<Game> Games::List() { return {}; }
 size_t Games::Count() { return 0; }
 const Texture* Games::Icon(const Game&, ImageCache&) { return nullptr; }

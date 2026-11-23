@@ -316,7 +316,7 @@ App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
     launcher_.Set(config_.apps);
     launcher_.SetPins(config_.pins, config_.barPins);
     games_.SetWake(wake);
-    games_.SetSources(config_.gameFolders, config_.gameShortcuts);
+    games_.SetSources(config_.gameFolders, config_.gameShortcuts, config_.gameNames);
     games_.Scan();
     windows_ = std::make_unique<OpenWindows>(hwnd, wake);
     tray_ = std::make_unique<Tray>(hwnd, wake);
@@ -3748,6 +3748,25 @@ float App::gamesButton(float right, float mid) {
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal) && !ImGui::IsPopupOpen("##gameMenu"))
                 ImGui::SetTooltip("%s\n%s", GameStoreName(g.store), win ? "Running: bring to the front" : "Start");
             if (ImGui::BeginPopupContextItem("##gameMenu")) {
+                // Rename: Enter keeps the new name; an empty one (or the
+                // name it was found as) goes back to that.
+                static char renameBuf[128];
+                if (ImGui::IsWindowAppearing()) std::snprintf(renameBuf, sizeof renameBuf, "%s", g.name.c_str());
+                ImGui::TextColored(p.muted, "Rename");
+                ImGui::SetNextItemWidth(220 * scale_);
+                if (ImGui::InputText("##rename", renameBuf, sizeof renameBuf, ImGuiInputTextFlags_EnterReturnsTrue)) {
+                    std::string name = renameBuf;
+                    if (name.empty() || name == g.found) {
+                        config_.gameNames.erase(g.found);
+                    } else {
+                        config_.gameNames[g.found] = name;
+                    }
+                    SaveConfig(config_);
+                    games_.SetSources(config_.gameFolders, config_.gameShortcuts, config_.gameNames);
+                    games_.Scan();
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem("Hide from this menu")) hide = g.name;
                 ImGui::EndPopup();
             }

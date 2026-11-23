@@ -199,7 +199,8 @@ result is a single `kitchensink.exe` with nothing to install.
   (Store packages with a `MicrosoftGame.config`). A click starts the game
   through its store (`steam://`, `origin2://`, Epic's and Ubisoft's links,
   GOG's own exe), or brings up its window while it's running (a green
-  dot). Right-click a game to hide it (`"hiddenGames"`); "Hidden" at the
+  dot). Right-click a game to rename it (`"gameNames"`, by the name it was
+  found as; clear the name to go back) or hide it (`"hiddenGames"`); "Hidden" at the
   bottom puts it back. It looks again when opened, at most once a minute.
   Games from no store are found in `"gameFolders"` (each folder inside one
   is a game; its exe is the one named like the folder, else the nearest

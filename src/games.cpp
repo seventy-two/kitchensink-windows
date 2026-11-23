@@ -376,11 +376,12 @@ Games::~Games() {
     if (thread_.joinable()) thread_.join();
 }
 
-void Games::SetSources(const std::vector<std::string>& folders, const std::vector<std::string>& shortcuts) {
+void Games::SetSources(const std::vector<std::string>& folders, const std::vector<std::string>& shortcuts,
+                       const std::map<std::string, std::string>& names) {
     {
         std::lock_guard<std::mutex> l(mu_);
-        if (folders == folders_ && shortcuts == shortcuts_) return;
-        folders_ = folders, shortcuts_ = shortcuts;
+        if (folders == folders_ && shortcuts == shortcuts_ && names == names_) return;
+        folders_ = folders, shortcuts_ = shortcuts, names_ = names;
     }
     scanned_ = -1e9;  // look again at the next Scan
 }
@@ -405,15 +406,17 @@ void Games::run() {
     ubisoft(found);
     xbox(found);
     std::vector<std::string> folders, shortcuts;
+    std::map<std::string, std::string> names;
     {
         std::lock_guard<std::mutex> l(mu_);
-        folders = folders_, shortcuts = shortcuts_;
+        folders = folders_, shortcuts = shortcuts_, names = names_;
     }
     // After the stores' games, so a store's copy of a game wins.
     shortcutGames(shortcuts, found);
     std::vector<Game> local;
     folderGames(folders, found, local);
     for (auto& g : local) found.push_back(std::move(g));
+    RenameGames(found, names);
     SortGames(found);
     for (const auto& g : found) {
         std::string key = iconKey(g);

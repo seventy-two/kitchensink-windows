@@ -18,6 +18,7 @@ const char* GameStoreName(GameStore s);
 
 struct Game {
     std::string name;
+    std::string found;   // its name as found, before any renaming
     GameStore store = GameStore::Steam;
     std::string id;      // the store's ID for it (Steam app ID, GOG game ID, ...)
     std::string dir;     // where it's installed, lower case, no trailing slash
@@ -53,6 +54,9 @@ bool EpicGame(const std::string& item, Game& out);
 // EAOffer picks the EA app's offer ID from the names in a game's
 // InstallData folder ("base-Origin.SFT.50.0001514"), or empty.
 std::string EAOffer(const std::vector<std::string>& entries);
+// RenameGames gives games the names the user chose (by the name each was
+// found as), keeping that in found.
+void RenameGames(std::vector<Game>& games, const std::map<std::string, std::string>& names);
 // SortGames puts the games in A-Z order (ignoring case and a leading
 // "The "), dropping a second copy of a game installed from two stores.
 void SortGames(std::vector<Game>& games);
