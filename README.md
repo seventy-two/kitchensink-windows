@@ -192,7 +192,7 @@ result is a single `kitchensink.exe` with nothing to install.
   Apps named in `"privateApps"` can be hidden from the menu with **Hide
   private apps** in the eye's right-click menu (the eye shows whenever
   there are private apps), and it's remembered.
-- **Games menu** (Windows only): the controller left of the apps flag lists
+- **Games menu** (Windows only): the joystick left of the apps flag lists
   the installed games A-Z, found where each store records them: Steam's
   library manifests, GOG's registry keys, Epic's `.item` manifests, the EA
   app's `EA Games` keys, Ubisoft Connect's installs and Xbox app games
@@ -201,6 +201,10 @@ result is a single `kitchensink.exe` with nothing to install.
   GOG's own exe), or brings up its window while it's running (a green
   dot). Right-click a game to hide it (`"hiddenGames"`); "Hidden" at the
   bottom puts it back. It looks again when opened, at most once a minute.
+  Games from no store are found in `"gameFolders"` (each folder inside one
+  is a game; its exe is the one named like the folder, else the nearest
+  the top), and `"gameShortcuts"` lists shortcuts as games (as in
+  `"pins"`, e.g. `Jagex Launcher.lnk`).
 - **Instead of the Windows taskbar** (Windows only): the dashboard can stand in
   for it, and **Hide the Windows taskbar** in Settings hides it on every
   monitor while the dashboard runs (set to auto-hide, so windows get the
