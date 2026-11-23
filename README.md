@@ -192,8 +192,8 @@ result is a single `kitchensink.exe` with nothing to install.
   Apps named in `"privateApps"` can be hidden from the menu with **Hide
   private apps** in the eye's right-click menu (the eye shows whenever
   there are private apps), and it's remembered.
-- **Games menu** (Windows only): the joystick left of the apps flag lists
-  the installed games A-Z, found where each store records them: Steam's
+- **Games menu** (Windows only): the joystick right of the apps flag lists
+  the installed games, most played first, found where each store records them: Steam's
   library manifests, GOG's registry keys, Epic's `.item` manifests, the EA
   app's `EA Games` keys, Ubisoft Connect's installs and Xbox app games
   (Store packages with a `MicrosoftGame.config`). A click starts the game
@@ -202,6 +202,10 @@ result is a single `kitchensink.exe` with nothing to install.
   dot). Right-click a game to rename it (`"gameNames"`, by the name it was
   found as; clear the name to go back) or hide it (`"hiddenGames"`); "Hidden" at the
   bottom puts it back. It looks again when opened, at most once a minute.
+  The order: how many of the last 90 days each game was seen running
+  (any window of its, checked every ten seconds however it was started;
+  kept a year in `"gamePlays"`, by the name it was found as; a store's
+  last played day, from Steam, counts too), then the most recent, then A-Z.
   Games from no store are found in `"gameFolders"` (each folder inside one
   is a game; its exe is the one named like the folder, else the nearest
   the top), and `"gameShortcuts"` lists shortcuts as games (as in

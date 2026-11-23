@@ -570,6 +570,7 @@ void App::Frame() {
     // One copy of the open windows for the frame: the title bar's pins,
     // the apps menu and the side column all look at it.
     openWindows_ = windows_->List();
+    notePlays();
     catInterval_ = 0;  // until he's drawn
     noActivate_.swap(noActivateNext_);
     noActivateNext_.clear();
@@ -964,8 +965,9 @@ void App::header() {
     if (lick_.Installed()) buttonsLeft = lickButton(buttonsLeft - 4 * scale_, mid);
     if (mango_.Installed()) buttonsLeft = mangoButton(buttonsLeft, mid);
     if (!launcher_.BarPins().empty()) buttonsLeft = pinButtons(buttonsLeft - 4 * scale_, mid);
-    if (!shownApps().empty() || !launcher_.Pins().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
+    // The joystick right of the apps flag (the user's ask, 23 Nov 2026).
     if (games_.Count()) buttonsLeft = gamesButton(buttonsLeft - 4 * scale_, mid);
+    if (!shownApps().empty() || !launcher_.Pins().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float x = buttonsLeft - 16 * scale_ - clockW;
@@ -3672,8 +3674,26 @@ float App::appsButton(float right, float mid) {
     return min.x;
 }
 
+// notePlays notes, every ten seconds, the day for each game with a window
+// open, however it was started, for the games menu's order.
+void App::notePlays() {
+    double now = ImGui::GetTime();
+    if (now - playsChecked_ < 10 || !games_.Count()) return;
+    playsChecked_ = now;
+    int today = int(std::time(nullptr) / 86400);
+    bool changed = false;
+    for (const auto& g : games_.List())
+        for (const auto& ow : openWindows_)
+            if (GameOwns(g, ow.match.exe, ow.match.family)) {
+                changed |= AddPlayDay(config_.gamePlays, g.found, today);
+                break;
+            }
+    if (changed) SaveConfig(config_);
+}
+
 // gamesButton draws a joystick in the title bar, ending at right, that
-// opens a menu of the installed games (see Games), A-Z, each with its
+// opens a menu of the installed games (see Games), most played first
+// (see SortGamesByUse), each with its
 // icon and a dot while it's running. Picking one brings its window to the
 // front, or starts it through its store; right-clicking one hides it, and
 // hidden ones can be put back from "Hidden" at the bottom. It returns its
@@ -3716,6 +3736,7 @@ float App::gamesButton(float right, float mid) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6 * scale_, 6 * scale_));
     if (ImGui::BeginPopup("##games")) {
         std::vector<Game> all = games_.List(), shown, hidden;
+        SortGamesByUse(all, config_.gamePlays, int(std::time(nullptr) / 86400));
         for (auto& g : all) {
             bool hide = std::find(config_.hiddenGames.begin(), config_.hiddenGames.end(), g.name) != config_.hiddenGames.end();
             (hide ? hidden : shown).push_back(std::move(g));

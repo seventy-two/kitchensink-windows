@@ -210,6 +210,36 @@ void SortGames(std::vector<Game>& games) {
                 games.end());
 }
 
+bool AddPlayDay(PlayDays& plays, const std::string& found, int day) {
+    std::vector<int>& days = plays[found];
+    days.erase(std::remove_if(days.begin(), days.end(), [&](int d) { return d < day - 366; }), days.end());
+    if (std::find(days.begin(), days.end(), day) != days.end()) return false;
+    days.push_back(day);
+    return true;
+}
+
+void SortGamesByUse(std::vector<Game>& games, const PlayDays& plays, int today) {
+    struct Use {
+        int days = 0;
+        int64_t last = 0;  // Unix seconds
+    };
+    std::map<std::string, Use> use;
+    for (const auto& g : games) {
+        std::set<int> days;
+        if (auto it = plays.find(g.found); it != plays.end()) days.insert(it->second.begin(), it->second.end());
+        if (g.lastPlayed > 0) days.insert(int(g.lastPlayed / 86400));
+        Use u;
+        for (int d : days)
+            if (d > today - kPlayWindow && d <= today) u.days++;
+        if (!days.empty()) u.last = std::max<int64_t>(int64_t(*days.rbegin()) * 86400, g.lastPlayed);
+        use[g.found] = u;
+    }
+    std::stable_sort(games.begin(), games.end(), [&](const Game& a, const Game& b) {
+        const Use &x = use[a.found], &y = use[b.found];
+        return std::tie(x.days, x.last) > std::tie(y.days, y.last);
+    });
+}
+
 namespace {
 
 // alnum is the letters and digits of s, lower case.

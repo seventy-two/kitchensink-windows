@@ -1467,6 +1467,31 @@ static void testGames() {
         CHECK(games[2].store == GameStore::Steam);
     }
 
+    // Most played first: days seen running in the last 90 (the store's
+    // last played day counting too), then the most recent, then A-Z.
+    {
+        int today = 20000;
+        std::vector<Game> gs(5);
+        const char* names[] = {"Alpha", "Bravo", "Charlie", "Delta", "Echo"};
+        for (int i = 0; i < 5; i++) gs[i].name = gs[i].found = names[i];
+        PlayDays plays;
+        CHECK(AddPlayDay(plays, "Charlie", today - 2));
+        CHECK(AddPlayDay(plays, "Charlie", today));
+        CHECK(!AddPlayDay(plays, "Charlie", today));
+        AddPlayDay(plays, "Delta", today - 10);
+        gs[1].lastPlayed = int64_t(today - 5) * 86400 + 3600;  // Bravo, from Steam
+        gs[1].found = "Bravo";
+        plays["Echo"] = {today - 400, today - 399};  // long ago: not counted, but more recent than never
+        SortGamesByUse(gs, plays, today);
+        CHECK_EQ(gs[0].name, std::string("Charlie"));  // 2 days
+        CHECK_EQ(gs[1].name, std::string("Bravo"));    // 1 day, 5 days ago
+        CHECK_EQ(gs[2].name, std::string("Delta"));    // 1 day, 10 days ago
+        CHECK_EQ(gs[3].name, std::string("Echo"));     // none lately
+        CHECK_EQ(gs[4].name, std::string("Alpha"));    // never
+        AddPlayDay(plays, "Echo", today);
+        CHECK_EQ(plays["Echo"].size(), size_t(1));  // a year old dropped
+    }
+
     // Games in a folder of their own, as on E: and G:.
     CHECK_EQ(FolderGameName("Space.Warlord.Baby.Trading.Simulator.Build.22021334"),
              std::string("Space Warlord Baby Trading Simulator"));

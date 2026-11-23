@@ -172,6 +172,11 @@ Config LoadConfig() {
     if (auto it = j.find("gameNames"); it != j.end() && it->is_object())
         for (const auto& [found, v] : it->items())
             if (v.is_string()) c.gameNames[found] = v.get<std::string>();
+    if (auto it = j.find("gamePlays"); it != j.end() && it->is_object())
+        for (const auto& [found, v] : it->items())
+            if (v.is_array())
+                for (const auto& d : v)
+                    if (d.is_number_integer()) c.gamePlays[found].push_back(d.get<int>());
     if (auto it = j.find("rowStyle"); it != j.end() && it->is_object())
         for (const auto& [id, v] : it->items())
             if (v.is_string()) c.rowStyle[id] = v.get<std::string>();
@@ -216,6 +221,7 @@ bool SaveConfig(const Config& c) {
         {"relevance", c.relevance},
         {"rowStyle", c.rowStyle},
         {"gameNames", c.gameNames},
+        {"gamePlays", c.gamePlays},
         {"pins", c.pins},
         {"trayCollapsed", c.trayCollapsed},
         {"netExpanded", c.netExpanded},

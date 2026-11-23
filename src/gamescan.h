@@ -60,6 +60,19 @@ void RenameGames(std::vector<Game>& games, const std::map<std::string, std::stri
 // SortGames puts the games in A-Z order (ignoring case and a leading
 // "The "), dropping a second copy of a game installed from two stores.
 void SortGames(std::vector<Game>& games);
+// PlayDays are the days (Unix days, UTC) each game was seen running, by
+// the name it was found as: config.json's "gamePlays".
+using PlayDays = std::map<std::string, std::vector<int>>;
+// kPlayWindow is how many days back SortGamesByUse counts.
+constexpr int kPlayWindow = 90;
+// AddPlayDay notes that the game found as found ran on day, dropping days
+// over a year old. It's false when that day was already there.
+bool AddPlayDay(PlayDays& plays, const std::string& found, int day);
+// SortGamesByUse puts the most played games first: by how many days in the
+// last kPlayWindow each was seen running (the store's last played day
+// counting as one), then the most recently played, keeping the A-Z order
+// (from SortGames) between games never played.
+void SortGamesByUse(std::vector<Game>& games, const PlayDays& plays, int today);
 // FolderGameName makes a game's name from its folder's, tidying a
 // download's dots, build number, version and group away
 // ("Space.Warlord.Baby.Trading.Simulator.Build.22021334").

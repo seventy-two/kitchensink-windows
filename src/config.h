@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "gamescan.h"
 #include "model.h"
 #include "shell.h"
 
@@ -61,6 +62,9 @@ struct Config {
     // Names for games, by the name each was found as (right-click,
     // Rename).
     std::map<std::string, std::string> gameNames;
+    // The days each game was seen running, by the name it was found as,
+    // for the games menu's most-played-first order.
+    PlayDays gamePlays;
     // Dims the window whatever the mouse does, until switched off (the
     // moon in the title bar).
     bool forceDim = false;
