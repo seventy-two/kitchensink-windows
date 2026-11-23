@@ -203,7 +203,7 @@ result is a single `kitchensink.exe` with nothing to install.
   found as; clear the name to go back) or hide it (`"hiddenGames"`); "Hidden" at the
   bottom puts it back. It looks again when opened, at most once a minute.
   The order: how many of the last 90 days each game was seen running
-  (any window of its, checked every ten seconds however it was started;
+  (any window of its, checked every five minutes however it was started;
   kept a year in `"gamePlays"`, by the name it was found as; a store's
   last played day, from Steam, counts too), then the most recent, then A-Z.
   Games from no store are found in `"gameFolders"` (each folder inside one

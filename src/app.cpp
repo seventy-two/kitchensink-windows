@@ -3674,11 +3674,12 @@ float App::appsButton(float right, float mid) {
     return min.x;
 }
 
-// notePlays notes, every ten seconds, the day for each game with a window
-// open, however it was started, for the games menu's order.
+// notePlays notes, every five minutes, the day for each game with a window
+// open, however it was started, for the games menu's order. It only needs
+// one sighting a day, so a session shorter than that may be missed.
 void App::notePlays() {
     double now = ImGui::GetTime();
-    if (now - playsChecked_ < 10 || !games_.Count()) return;
+    if (now - playsChecked_ < 300 || !games_.Count()) return;
     playsChecked_ = now;
     int today = int(std::time(nullptr) / 86400);
     bool changed = false;
