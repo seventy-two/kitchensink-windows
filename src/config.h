@@ -51,6 +51,9 @@ struct Config {
     // toggled from the eye's right-click menu.
     std::vector<std::string> privateApps;
     bool hideApps = false;
+    // Games (by name) left out of the games menu, hidden from its
+    // right-click menu.
+    std::vector<std::string> hiddenGames;
     // Dims the window whatever the mouse does, until switched off (the
     // moon in the title bar).
     bool forceDim = false;

@@ -1,5 +1,5 @@
 // The Windows client's PC-specific parts, left out on Linux: the "This PC"
-// and "Now playing" panels, the apps menu and pins, the open windows, tray
+// and "Now playing" panels, the apps and games menus and pins, the open windows, tray
 // and taskbar, Lick of the Day, watchgrab's
 // download buttons, uploading RuneLite's files, Squeak's battery
 // readings, the monitor's brightness, the volume and network speeds. Each
@@ -7,6 +7,7 @@
 // do-nothing version the dashboard treats as absent.
 #include "battery.h"
 #include "brightness.h"
+#include "games.h"
 #include "grabber.h"
 #include "launcher.h"
 #include "lick.h"
@@ -33,6 +34,14 @@ void MediaWatcher::Want() {}
 bool MediaWatcher::Take(Snapshot&) { return false; }
 void MediaWatcher::Command(MediaCommand, const std::string&) {}
 void MediaWatcher::run() {}
+
+Games::~Games() = default;
+void Games::Scan(bool) {}
+std::vector<Game> Games::List() { return {}; }
+size_t Games::Count() { return 0; }
+const Texture* Games::Icon(const Game&, ImageCache&) { return nullptr; }
+void Games::Start(const Game&) const {}
+void Games::run() {}
 
 void Launcher::Set(const std::vector<std::string>&) {}
 const std::vector<LaunchApp>& Launcher::Installed() { return installed_; }

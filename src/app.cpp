@@ -315,6 +315,8 @@ App::App(NativeWindow hwnd, GpuDevice device, std::function<void()> wake,
     lick_.Start();
     launcher_.Set(config_.apps);
     launcher_.SetPins(config_.pins, config_.barPins);
+    games_.SetWake(wake);
+    games_.Scan();
     windows_ = std::make_unique<OpenWindows>(hwnd, wake);
     tray_ = std::make_unique<Tray>(hwnd, wake);
     applyTaskbar();
@@ -962,6 +964,7 @@ void App::header() {
     if (mango_.Installed()) buttonsLeft = mangoButton(buttonsLeft, mid);
     if (!launcher_.BarPins().empty()) buttonsLeft = pinButtons(buttonsLeft - 4 * scale_, mid);
     if (!shownApps().empty() || !launcher_.Pins().empty()) buttonsLeft = appsButton(buttonsLeft - 4 * scale_, mid);
+    if (games_.Count()) buttonsLeft = gamesButton(buttonsLeft, mid);
     if (clockW > 0) {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         float x = buttonsLeft - 16 * scale_ - clockW;
@@ -3661,6 +3664,126 @@ float App::appsButton(float right, float mid) {
             for (const auto& name : section.apps)
                 for (const auto& a : apps)
                     if (a.name == name) appRow(a);
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopStyleVar();
+    return min.x;
+}
+
+// gamesButton draws a game controller in the title bar, ending at right,
+// that opens a menu of the installed games (see Games), A-Z, each with its
+// icon and a dot while it's running. Picking one brings its window to the
+// front, or starts it through its store; right-clicking one hides it, and
+// hidden ones can be put back from "Hidden" at the bottom. It returns its
+// left edge.
+float App::gamesButton(float right, float mid) {
+    const Palette& p = Colours();
+    float size = ImGui::GetFrameHeight();
+    ImVec2 origin = ImGui::GetWindowPos();
+    float w = std::round(size * 1.25f);
+    ImGui::SetCursorPos(ImVec2(right - origin.x - w, mid - size / 2));
+    bool open = ImGui::IsPopupOpen("##games");
+    if (ImGui::InvisibleButton("##gamesButton", ImVec2(w, size))) {
+        games_.Scan();  // catches what's been installed since (at most once a minute)
+        ImGui::OpenPopup("##games");
+    }
+    ImVec2 min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax();
+    noDrag_.push_back(ImRect(min, max));
+    ImDrawList* bar = ImGui::GetWindowDrawList();
+    bool lit = open || ImGui::IsItemHovered();
+    if (lit)
+        bar->AddRectFilled(min, max, ImGui::GetColorU32(ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered),
+                           ImGui::GetStyle().FrameRounding);
+    // A controller, greyed like the flag beside it: a wide body with two
+    // grips hanging below, a d-pad on the left and four buttons on the
+    // right cut out of it.
+    ImVec4 ink = lit ? p.text : p.muted;
+    // The cut-outs are a dark grey, like the flag's panes.
+    ImU32 inkU = u32(ink), hole = u32(mix(ink, p.bg, 0.75f));
+    ImVec2 c((min.x + max.x) / 2, (min.y + max.y) / 2 + size * 0.02f);
+    float u = size / 20.0f;  // the drawing is 20 units tall
+    float bw = 7.6f * u, bh = 3.4f * u;
+    bar->AddRectFilled(ImVec2(c.x - bw, c.y - bh), ImVec2(c.x + bw, c.y + bh * 0.9f), inkU, 3.4f * u);
+    for (float side : {-1.0f, 1.0f}) {
+        ImVec2 a(c.x + side * 5.2f * u, c.y + 1.0f * u), b(c.x + side * 6.3f * u, c.y + 4.6f * u);
+        bar->AddLine(a, b, inkU, 4.2f * u);
+        bar->AddCircleFilled(b, 2.1f * u, inkU);
+    }
+    ImVec2 pad(c.x - 4.3f * u, c.y - 0.3f * u);
+    bar->AddRectFilled(ImVec2(pad.x - 2.2f * u, pad.y - 0.6f * u), ImVec2(pad.x + 2.2f * u, pad.y + 0.6f * u), hole);
+    bar->AddRectFilled(ImVec2(pad.x - 0.6f * u, pad.y - 2.2f * u), ImVec2(pad.x + 0.6f * u, pad.y + 2.2f * u), hole);
+    ImVec2 btn(c.x + 4.3f * u, c.y - 0.3f * u);
+    for (ImVec2 d : {ImVec2(0, -1.4f), ImVec2(0, 1.4f), ImVec2(-1.4f, 0), ImVec2(1.4f, 0)})
+        bar->AddCircleFilled(ImVec2(btn.x + d.x * u, btn.y + d.y * u), 0.75f * u, hole);
+    if (!open && ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Games");
+
+    ImGui::SetNextWindowPos(ImVec2(max.x, max.y + 4 * scale_), ImGuiCond_Always, ImVec2(1, 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6 * scale_, 6 * scale_));
+    if (ImGui::BeginPopup("##games")) {
+        std::vector<Game> all = games_.List(), shown, hidden;
+        for (auto& g : all) {
+            bool hide = std::find(config_.hiddenGames.begin(), config_.hiddenGames.end(), g.name) != config_.hiddenGames.end();
+            (hide ? hidden : shown).push_back(std::move(g));
+        }
+        float iconSize = std::round(20 * scale_), pad = 6 * scale_;
+        float rowH = std::max(iconSize, ImGui::GetTextLineHeight()) + pad * 2;
+        float rw = 0;
+        for (const auto& g : shown) rw = std::max(rw, ImGui::CalcTextSize(g.name.c_str()).x);
+        rw = std::max(rw, ImGui::CalcTextSize("Hidden").x + 20 * scale_);
+        rw += iconSize + pad * 4 + 14 * scale_;
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        float selH = rowH - ImGui::GetStyle().ItemSpacing.y;
+        std::string hide, unhide;
+        for (const auto& g : shown) {
+            ImGui::PushID((std::string(GameStoreName(g.store)) + g.id + g.dir).c_str());
+            uintptr_t win = 0;
+            for (const auto& ow : openWindows_)
+                if (GameOwns(g, ow.match.exe, ow.match.family)) {
+                    win = ow.id;
+                    break;
+                }
+            ImVec2 at = ImGui::GetCursorScreenPos();
+            if (ImGui::Selectable("##game", false, 0, ImVec2(rw, selH))) {
+                if (win) {
+                    windows_->Show(win);
+                } else {
+                    games_.Start(g);
+                }
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal) && !ImGui::IsPopupOpen("##gameMenu"))
+                ImGui::SetTooltip("%s\n%s", GameStoreName(g.store), win ? "Running: bring to the front" : "Start");
+            if (ImGui::BeginPopupContextItem("##gameMenu")) {
+                if (ImGui::MenuItem("Hide from this menu")) hide = g.name;
+                ImGui::EndPopup();
+            }
+            float cy = at.y + selH / 2;
+            ImVec2 ic(at.x + pad, std::round(cy - iconSize / 2));
+            if (const Texture* t = games_.Icon(g, *images_))
+                dl->AddImage((ImTextureID)(intptr_t)t->srv, ic, ImVec2(ic.x + iconSize, ic.y + iconSize));
+            float th = ImGui::GetTextLineHeight();
+            dl->AddText(ImVec2(ic.x + iconSize + pad * 1.5f, std::round(cy - th / 2)), u32(p.text), g.name.c_str());
+            if (win) dl->AddCircleFilled(ImVec2(at.x + rw - pad - 3 * scale_, cy), 3 * scale_, u32(p.good));
+            ImGui::PopID();
+        }
+        if (!hidden.empty()) {
+            if (!shown.empty()) ImGui::Separator();
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + pad);
+            if (ImGui::BeginMenu("Hidden")) {
+                for (const auto& g : hidden)
+                    if (ImGui::MenuItem(g.name.c_str())) unhide = g.name;
+                ImGui::EndMenu();
+            }
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayNormal)) ImGui::SetTooltip("Pick one to put it back");
+        }
+        if (!hide.empty()) {
+            config_.hiddenGames.push_back(hide);
+            SaveConfig(config_);
+        }
+        if (!unhide.empty()) {
+            auto& h = config_.hiddenGames;
+            h.erase(std::remove(h.begin(), h.end(), unhide), h.end());
+            SaveConfig(config_);
         }
         ImGui::EndPopup();
     }

@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "../src/cat.h"
+#include "../src/gamescan.h"
 #include "../src/grab.h"
 #include "../src/local.h"
 #include "../src/model.h"
@@ -1387,6 +1388,97 @@ static void testShell() {
     CHECK_EQ(ks::PinTarget({4, 5}, 0, {}), uintptr_t(4));       // never active: the first
 }
 
+static void testGames() {
+    // Steam's library list and a game's manifest, as on the PC.
+    const char* folders = R"("libraryfolders"
+{
+	"0"
+	{
+		"path"		"C:\\Program Files (x86)\\Steam"
+		"apps"
+		{
+			"228980"		"147871673"
+		}
+	}
+	"1"
+	{
+		"path"		"G:\\SteamLibrary\\"
+	}
+})";
+    auto libs = SteamLibraries(folders);
+    CHECK_EQ(libs.size(), size_t(2));
+    if (libs.size() == 2) {
+        CHECK_EQ(libs[0], std::string("C:\\Program Files (x86)\\Steam"));
+        CHECK_EQ(libs[1], std::string("G:\\SteamLibrary"));
+    }
+    const char* acf = R"("AppState"
+{
+	"appid"		"24810"
+	"name"		"Command & Conquer 3: Kane's Wrath™"
+	"StateFlags"		"4"
+	"installdir"		"Command & Conquer 3 Kane's Wrath"
+	"LastPlayed"		"1763500000"
+	// a comment
+})";
+    Game g;
+    CHECK(SteamGame(acf, "G:\\SteamLibrary", g));
+    CHECK_EQ(g.id, std::string("24810"));
+    CHECK_EQ(g.dir, std::string("g:\\steamlibrary\\steamapps\\common\\command & conquer 3 kane's wrath"));
+    CHECK_EQ(g.open, std::string("steam://rungameid/24810"));
+    CHECK_EQ(g.lastPlayed, int64_t(1763500000));
+    std::string redist = R"("AppState" { "appid" "228980" "name" "Steamworks Common Redistributables" "StateFlags" "4" "installdir" "Steamworks Shared" })";
+    CHECK(!SteamGame(redist, "C:\\Steam", g));
+    std::string updating = R"("AppState" { "appid" "1" "name" "Half" "StateFlags" "6" "installdir" "Half" })";
+    CHECK(SteamGame(updating, "C:\\Steam", g));
+    std::string downloading = R"("AppState" { "appid" "1" "name" "Half" "StateFlags" "1026" "installdir" "Half" })";
+    CHECK(!SteamGame(downloading, "C:\\Steam", g));
+
+    // Epic's manifest.
+    const char* item = R"({"bIsIncompleteInstall": false, "LaunchExecutable": "Overcooked2.exe",
+        "AppCategories": ["public", "games", "applications"], "DisplayName": "Overcooked! 2",
+        "InstallLocation": "C:\\Program Files\\Epic Games\\Overcooked2",
+        "CatalogNamespace": "ns", "CatalogItemId": "item", "AppName": "Potoo", "MainGameAppName": "Potoo"})";
+    CHECK(EpicGame(item, g));
+    CHECK_EQ(g.name, std::string("Overcooked! 2"));
+    CHECK_EQ(g.dir, std::string("c:\\program files\\epic games\\overcooked2"));
+    CHECK_EQ(g.open, std::string("com.epicgames.launcher://apps/ns%3Aitem%3APotoo?action=launch&silent=true"));
+    CHECK_EQ(g.icon, std::string("C:\\Program Files\\Epic Games\\Overcooked2\\Overcooked2.exe"));
+    std::string dlc = std::string(item);
+    dlc.replace(dlc.find("\"MainGameAppName\": \"Potoo\""), 26, "\"MainGameAppName\": \"Other\"");
+    CHECK(!EpicGame(dlc, g));
+    CHECK(!EpicGame(R"({"AppName": "UE_5.4", "DisplayName": "Unreal Engine", "InstallLocation": "C:\\UE", "AppCategories": ["engines"]})", g));
+    CHECK(!EpicGame("not json", g));
+
+    CHECK_EQ(EAOffer({"dlc-Origin.SFT.50.0001523", "base-Origin.SFT.50.0001514"}), std::string("Origin.SFT.50.0001514"));
+    CHECK_EQ(EAOffer({"dlc-x"}), std::string(""));
+
+    // A-Z, ignoring "The " and case, with the trademark sign gone and a
+    // game in two stores listed once (the first store's).
+    std::vector<Game> games(4);
+    games[0].name = "Worms Armageddon", games[0].store = GameStore::Steam;
+    games[1].name = "The Witcher 3: Wild Hunt";
+    games[2].name = "Battlefield™ 6";
+    games[3].name = "worms armageddon", games[3].store = GameStore::GOG;
+    SortGames(games);
+    CHECK_EQ(games.size(), size_t(3));
+    if (games.size() == 3) {
+        CHECK_EQ(games[0].name, std::string("Battlefield 6"));
+        CHECK_EQ(games[1].name, std::string("The Witcher 3: Wild Hunt"));
+        CHECK(games[2].store == GameStore::Steam);
+    }
+
+    Game w;
+    w.dir = "g:\\worms armageddon";
+    CHECK(GameOwns(w, "g:\\worms armageddon\\wa.exe", ""));
+    CHECK(!GameOwns(w, "g:\\worms armageddon 2\\wa.exe", ""));
+    CHECK(!GameOwns(w, "g:\\worms armageddon", ""));
+    Game x;
+    x.dir = "c:\\program files\\windowsapps\\q";
+    x.family = "Devolver.Q_6kzv";
+    CHECK(GameOwns(x, "", "Devolver.Q_6kzv"));
+    CHECK(!GameOwns(x, "c:\\program files\\windowsapps\\q\\q.exe", ""));
+}
+
 int main() {
     testNetRate();
     testShell();
@@ -1395,6 +1487,7 @@ int main() {
     testRetro();
     testCat();
     testCatStyles();
+    testGames();
     testTemporaryEvents();
     testStaleEvents();
     testUpload();

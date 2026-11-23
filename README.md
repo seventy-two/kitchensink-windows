@@ -192,6 +192,15 @@ result is a single `kitchensink.exe` with nothing to install.
   Apps named in `"privateApps"` can be hidden from the menu with **Hide
   private apps** in the eye's right-click menu (the eye shows whenever
   there are private apps), and it's remembered.
+- **Games menu** (Windows only): the controller left of the apps flag lists
+  the installed games A-Z, found where each store records them: Steam's
+  library manifests, GOG's registry keys, Epic's `.item` manifests, the EA
+  app's `EA Games` keys, Ubisoft Connect's installs and Xbox app games
+  (Store packages with a `MicrosoftGame.config`). A click starts the game
+  through its store (`steam://`, `origin2://`, Epic's and Ubisoft's links,
+  GOG's own exe), or brings up its window while it's running (a green
+  dot). Right-click a game to hide it (`"hiddenGames"`); "Hidden" at the
+  bottom puts it back. It looks again when opened, at most once a minute.
 - **Instead of the Windows taskbar** (Windows only): the dashboard can stand in
   for it, and **Hide the Windows taskbar** in Settings hides it on every
   monitor while the dashboard runs (set to auto-hide, so windows get the
@@ -274,7 +283,7 @@ parts (the data model and the server-sent events parser) also build and
 test on Linux:
 
 ```sh
-g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/model.cpp src/sse.cpp src/local.cpp src/grab.cpp \
+g++ -std=c++17 -I src -I third_party -I third_party/imgui tests/tests.cpp src/gamescan.cpp src/model.cpp src/sse.cpp src/local.cpp src/grab.cpp \
     src/cat.cpp src/weather_icon.cpp src/retro.cpp src/sky.cpp third_party/imgui/imgui*.cpp && ./a.out
 ```
 
@@ -326,6 +335,7 @@ make -f linux/Makefile -j4        # build/kitchensink, then the tests
 | `src/volume.cpp` | reads and sets the default speakers' volume and mute (Core Audio) |
 | `src/netspeed.cpp` | reads the network adapters' byte counters; `src/netrate.h` turns them into speeds, tested anywhere |
 | `src/lick.cpp` | starts Lick of the Day with the dashboard, and hides and shows it |
+| `src/gamescan.cpp`, `src/games.cpp` | the games menu: reading the stores' records (portable), and finding, starting and drawing the games on Windows |
 | `src/launcher.cpp` | the apps menu and pinned apps: finding, starting and bringing up the apps, and their icons |
 | `src/openwindows.cpp` | the open windows the taskbar would show, on a thread of its own, with the shell's window events |
 | `src/tray.cpp` | reads the tray's icons from Explorer and sends them clicks |

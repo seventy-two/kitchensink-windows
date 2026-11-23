@@ -19,6 +19,7 @@
 #include "grabber.h"
 #include "images.h"
 #include "imgui_internal.h"
+#include "games.h"
 #include "launcher.h"
 #include "lick.h"
 #include "model.h"
@@ -200,6 +201,9 @@ private:
     float dimButton(float right, float mid);
     float displayOffButton(float right, float mid);
     float appsButton(float right, float mid);
+    // gamesButton draws a game controller, ending at right, that opens the
+    // games menu, and returns its left edge.
+    float gamesButton(float right, float mid);
     // pinButtons draws the pinned apps' icons, ending at right, and returns
     // where they start.
     float pinButtons(float right, float mid);
@@ -270,6 +274,7 @@ private:
     double mangoClicked_ = -1;
     bool mangoRaised_ = false;          // raised since the last click
     Launcher launcher_;                 // the apps menu's apps, and the pins
+    Games games_;                       // the games menu's games
     std::unique_ptr<OpenWindows> windows_;  // the open windows, for the Windows card and pins
     std::unique_ptr<Tray> tray_;        // the notification area's icons
     Taskbar taskbar_;                   // hides the Windows taskbar while it's wanted
