@@ -5089,6 +5089,11 @@ void App::windowsBar(const std::vector<OpenWindow>& list, float width) {
     float iconSize = std::round(16 * s), inset = std::round(3 * s);
     float h = windowsBarHeight(list.size());
     uintptr_t front = windows_->Front();
+    // Centre the caps, not the line box: the line box has room for
+    // descenders, so centring it puts the title visibly low in its row.
+    float capMid = lineH / 2;
+    if (const ImFontGlyph* g = ImGui::GetFont()->FindGlyphNoFallback('H'))
+        capMid = (g->Y0 + g->Y1) / 2 * ImGui::GetFontSize() / ImGui::GetFont()->FontSize;
 
     ImGui::PushID("##windows");
     ImGui::PushStyleColor(ImGuiCol_ChildBg, p.card);
@@ -5115,9 +5120,6 @@ void App::windowsBar(const std::vector<OpenWindow>& list, float width) {
         if (flashing) dl->AddRectFilled(at, end, u32(mix(p.card, p.warn, hovered ? 0.4f : 0.3f)), round);
         else if (isFront) dl->AddRectFilled(at, end, u32(mix(p.card, p.accent, hovered ? 0.3f : 0.2f)), round);
         else if (hovered) dl->AddRectFilled(at, end, ImGui::GetColorU32(ImGuiCol_ButtonHovered), round);
-        if (isFront)
-            dl->AddRectFilled(ImVec2(at.x, at.y + rowH * 0.25f), ImVec2(at.x + std::round(2 * s), at.y + rowH * 0.75f),
-                              u32(p.accent), s);
         float x = at.x + pad;
         if (const Texture* t = windows_->Icons().Get(w.icon, *images_)) {
             ImVec2 a(x, std::round(at.y + (rowH - iconSize) / 2));
@@ -5127,7 +5129,7 @@ void App::windowsBar(const std::vector<OpenWindow>& list, float width) {
         x += iconSize + pad;
         std::string clean = drawable(w.title), title = fit(clean, end.x - pad - x);
         ImVec4 col = flashing ? p.text : w.minimised ? p.muted : p.text;
-        dl->AddText(ImVec2(x, std::round(at.y + (rowH - lineH) / 2)), u32(col), title.c_str());
+        dl->AddText(ImVec2(x, std::round(at.y + rowH / 2 - capMid)), u32(col), title.c_str());
         if (pressed) {
             const ImGuiIO& io = ImGui::GetIO();
             if (io.MouseReleased[ImGuiMouseButton_Middle]) windows_->Close(w.id);
