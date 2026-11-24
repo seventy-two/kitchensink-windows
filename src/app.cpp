@@ -4597,7 +4597,7 @@ std::vector<const Event*> App::liveCodes() const {
 
 float App::codeRowsHeight() const {
     size_t n = liveCodes().size();
-    return n ? n * std::round(30 * scale_) + (n - 1) * std::round(3 * scale_) : 0;
+    return n ? n * std::round(22 * scale_) + (n - 1) * std::round(2 * scale_) : 0;
 }
 
 // codeRows draws each live sign-in code as one slim row: what it's for on
@@ -4609,7 +4609,7 @@ void App::codeRows(float width) {
     if (codes.empty()) return;
     const Palette& p = Colours();
     double t = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
-    float rowH = std::round(30 * scale_), pad = std::round(10 * scale_);
+    float rowH = std::round(22 * scale_), pad = std::round(8 * scale_);
     int64_t clear = 0;
     for (size_t i = 0; i < codes.size(); i++) {
         const Event& e = *codes[i];
@@ -4619,10 +4619,7 @@ void App::codeRows(float width) {
         ImGui::InvisibleButton("##code", ImVec2(width, rowH), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
         bool over = ImGui::IsItemHovered();
         dl->AddRectFilled(a, b, u32(over ? p.hover : p.card));
-        if (over) {
-            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-            ImGui::SetTooltip("Click to copy, right-click to dismiss");
-        }
+        if (over) ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
             copySecret(hwnd_, e.body);
             copiedCode_ = e.id;
@@ -4637,7 +4634,7 @@ void App::codeRows(float width) {
         bool copied = copiedCode_ == e.id && ImGui::GetTime() - copiedAt_ < 2;
 
         // The code, right-aligned; "Copied" just left of it for a moment.
-        ImGui::PushFont(fonts_.heading);
+        ImGui::PushFont(fonts_.body);
         ImVec2 cs = ImGui::CalcTextSize(shown.c_str());
         float codeX = b.x - pad - cs.x;
         dl->AddText(ImVec2(codeX, std::round(a.y + (rowH - cs.y) / 2)), u32(copied ? p.accent : p.text), shown.c_str());
@@ -4658,11 +4655,11 @@ void App::codeRows(float width) {
         float left = std::clamp(float((double(e.expires) - t) / span), 0.0f, 1.0f);
         ImVec4 bar = p.accent;
         bar.w *= 0.7f;
-        float h = std::max(1.0f, std::round(1.5f * scale_));
+        float h = std::max(1.0f, std::round(1 * scale_));
         dl->AddRectFilled(ImVec2(a.x, b.y - h), ImVec2(a.x + width * left, b.y), u32(bar));
         bevel(a, b);
         ImGui::PopID();
-        if (i + 1 < codes.size()) ImGui::Dummy(ImVec2(0, std::round(3 * scale_) - ImGui::GetStyle().ItemSpacing.y));
+        if (i + 1 < codes.size()) ImGui::Dummy(ImVec2(0, std::round(2 * scale_) - ImGui::GetStyle().ItemSpacing.y));
     }
     if (clear != 0) {
         model_.Clear(clear);
