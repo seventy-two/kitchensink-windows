@@ -521,20 +521,40 @@ void App::Pump() {
     if (pendingSince_ == 0) pendingSince_ = TickMs();
     if (FlushIn() > 0) return;
 
-    if (pending_.size() == 1) {
+    // Sign-in codes are never folded into a summary: each shows on its own,
+    // after the rest, and clicking it copies the code.
+    std::vector<Event> codes;
+    for (auto it = pending_.begin(); it != pending_.end();) {
+        if (it->key.rfind("code:", 0) == 0 && !it->body.empty()) {
+            codes.push_back(std::move(*it));
+            it = pending_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    if (pending_.empty()) {
+        // nothing else to show
+    } else if (pending_.size() == 1) {
         const Event& e = pending_[0];
         lastNotifyURL_ = e.url;
+        lastNotifyCopy_.clear();
         notify_(e.title, e.body.empty() ? model_.TitleOf(e.monitor) : e.body);
     } else {
         // Several at once, e.g. after being offline: one summary, newest
         // first.
         lastNotifyURL_.clear();
+        lastNotifyCopy_.clear();
         std::string body;
         for (size_t i = pending_.size(); i-- > 0;) {
             if (!body.empty()) body += "\n";
             body += pending_[i].title;
         }
         notify_(std::to_string(pending_.size()) + " new events", body);
+    }
+    for (const Event& c : codes) {
+        lastNotifyURL_.clear();
+        lastNotifyCopy_ = c.body;
+        notify_(c.title, c.body + "  (click to copy)");
     }
     pending_.clear();
     pendingSince_ = 0;
@@ -560,7 +580,37 @@ unsigned long App::FlushIn() const {
     return waited >= kHoldMs ? 0 : (unsigned long)(kHoldMs - waited);
 }
 
+// copySecret puts text on the clipboard, marked so Windows keeps it out of
+// clipboard history and cloud clipboard (it's a sign-in code). Elsewhere
+// it's an ordinary copy.
+#ifdef _WIN32
+static void copySecret(HWND owner, const std::string& text) {
+    std::wstring w(text.begin(), text.end());  // codes are ASCII
+    if (!OpenClipboard(owner)) return;
+    EmptyClipboard();
+    if (HGLOBAL mem = GlobalAlloc(GMEM_MOVEABLE, (w.size() + 1) * sizeof(wchar_t))) {
+        memcpy(GlobalLock(mem), w.c_str(), (w.size() + 1) * sizeof(wchar_t));
+        GlobalUnlock(mem);
+        if (!SetClipboardData(CF_UNICODETEXT, mem)) GlobalFree(mem);
+    }
+    if (UINT fmt = RegisterClipboardFormatW(L"ExcludeClipboardContentFromMonitorProcessing"))
+        if (HGLOBAL flag = GlobalAlloc(GMEM_MOVEABLE, sizeof(DWORD))) {
+            *static_cast<DWORD*>(GlobalLock(flag)) = 0;
+            GlobalUnlock(flag);
+            if (!SetClipboardData(fmt, flag)) GlobalFree(flag);
+        }
+    CloseClipboard();
+}
+#else
+static void copySecret(NativeWindow, const std::string& text) { ImGui::SetClipboardText(text.c_str()); }
+#endif
+
 bool App::NotificationClicked() {
+    if (!lastNotifyCopy_.empty()) {
+        copySecret(hwnd_, lastNotifyCopy_);
+        lastNotifyCopy_.clear();
+        return true;
+    }
     if (lastNotifyURL_.empty()) return false;
     OpenURL(lastNotifyURL_);
     return true;

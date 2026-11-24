@@ -305,6 +305,9 @@ private:
     bool mediaBarShown_ = false;  // Recent's column is up, so Now playing is a bar in it, not a panel
     std::function<void(const std::string&, const std::string&)> notify_;
     std::string lastNotifyURL_;
+    // A sign-in code (codes monitor) the last notification showed: clicking
+    // it copies the code instead of opening anything.
+    std::string lastNotifyCopy_;
     // Notifications are held briefly so a burst becomes one notification.
     std::vector<Event> pending_;
     unsigned long long pendingSince_ = 0;
