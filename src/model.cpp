@@ -55,6 +55,7 @@ Stat parseStat(const json& j) {
     }
     st.icon = str(j, "icon");
     st.url = str(j, "url");
+    st.open = str(j, "open");
     st.tag = str(j, "tag");
     if (auto it = j.find("spark"); it != j.end() && it->is_object()) {
         const json& sp = *it;

@@ -41,6 +41,7 @@ struct Stat {
     bool isPrivate = false;  // a personal figure, e.g. money, hidden on request
     std::string icon;        // a picture by the value, e.g. "rain"
     std::string url;         // opened when the stat is clicked
+    std::string open;        // an app to open url with, as for a Cell
     float level = 0;         // 0 to 1, a faint chart behind, e.g. the chance of rain
     bool hasLevel = false;
     // The widest the value and detail can get, e.g. "100%": a summary tile

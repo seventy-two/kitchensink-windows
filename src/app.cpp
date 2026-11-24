@@ -2172,7 +2172,7 @@ bool App::chips(const std::vector<Stat>& stats, float width, bool live, bool gri
         if (live && !s.url.empty() && ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(a, ImVec2(a.x + w, a.y + h))) {
             dl->AddRectFilled(a, ImVec2(a.x + w, a.y + h), u32(fade(p.text, 0.12f)));
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) OpenURL(s.url);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) OpenURL(s.url, s.open);
             onLink = true;
         }
         float inner = w - pad.x * 2;
@@ -2333,7 +2333,7 @@ bool App::slimStats(const std::vector<Stat>& stats, float width, bool asChips, b
         if (live && !st.url.empty() && ImGui::IsWindowHovered() && ImGui::IsMouseHoveringRect(a, z)) {
             dl->AddRectFilled(a, z, u32(fade(p.text, 0.12f)));
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) OpenURL(st.url);
+            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) OpenURL(st.url, st.open);
             onLink = true;
         }
         float tx = a.x + padX;

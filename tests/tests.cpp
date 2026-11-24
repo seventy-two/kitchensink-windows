@@ -680,9 +680,10 @@ static void testWeatherIcons() {
     DrawWeatherIcon(none, "tornado", {0, 0}, 50, col);
     CHECK_EQ(none.shapes, 0);
     Snapshot snap = ParseSnapshot(nlohmann::json::parse(
-        R"({"summary": [{"label": "13:00", "value": "18°", "icon": "rain", "level": 0.6}, {"level": 3}, {"url": "https://example.com/"}, {"level": 0}]})"));
+        R"({"summary": [{"label": "13:00", "value": "18°", "icon": "rain", "level": 0.6}, {"level": 3}, {"url": "https://example.com/", "open": "trashbox"}, {"level": 0}]})"));
     CHECK_EQ(snap.summary[0].icon, std::string("rain"));
     CHECK_EQ(snap.summary[2].url, std::string("https://example.com/"));
+    CHECK_EQ(snap.summary[2].open, std::string("trashbox"));
     CHECK(snap.paste.empty());
     CHECK_EQ(ParseSnapshot(nlohmann::json::parse(R"({"paste": "Log it"})")).paste, std::string("Log it"));
     CHECK(snap.summary[0].url.empty());
