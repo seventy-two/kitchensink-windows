@@ -4600,80 +4600,60 @@ float App::codeRowsHeight() const {
     return n ? n * std::round(30 * scale_) + (n - 1) * std::round(3 * scale_) : 0;
 }
 
-// codeRows draws each live sign-in code as one slim row: who it's from, the
-// code, Copy (the whole row copies too), an x on hover to clear it, and a
-// hairline along the bottom for the time it has left.
+// codeRows draws each live sign-in code as one slim row: what it's for on
+// the left, the code on the right. Clicking copies the code; right-click
+// dismisses it. Nothing moves on hover, so a click can't land on the wrong
+// thing. A hairline along the bottom shows the time it has left.
 void App::codeRows(float width) {
     std::vector<const Event*> codes = liveCodes();
     if (codes.empty()) return;
     const Palette& p = Colours();
-    const ImGuiIO& io = ImGui::GetIO();
     double t = std::chrono::duration<double>(std::chrono::system_clock::now().time_since_epoch()).count();
-    float rowH = std::round(30 * scale_), pad = std::round(9 * scale_);
+    float rowH = std::round(30 * scale_), pad = std::round(10 * scale_);
     int64_t clear = 0;
     for (size_t i = 0; i < codes.size(); i++) {
         const Event& e = *codes[i];
         ImGui::PushID(int(e.id));
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 a = ImGui::GetCursorScreenPos(), b(a.x + width, a.y + rowH);
-        ImGui::InvisibleButton("##code", ImVec2(width, rowH));
+        ImGui::InvisibleButton("##code", ImVec2(width, rowH), ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
         bool over = ImGui::IsItemHovered();
-
-        float xs = std::round(20 * scale_);
-        ImRect x(ImVec2(b.x - xs - 3 * scale_, a.y + (rowH - xs) / 2), ImVec2(b.x - 3 * scale_, a.y + (rowH + xs) / 2));
-        bool overX = over && x.Contains(io.MousePos);
-        dl->AddRectFilled(a, b, u32(over && !overX ? p.hover : p.card));
+        dl->AddRectFilled(a, b, u32(over ? p.hover : p.card));
+        if (over) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+            ImGui::SetTooltip("Click to copy, right-click to dismiss");
+        }
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+            copySecret(hwnd_, e.body);
+            copiedCode_ = e.id;
+            copiedAt_ = ImGui::GetTime();
+        }
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right)) clear = e.id;
 
         std::string from = e.title.rfind("Code from ", 0) == 0 ? e.title.substr(10) : e.title;
-        std::string shown = e.body;  // "482913" reads as "482 913"; Copy copies it whole
+        std::string shown = e.body;  // "482913" reads as "482 913"; the copy is whole
         if (shown.size() == 6 && shown.find_first_not_of("0123456789") == std::string::npos)
             shown = shown.substr(0, 3) + " " + shown.substr(3);
-
-        // Right: Copy (and the x while hovered).
         bool copied = copiedCode_ == e.id && ImGui::GetTime() - copiedAt_ < 2;
-        const char* label = copied ? "Copied" : "Copy";
-        ImGui::PushFont(fonts_.caption);
-        ImVec2 ls = ImGui::CalcTextSize(label);
-        float bw = ImGui::CalcTextSize("Copied").x + 14 * scale_, bh = rowH - 10 * scale_;
-        float right = over ? x.Min.x - 4 * scale_ : b.x - pad;
-        ImRect btn(ImVec2(right - bw, a.y + 5 * scale_), ImVec2(right, a.y + 5 * scale_ + bh));
-        bool overBtn = over && btn.Contains(io.MousePos);
-        dl->AddRectFilled(btn.Min, btn.Max, u32(copied ? p.accent : overBtn ? p.frame : p.hover), 4 * scale_);
-        dl->AddText(ImVec2(std::round(btn.GetCenter().x - ls.x / 2), std::round(btn.GetCenter().y - ls.y / 2)),
-                    u32(copied ? p.bg : p.text), label);
 
-        // Left: who it's from, then the code.
-        float ty = std::round(a.y + (rowH - ImGui::GetFontSize()) / 2);
-        std::string head = "Code \xC2\xB7 " + from;
-        ImGui::PopFont();
+        // The code, right-aligned; "Copied" just left of it for a moment.
         ImGui::PushFont(fonts_.heading);
         ImVec2 cs = ImGui::CalcTextSize(shown.c_str());
-        float codeX = btn.Min.x - 10 * scale_ - cs.x;
-        dl->AddText(ImVec2(codeX, std::round(a.y + (rowH - cs.y) / 2)), u32(p.text), shown.c_str());
+        float codeX = b.x - pad - cs.x;
+        dl->AddText(ImVec2(codeX, std::round(a.y + (rowH - cs.y) / 2)), u32(copied ? p.accent : p.text), shown.c_str());
         ImGui::PopFont();
         ImGui::PushFont(fonts_.caption);
-        std::string fitted = fit(head, codeX - 10 * scale_ - (a.x + pad));
+        float ty = std::round(a.y + (rowH - ImGui::GetFontSize()) / 2);
+        float labelMax = codeX - 10 * scale_;
+        if (copied) {
+            ImVec2 ls = ImGui::CalcTextSize("Copied");
+            labelMax -= ls.x + 10 * scale_;
+            dl->AddText(ImVec2(codeX - 10 * scale_ - ls.x, ty), u32(p.accent), "Copied");
+        }
+        std::string fitted = fit(from, labelMax - (a.x + pad));
         dl->AddText(ImVec2(a.x + pad, ty), u32(p.muted), fitted.c_str());
         ImGui::PopFont();
 
-        if (over) {
-            if (overX) dl->AddRectFilled(x.Min, x.Max, u32(p.frame), 4 * scale_);
-            ImGui::PushFont(fonts_.chrome);
-            ImVec2 g = ImGui::CalcTextSize(icon::Close);
-            dl->AddText(ImVec2(std::round(x.GetCenter().x - g.x / 2), std::round(x.GetCenter().y - g.y / 2)),
-                        u32(overX ? p.text : p.muted), icon::Close);
-            ImGui::PopFont();
-            if (overX) ImGui::SetTooltip("Clear");
-            else ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
-        }
-        if (ImGui::IsItemClicked()) {
-            if (overX) clear = e.id;
-            else {
-                copySecret(hwnd_, e.body);
-                copiedCode_ = e.id;
-                copiedAt_ = ImGui::GetTime();
-            }
-        }
         float span = float(std::max<int64_t>(e.expires - e.time, 1));
         float left = std::clamp(float((double(e.expires) - t) / span), 0.0f, 1.0f);
         ImVec4 bar = p.accent;
