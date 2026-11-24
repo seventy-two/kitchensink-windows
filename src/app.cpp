@@ -4574,11 +4574,108 @@ void App::feedHeading(float width) {
     }
 }
 
+#ifdef _WIN32
+static void copySecret(HWND owner, const std::string& text);
+#else
+static void copySecret(NativeWindow, const std::string& text);
+#endif
+
+// codeCard draws a sign-in code (codes monitor) in "Just now": the code big
+// and easy to read, who it's from, a Copy button (the whole card copies
+// too), and how long it has left. It returns whether the x was clicked.
+bool App::codeCard(const Event& e, int64_t t, float left) {
+    const Palette& p = Colours();
+    const ImGuiIO& io = ImGui::GetIO();
+    ImDrawList* dl = ImGui::GetWindowDrawList();
+    float pad = (compact_ ? 8 : 11) * scale_;
+    ImGui::PushID(int(e.id));
+    dl->ChannelsSplit(2);
+    dl->ChannelsSetCurrent(1);
+    ImVec2 start = ImGui::GetCursorScreenPos();
+    float width = ImGui::GetContentRegionAvail().x;
+
+    std::string from = e.title.rfind("Code from ", 0) == 0 ? e.title.substr(10) : e.title;
+    ImGui::SetCursorScreenPos(ImVec2(start.x + pad, start.y + pad * 0.8f));
+    ImGui::PushFont(fonts_.caption);
+    mutedText("Sign-in code  \xC2\xB7  " + from + "  \xC2\xB7  " + Ago(e.time, t));
+    ImGui::PopFont();
+    // "482913" reads as "482 913"; Copy copies it whole.
+    std::string shown = e.body;
+    if (shown.size() == 6 && shown.find_first_not_of("0123456789") == std::string::npos)
+        shown = shown.substr(0, 3) + " " + shown.substr(3);
+    ImGui::SetCursorScreenPos(ImVec2(start.x + pad, ImGui::GetCursorScreenPos().y + 2 * scale_));
+    ImGui::PushFont(fonts_.big);
+    ImVec2 codeAt = ImGui::GetCursorScreenPos();
+    ImVec2 codeSize = ImGui::CalcTextSize(shown.c_str());
+    dl->AddText(codeAt, u32(p.text), shown.c_str());
+    ImGui::PopFont();
+
+    // Copy, right of the code, as tall as it.
+    bool copied = copiedCode_ == e.id && ImGui::GetTime() - copiedAt_ < 2;
+    const char* label = copied ? "Copied" : "Copy";
+    ImGui::PushFont(fonts_.body);
+    float bw = std::max(ImGui::CalcTextSize("Copied").x + 20 * scale_, 64 * scale_);
+    float bh = ImGui::GetFontSize() + 10 * scale_;
+    ImRect btn(ImVec2(start.x + width - pad - bw, codeAt.y + (codeSize.y - bh) / 2),
+               ImVec2(start.x + width - pad, codeAt.y + (codeSize.y + bh) / 2));
+    ImGui::PopFont();
+    ImVec2 end(start.x + width, codeAt.y + codeSize.y + pad);
+    ImGui::SetCursorScreenPos(start);
+    ImGui::InvisibleButton("##code", ImVec2(width, end.y - start.y));
+    bool over = ImGui::IsItemHovered();
+
+    float xs = std::round(22 * scale_);
+    float edge = end.x - 3 * scale_;
+    ImRect x(ImVec2(edge - xs, start.y + 3 * scale_), ImVec2(edge, start.y + 3 * scale_ + xs));
+    bool overX = over && x.Contains(io.MousePos);
+    bool overBtn = over && btn.Contains(io.MousePos);
+    dl->AddRectFilled(btn.Min, btn.Max, u32(copied ? p.accent : overBtn ? p.hover : p.frame), 4 * scale_);
+    ImGui::PushFont(fonts_.body);
+    ImVec2 ls = ImGui::CalcTextSize(label);
+    dl->AddText(ImVec2(std::round(btn.GetCenter().x - ls.x / 2), std::round(btn.GetCenter().y - ls.y / 2)),
+                u32(copied ? p.bg : p.text), label);
+    ImGui::PopFont();
+    if (over) {
+        if (overX) dl->AddRectFilled(x.Min, x.Max, u32(p.frame), 4 * scale_);
+        ImGui::PushFont(fonts_.chrome);
+        ImVec2 g = ImGui::CalcTextSize(icon::Close);
+        dl->AddText(ImVec2(std::round(x.GetCenter().x - g.x / 2), std::round(x.GetCenter().y - g.y / 2)),
+                    u32(overX ? p.text : p.muted), icon::Close);
+        ImGui::PopFont();
+        if (overX) ImGui::SetTooltip("Clear");
+        else ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+    }
+
+    dl->ChannelsSetCurrent(0);
+    dl->AddRectFilled(start, end, u32(over && !overX ? p.hover : p.card));
+    bool cleared = false;
+    if (ImGui::IsItemClicked()) {
+        if (overX) cleared = true;
+        else {
+            copySecret(hwnd_, e.body);
+            copiedCode_ = e.id;
+            copiedAt_ = ImGui::GetTime();
+        }
+    }
+    if (left >= 0) {
+        float h = std::max(2.0f, std::round(2 * scale_));
+        ImVec4 bar = p.accent;
+        bar.w *= 0.7f;
+        dl->AddRectFilled(ImVec2(start.x, end.y - h), ImVec2(start.x + (end.x - start.x) * left, end.y), u32(bar));
+    }
+    dl->ChannelsMerge();
+    bevel(start, end);
+    ImGui::Dummy(ImVec2(0, 1 * scale_));
+    ImGui::PopID();
+    return cleared;
+}
+
 // eventCard draws one event as a card, which opens its link when clicked
 // and has an x to clear it while hovered; left, from 1 down to 0, draws
 // how long a temporary one has left (negative for none). It returns
 // whether the x was clicked.
 bool App::eventCard(const Event& e, int64_t t, float left) {
+    if (e.key.rfind("code:", 0) == 0 && !e.body.empty()) return codeCard(e, t, left);
     const Palette& p = Colours();
     const ImGuiIO& io = ImGui::GetIO();
     ImDrawList* dl = ImGui::GetWindowDrawList();

@@ -188,6 +188,9 @@ private:
     void netBar(float width);
     float netBarHeight();
     float landHeight() const;
+    bool codeCard(const Event& e, int64_t t, float left);
+    int64_t copiedCode_ = 0;  // the code card last copied
+    double copiedAt_ = 0;
     bool eventCard(const Event& e, int64_t t, float left);
     void temporaries();
     void cat(float width);
