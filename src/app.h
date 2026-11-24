@@ -188,7 +188,10 @@ private:
     void netBar(float width);
     float netBarHeight();
     float landHeight() const;
-    bool codeCard(const Event& e, int64_t t, float left);
+    // Sign-in codes (codes monitor): slim rows pinned above the open windows.
+    std::vector<const Event*> liveCodes() const;
+    float codeRowsHeight() const;
+    void codeRows(float width);
     int64_t copiedCode_ = 0;  // the code card last copied
     double copiedAt_ = 0;
     bool eventCard(const Event& e, int64_t t, float left);
