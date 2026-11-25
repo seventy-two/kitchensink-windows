@@ -74,6 +74,12 @@ public:
     // TaskbarCreated is for Explorer having (re)started: the tray is read
     // again and the taskbar hidden again if it should be.
     void TaskbarCreated();
+    // AskWindow asks before the window is closed (hidden to the tray) or
+    // minimised, as with the taskbar hidden there's nothing to bring it back
+    // with but starting it again. It's for the title-bar buttons and for
+    // Alt+F4, Win+Down and the like.
+    enum class WindowAsk { None, Close, Minimise };
+    void AskWindow(WindowAsk what);
     // RestoreTaskbar puts the Windows taskbar back, e.g. at sign-out.
     void RestoreTaskbar();
     // NoActivate reports whether a click at a point in client pixels should
@@ -229,6 +235,7 @@ private:
     std::vector<LaunchApp> shownApps();
     void empty(const char* message, bool settingsButton);
     void settings();
+    void windowAsk();
     void diagnostics();
     void openSettings();
 
@@ -359,6 +366,7 @@ private:
     std::vector<std::pair<std::string, ImRect>> cardRects_;
 
     bool settingsOpen_ = false;
+    WindowAsk windowAsk_ = WindowAsk::None;
     char urlBuf_[512] = {};
     char tokenBuf_[256] = {};
     int priorityChoice_ = 1;

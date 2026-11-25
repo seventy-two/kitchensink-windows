@@ -12,6 +12,8 @@ bool WindowActive(NativeWindow w) { return GetForegroundWindow() == w; }
 void MinimiseWindow(NativeWindow w) { ShowWindow(w, SW_MINIMIZE); }
 void ToggleMaximise(NativeWindow w) { ShowWindow(w, IsZoomed(w) ? SW_RESTORE : SW_MAXIMIZE); }
 void CloseMainWindow(NativeWindow w) { PostMessageW(w, WM_CLOSE, 0, 0); }
+void HideMainWindow(NativeWindow w) { ShowWindow(w, SW_HIDE); }
+void QuitApp(NativeWindow w) { PostMessageW(w, RegisterWindowMessageW(L"kitchensink-quit"), 0, 0); }
 
 bool MouseOverWindow(NativeWindow w) {
     POINT p;

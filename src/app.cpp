@@ -770,6 +770,7 @@ void App::Frame() {
     ImGui::EndChild();
     settings();
     panelSettings();
+    windowAsk();
 
     // OLED care dims everything when the mouse hasn't been over the window
     // for a while; it's back as soon as it is.
@@ -777,7 +778,8 @@ void App::Frame() {
     // Win32 backend reports the cursor wherever it is on screen. So ask
     // Windows whether the cursor is over this window (and not something on
     // top of it).
-    if (mouseOverWindow() || settingsOpen_ || !panelSettings_.empty()) lastActivity_ = t;
+    if (mouseOverWindow() || settingsOpen_ || !panelSettings_.empty() || windowAsk_ != WindowAsk::None)
+        lastActivity_ = t;
     bool dimmed = config_.forceDim || (config_.oled.dim && OledDim(t, lastActivity_, wakeUntil_));
     if (dimmed) ImGui::GetForegroundDrawList()->AddRectFilled(ImVec2(0, 0), io.DisplaySize, IM_COL32(0, 0, 0, 153));
     // The cat isn't drawn while the window's dimmed.
@@ -1065,7 +1067,7 @@ float App::windowButtons() {
     enum { Minimise, Maximise, Close };
     const char* glyphs[] = {icon::Minimise, zoomed ? icon::Restore : icon::Maximise, icon::Close};
 #ifdef _WIN32
-    const char* closeTip = "Close (keeps running in the tray)";
+    const char* closeTip = "Close (asks first: keeps running in the tray)";
 #else
     const char* closeTip = "Close";
 #endif
@@ -1102,9 +1104,14 @@ float App::windowButtons() {
             anyHovered = true;
         }
         if (clicked) {
+#ifdef _WIN32
+            if (i == Minimise) AskWindow(WindowAsk::Minimise);
+            if (i == Close) AskWindow(WindowAsk::Close);
+#else
             if (i == Minimise) MinimiseWindow(hwnd_);
-            if (i == Maximise) ToggleMaximise(hwnd_);
             if (i == Close) CloseMainWindow(hwnd_);
+#endif
+            if (i == Maximise) ToggleMaximise(hwnd_);
         }
     }
     if (!anyHovered) hoverButton_ = -1;
@@ -1454,7 +1461,7 @@ void App::panelSettings() {
         panelSettings_.clear();
         return;
     }
-    if (!ImGui::IsPopupOpen("##panelSettings")) ImGui::OpenPopup("##panelSettings");
+    if (windowAsk_ == WindowAsk::None && !ImGui::IsPopupOpen("##panelSettings")) ImGui::OpenPopup("##panelSettings");
     ImGuiIO& io = ImGui::GetIO();
     ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, io.DisplaySize.y / 2), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(760 * scale_, io.DisplaySize.x - 32 * scale_), 0));
@@ -4829,8 +4836,81 @@ void App::diagnostics() {
     ImGui::Dummy(ImVec2(0, 8 * scale_));
 }
 
+void App::AskWindow(WindowAsk what) { windowAsk_ = what; }
+
+// windowAsk is the question AskWindow puts: Cancel is the default (Enter or
+// Esc), since the window is meant to stay up.
+void App::windowAsk() {
+    if (windowAsk_ == WindowAsk::None) return;
+    if (!ImGui::IsPopupOpen("##windowAsk")) ImGui::OpenPopup("##windowAsk");
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, io.DisplaySize.y / 2), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+    ImGui::SetNextWindowSize(ImVec2(std::min(440 * scale_, io.DisplaySize.x - 32 * scale_), 0));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(24 * scale_, 20 * scale_));
+    bool open = ImGui::BeginPopupModal("##windowAsk", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove |
+                                                                   ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings);
+    ImGui::PopStyleVar();
+    if (!open) {
+        windowAsk_ = WindowAsk::None;
+        return;
+    }
+    bool closing = windowAsk_ == WindowAsk::Close;
+    ImGui::PushFont(fonts_.title);
+    ImGui::TextColored(Colours().heading, closing ? "Close kitchensink?" : "Minimise kitchensink?");
+    ImGui::PopFont();
+    ImGui::Dummy(ImVec2(0, 4 * scale_));
+    const char* why;
+    if (config_.hideTaskbar)
+        why = closing ? "Close hides it and leaves it running in the tray, but the taskbar's hidden, so there's no tray "
+                        "icon to bring it back with. Start kitchensink again to get it back."
+                      : "The taskbar's hidden, so there's no button to bring it back with. Start kitchensink again to "
+                        "get it back.";
+    else
+        why = closing ? "Close hides it and leaves it running in the tray; its icon there brings it back."
+                      : "Its taskbar button brings it back.";
+    ImGui::PushTextWrapPos(0);
+    ImGui::TextUnformatted(why);
+    ImGui::PopTextWrapPos();
+    ImGui::Dummy(ImVec2(0, 8 * scale_));
+
+    const ImGuiStyle& st = ImGui::GetStyle();
+    float w = ImGui::GetContentRegionAvail().x;
+    float bw = 96 * scale_;
+    int n = closing ? 3 : 2;
+    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + w - (bw * n + st.ItemSpacing.x * (n - 1)));
+    auto done = [&] {
+        windowAsk_ = WindowAsk::None;
+        ImGui::CloseCurrentPopup();
+    };
+#ifdef _WIN32
+    if (closing) {
+        if (ImGui::Button("Quit", ImVec2(bw, 0))) {
+            done();
+            QuitApp(hwnd_);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Hide", ImVec2(bw, 0))) {
+            done();
+            HideMainWindow(hwnd_);
+        }
+    } else if (ImGui::Button("Minimise", ImVec2(bw, 0))) {
+        done();
+        MinimiseWindow(hwnd_);
+    }
+#endif
+    ImGui::SameLine();
+    ImGui::PushStyleColor(ImGuiCol_Button, Colours().accent);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, fade(Colours().accent, 0.85f));
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1, 1, 1, 1));
+    if (ImGui::Button("Cancel", ImVec2(bw, 0)) || ImGui::IsKeyPressed(ImGuiKey_Escape) ||
+        ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))
+        done();
+    ImGui::PopStyleColor(3);
+    ImGui::EndPopup();
+}
+
 void App::settings() {
-    if (settingsOpen_ && !ImGui::IsPopupOpen("Settings")) ImGui::OpenPopup("Settings");
+    if (settingsOpen_ && windowAsk_ == WindowAsk::None && !ImGui::IsPopupOpen("Settings")) ImGui::OpenPopup("Settings");
     ImGuiIO& io = ImGui::GetIO();
     ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x / 2, io.DisplaySize.y / 2), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
     ImGui::SetNextWindowSize(ImVec2(std::min(520 * scale_, io.DisplaySize.x - 32 * scale_), 0));

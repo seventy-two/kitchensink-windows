@@ -297,10 +297,24 @@ LRESULT CALLBACK wndProc(HWND h, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (lParam && wcscmp(reinterpret_cast<const wchar_t*>(lParam), L"ImmersiveColorSet") == 0 && app) applyTheme();
         return 0;
     case WM_CLOSE:
-        // Closing the window keeps the app in the tray; Quit is in the
-        // tray menu.
-        ShowWindow(h, SW_HIDE);
+        // Alt+F4 and the like ask first, as the close button does: with the
+        // taskbar hidden, a hidden window has no way back but a relaunch.
+        // The dialog hides it (the app stays in the tray) or quits.
+        if (app && IsWindowVisible(h) && !IsIconic(h)) {
+            app->AskWindow(ks::App::WindowAsk::Close);
+            framesWanted = 3;
+        } else {
+            ShowWindow(h, SW_HIDE);
+        }
         return 0;
+    case WM_SYSCOMMAND:
+        // Win+Down, the window menu's Minimise and the like ask first too.
+        if ((wParam & 0xFFF0) == SC_MINIMIZE && app && IsWindowVisible(h) && !IsIconic(h)) {
+            app->AskWindow(ks::App::WindowAsk::Minimise);
+            framesWanted = 3;
+            return 0;
+        }
+        break;
     case WM_APP_TRAY:
         switch (LOWORD(lParam)) {
         case WM_LBUTTONUP:

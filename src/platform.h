@@ -37,6 +37,12 @@ void MinimiseWindow(NativeWindow w);
 void ToggleMaximise(NativeWindow w);
 // CloseMainWindow asks the window to close, as its close button would.
 void CloseMainWindow(NativeWindow w);
+#ifdef _WIN32
+// HideMainWindow hides the window, leaving the app running in the tray.
+void HideMainWindow(NativeWindow w);
+// QuitApp quits as the tray menu's Quit does.
+void QuitApp(NativeWindow w);
+#endif
 // MouseOverWindow reports whether the pointer is over the window, not over
 // another window in front of it.
 bool MouseOverWindow(NativeWindow w);
